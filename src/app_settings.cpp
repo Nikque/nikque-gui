@@ -174,9 +174,9 @@ void App::open_learn_settings()
 	for (const auto &o : kLearnOptions) {
 		FormField x;
 		x.kind = FormField::Text;
-		x.label = t(o.label) + L"（" + widen(o.key) + L"）";
+		x.label = t(o.label);
 		x.text = widen(ini_.get("learn_options", o.key));
-		x.note = t(o.note);
+		x.note = widen(o.key) + L"：" + t(o.note);
 		f.push_back(std::move(x));
 	}
 	if (!run_form(hwnd_, t("learnopt.window"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return;

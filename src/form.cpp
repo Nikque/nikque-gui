@@ -93,7 +93,7 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 	HFONT font = CreateFontW(-px(14), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Yu Gothic UI");
 	HFONT bold = CreateFontW(-px(14), 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Yu Gothic UI");
 
-	const int label_w = px(230), field_w = px(150), note_w = px(260), row = px(30), pad = px(14);
+	const int label_w = px(230), field_w = px(150), note_w = px(360), row = px(30), pad = px(14);
 	const int width = pad * 2 + label_w + field_w + px(10) + note_w;
 	const int height = pad * 2 + row * static_cast<int>(fields.size()) + px(46);
 	RECT wr{0, 0, width, height};
