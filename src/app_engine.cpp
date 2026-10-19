@@ -72,6 +72,9 @@ std::string App::book_params() const
 	std::string s = "base=" + base_ + " stages=" + stages_;
 	if (umi_ == UmiMode::Best) s += " umi=best";
 	else if (umi_ == UmiMode::Loss) s += " umi=loss x=" + std::to_string(loss_x_) + " y=" + std::to_string(loss_y_);
+	else if (umi_ == UmiMode::Range) s += " umi=range lo=" + std::to_string(umi_lo_) + " hi=" + std::to_string(umi_hi_);
+	else s += " umi=off";
+	if (umi_depth_ != 60 && umi_ != UmiMode::Off) s += " depth=" + std::to_string(umi_depth_);
 	return s;
 }
 
@@ -153,6 +156,7 @@ void App::start_engines()
 			continue;
 		}
 		send(role, "mode 3\n");
+		if (role == 0) send(0, learn_options_commands());  // the settings of book learning
 		log(lang::f("log.engine_started", {lang::t(role ? "engine.search" : "engine.main"), exe,
 		                                   role == 0 ? book : lang::t("log.no_book")}));
 	}

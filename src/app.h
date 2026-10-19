@@ -66,6 +66,7 @@ enum : int {
 	LearnFix,
 	LearnStop,
 	LearnContinue,
+	LearnSettings,
 	EngineNikque = 1400,
 	EngineNewedax,
 	RestartEngines,
@@ -87,6 +88,7 @@ enum : int {
 	TabBook,
 	TabRecord,
 	OpenConfig = 1700,
+	RangeSettings,
 	LangJa,
 	HelpKeys = 1800,
 	HelpAbout,
@@ -99,7 +101,7 @@ enum class Effects : int { On = 0, Subdued = 1, Off = 2 };
 enum class TopEffect : int { Strong = 0, Normal = 1, Weak = 2 };
 enum class Tab : int { Moves = 0, Book = 1, Record = 2, Count };
 enum class EngineKind : int { Nikque18 = 0, Newedax = 1 };
-enum class UmiMode : int { Best = 0, Loss = 1, Off = 2 };
+enum class UmiMode : int { Best = 0, Loss = 1, Off = 2, Range = 3 };
 enum class Column : int { Move, Value, Stage, Missing, Positions, Level, Umi, Count };
 
 struct Layout {
@@ -200,6 +202,8 @@ public:
 	int threads_ = 0;          // 0: all logical CPUs
 	UmiMode umi_ = UmiMode::Best;
 	int loss_x_ = 2, loss_y_ = 4;
+	int umi_lo_ = -64, umi_hi_ = 64;  // the range of values of the umigame numbers (UmiMode::Range)
+	int umi_depth_ = 60;             // the last ply the umigame numbers go to
 	std::string base_ = "deviate";
 	std::string stages_ = "1/1,2/2,3/3,4/4,5/5";
 	bool count_ = true;        // ask the number of positions (heavier)
@@ -314,6 +318,10 @@ public:
 	int missing_target() const;
 	void switch_book(const std::wstring &path);
 	void export_missing();
+	// app_settings.cpp
+	void open_range_settings();
+	void open_learn_settings();
+	std::string learn_options_commands() const;
 	// app_learn.cpp
 	std::wstring book_file() const;
 	void learn_command(int id);

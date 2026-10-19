@@ -247,7 +247,10 @@ void App::load_config()
 	level_ = ini_.get_int("analysis", "level", 21, 1, 60);
 	threads_ = ini_.get_int("analysis", "threads", 0, 0, 1024);
 	const std::string u = lower(ini_.get("analysis", "umi", "best"));
-	umi_ = u == "loss" ? UmiMode::Loss : u == "off" ? UmiMode::Off : UmiMode::Best;
+	umi_ = u == "loss" ? UmiMode::Loss : u == "off" ? UmiMode::Off : u == "range" ? UmiMode::Range : UmiMode::Best;
+	umi_lo_ = ini_.get_int("analysis", "umi_lo", -64, -64, 64);
+	umi_hi_ = ini_.get_int("analysis", "umi_hi", 64, -64, 64);
+	umi_depth_ = ini_.get_int("analysis", "umi_depth", 60, 1, 60);
 	loss_x_ = ini_.get_int("analysis", "x", 2, 0, 64);
 	loss_y_ = ini_.get_int("analysis", "y", 4, 0, 128);
 	base_ = lower(ini_.get("analysis", "base", "deviate"));
@@ -299,7 +302,10 @@ void App::save_config()
 	ini_.set_int("analysis", "book", use_book_);
 	ini_.set_int("analysis", "level", level_);
 	ini_.set_int("analysis", "threads", threads_);
-	ini_.set("analysis", "umi", umi_ == UmiMode::Loss ? "loss" : umi_ == UmiMode::Off ? "off" : "best");
+	ini_.set("analysis", "umi", umi_ == UmiMode::Loss ? "loss" : umi_ == UmiMode::Off ? "off" : umi_ == UmiMode::Range ? "range" : "best");
+	ini_.set_int("analysis", "umi_lo", umi_lo_);
+	ini_.set_int("analysis", "umi_hi", umi_hi_);
+	ini_.set_int("analysis", "umi_depth", umi_depth_);
 	ini_.set_int("analysis", "x", loss_x_);
 	ini_.set_int("analysis", "y", loss_y_);
 	ini_.set("analysis", "base", base_);
@@ -410,6 +416,8 @@ void App::build_menu()
 	AppendMenuW(learn, MF_SEPARATOR, 0, nullptr);
 	item(learn, cmd::LearnStop, t("menu.learn.stop"));
 	item(learn, cmd::LearnContinue, t("menu.learn.continue"));
+	AppendMenuW(learn, MF_SEPARATOR, 0, nullptr);
+	item(learn, cmd::LearnSettings, t("menu.learn.settings"));
 	sub(bar, learn, t("menu.learn"));
 
 	HMENU eng = CreatePopupMenu();
@@ -451,6 +459,7 @@ void App::build_menu()
 	sub(bar, view, t("menu.view"));
 
 	HMENU set = CreatePopupMenu();
+	item(set, cmd::RangeSettings, t("menu.settings.range"));
 	item(set, cmd::OpenConfig, t("menu.settings.config"));
 	HMENU lg = CreatePopupMenu();
 	item(lg, cmd::LangJa, L"日本語");

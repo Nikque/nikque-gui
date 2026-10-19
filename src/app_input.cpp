@@ -447,6 +447,14 @@ void App::on_command(int id)
 		stop_learning();
 		return;
 	}
+	if (id == cmd::LearnSettings) {
+		open_learn_settings();
+		return;
+	}
+	if (id == cmd::RangeSettings) {
+		open_range_settings();
+		return;
+	}
 	if (id == cmd::LearnContinue) {
 		continue_learning();
 		return;
