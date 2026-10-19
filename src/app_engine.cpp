@@ -168,7 +168,7 @@ void App::stop_engines()
 	requests_.clear();
 	book_id_ = count_id_ = levels_id_ = 0;
 	graph_id_ = 0;
-	hint_busy_ = hint_accept_ = false;
+	hint_busy_ = hint_accept_ = hint_background_ = false;
 	DeleteFileW((temp_dir_ + L"\\nobook.dat").c_str());
 }
 
@@ -277,35 +277,66 @@ void App::request_analysis()
 
 	// ---- search engine: the values of all the moves (hint)
 	if (eng_[1].alive) {
-		std::string out;
 		PosInfo *info = want ? &cache_.get(p) : nullptr;
 		const bool need = info && !(info->search_done && info->search_level == level_);
 		if (!need) {
-			if (hint_busy_) {
-				out += "stop\n";
+			// a search of another position is stopped, unless it is the background work on the game
+			const bool keep = hint_background_ && backward_ && show_eval_;
+			if (hint_busy_ && !keep) {
+				send(1, "stop\n");
 				hint_busy_ = hint_accept_ = false;
 			}
+			pump_search();
 		} else if (!(hint_busy_ && hint_pos_ == key && hint_level_ == level_)) {
-			if (hint_busy_) out += "stop\n";  // the commands sent after it are kept
-			if (engine_level_[1] != level_) {
-				out += "level " + std::to_string(level_) + "\n";
-				engine_level_[1] = level_;
-			}
-			if (info->search_level != level_) info->reset_search();
-			if (eng_[1].board != key) {
-				out += "setboard " + p.to_board_string() + "\n";
-				eng_[1].board = key;
-			}
-			// the answer of this marker comes after every line of the search stopped above
-			marker_id_ = next_id_++;
-			out += "book moveinfo id=" + std::to_string(marker_id_) + " parts=\n";
-			out += "hint 60\n";
-			hint_busy_ = true;
-			hint_accept_ = false;
-			hint_pos_ = key;
-			hint_level_ = level_;
+			send_hint(p, false);
+		} else {
+			hint_background_ = false;  // the background search reached the position shown
 		}
-		send(1, out);
+	}
+}
+
+void App::send_hint(const Position &p, bool background)
+{
+	const PosKey key = key_of(p);
+	std::string out;
+	if (hint_busy_) out += "stop\n";  // the commands sent after it are kept
+	if (engine_level_[1] != level_) {
+		out += "level " + std::to_string(level_) + "\n";
+		engine_level_[1] = level_;
+	}
+	PosInfo &info = cache_.get(p);
+	if (info.search_level != level_) info.reset_search();
+	if (eng_[1].board != key) {
+		out += "setboard " + p.to_board_string() + "\n";
+		eng_[1].board = key;
+	}
+	// the answer of this marker comes after every line of the search stopped above
+	marker_id_ = next_id_++;
+	out += "book moveinfo id=" + std::to_string(marker_id_) + " parts=\n";
+	out += "hint 60\n";
+	// and the answer of this one comes when the hint has ended
+	hint_end_id_ = next_id_++;
+	out += "book moveinfo id=" + std::to_string(hint_end_id_) + " parts=\n";
+	hint_busy_ = true;
+	hint_accept_ = false;
+	hint_background_ = background;
+	hint_pos_ = key;
+	hint_level_ = level_;
+	send(1, out);
+}
+
+// The positions of the game, from the end backward, are searched while the search engine has nothing else to
+// do: their values go back to the moves before them (backward analysis) and fill the graph.
+void App::pump_search()
+{
+	if (!eng_[1].alive || hint_busy_ || !backward_ || !show_eval_) return;
+	for (int i = game_.size(); i >= 0; --i) {
+		const Position &p = game_.at(i);
+		if (p.game_over() || p.must_pass()) continue;
+		const PosInfo *info = cache_.peek(p);
+		if (info && info->search_done && info->search_level == level_) continue;
+		send_hint(p, true);
+		return;
 	}
 }
 
@@ -329,6 +360,14 @@ void App::on_engine(WPARAM tag, bool ended)
 					hint_accept_ = true;
 					s.loaded = true;
 					measure::engine_answer(1);
+				}
+				if (f.kind() == "begin" && id == hint_end_id_ && hint_busy_) {
+					// the hint has ended: a move without a line (an engine that gave fewer) is not asked again
+					PosInfo &info = cache_.get(Position{hint_pos_.black, hint_pos_.white, hint_pos_.side});
+					info.search_done = true;
+					info.search_level = hint_level_;
+					hint_busy_ = hint_accept_ = false;
+					changed = true;
 				}
 				continue;
 			}
@@ -395,7 +434,7 @@ void App::on_engine(WPARAM tag, bool ended)
 					info.search_level = hint_level_;
 					hint_busy_ = hint_accept_ = false;
 				}
-				if (hint_pos_ == here) changed = true;
+				changed = true;  // the position shown, or a point of the graph
 				continue;
 			}
 		}
@@ -411,6 +450,7 @@ void App::on_engine(WPARAM tag, bool ended)
 		changed = true;
 	}
 	if (role == 0) pump_graph();
+	else if (!hint_busy_) pump_search();
 	if (changed) {
 		update_animation_timer();
 		invalidate();

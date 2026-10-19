@@ -42,6 +42,7 @@ add_executable(nikque-gui WIN32
 	src/app_input.cpp
 	src/app_engine.cpp
 	src/analysis.cpp
+	src/openings.cpp
 	src/engine.cpp
 	src/ini.cpp
 	src/lang.cpp

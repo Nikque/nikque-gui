@@ -248,10 +248,12 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 	}
 
 	// stage 0: the small level (or "end" for a search to the end) at the lower right
-	if (k == 0 && (v.level > 0 || v.exact)) {
-		const std::wstring lv = v.exact ? lang::t("cell.exact") : std::to_wstring(v.level);
+	if (k == 0 && (v.level > 0 || v.exact || v.improved)) {
+		// a star: the value came back from the next position of the game (backward analysis)
+		std::wstring lv = v.exact ? lang::t("cell.exact") : v.level > 0 ? std::to_wstring(v.level) : std::wstring();
+		if (v.improved) lv += L"\x2605";
 		const float sem = std::round(c * 0.2f * 2) / 2;
-		const NumberShape &ls = gx.shape(lv, sem, v.exact ? Face::Ui : Face::Number);
+		const NumberShape &ls = gx.shape(lv, sem, (v.exact || v.improved) ? Face::Ui : Face::Number);
 		const float lw = ls.bounds.right - ls.bounds.left;
 		const D2D1_MATRIX_3X2_F m = D2D1::Matrix3x2F::Translation(rc.right - c * 0.07f - lw - ls.bounds.left,
 		                                                          rc.bottom - c * 0.07f - ls.bounds.bottom);
@@ -317,7 +319,7 @@ void draw_cell(App &app, int sq, double t)
 	const float c = static_cast<float>(L.cell);
 
 	dc->FillRectangle(rc, gx.brush(th.board));
-	if (th.design == Design::Paw && !v.stone && !v.has_value && !v.pending &&
+	if (th.design == Design::Paw && !v.stone && !v.has_value && !v.pending && !v.pv_num &&
 	    (sq == 0 || sq == 7 || sq == 56 || sq == 63)) {
 		// faint paw prints in the corner squares (never under a stone or a number)
 		const float sz = c * 0.72f;
@@ -362,6 +364,17 @@ void draw_cell(App &app, int sq, double t)
 	}
 	if (v.has_value) draw_value(app, th, rc, v, t);
 	else if (v.pending) draw_pending(app, th, rc, t);
+
+	if (v.pv_num > 0) {
+		// the expected line: a see-through stone of the side who plays there, and the order
+		const float r = c * 0.36f;
+		const bool black = v.pv_side == kBlack;
+		const D2D1_COLOR_F stone = black ? th.black_stone : th.white_stone;
+		dc->FillEllipse(D2D1::Ellipse(center, r, r), gx.brush(D2D1_COLOR_F{stone.r, stone.g, stone.b, 0.62f}));
+		dc->DrawEllipse(D2D1::Ellipse(center, r, r), gx.brush(black ? th.black_rim : th.white_rim), 1.0f);
+		IDWriteTextFormat *f = gx.text(std::round(c * 0.3f), true, DWRITE_TEXT_ALIGNMENT_CENTER, Face::Number);
+		gx.draw_text(std::to_wstring(v.pv_num), f, rc, black ? rgb(0xffffff) : rgb(0x09090b));
+	}
 }
 
 void draw_board(App &app, const D2D1_RECT_F *)

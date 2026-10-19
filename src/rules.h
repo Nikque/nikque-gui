@@ -41,6 +41,12 @@ struct Position {
 	friend bool operator==(const Position &, const Position &) = default;
 };
 
+// the 8 symmetries of the board: 0 identity, 1 mirror left-right, 2 mirror top-bottom, 3 rotate 180,
+// 4 transpose (a1-h8 diagonal), 5..7 the transpose with 1..3
+u64 symmetric(u64 b, int s) noexcept;
+Position symmetric(const Position &p, int s) noexcept;
+int symmetric_square(int sq, int s) noexcept;
+
 // "a1".."h8", "pa"
 std::string square_name(int sq);
 // accepts a1..h8 in either case and "pa"/"ps"; returns kNoMove otherwise

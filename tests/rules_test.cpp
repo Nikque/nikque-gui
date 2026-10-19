@@ -128,6 +128,41 @@ static void test_game_record()
 	CHECK(parse_moves("Edax 4.5.5 version").moves.empty());
 }
 
+static void test_symmetry()
+{
+	for (int sq = 0; sq < 64; ++sq) {
+		const int x = sq & 7, y = sq >> 3;
+		CHECK(symmetric_square(sq, 0) == sq);
+		CHECK(symmetric_square(sq, 1) == y * 8 + (7 - x));
+		CHECK(symmetric_square(sq, 2) == (7 - y) * 8 + x);
+		CHECK(symmetric_square(sq, 3) == (7 - y) * 8 + (7 - x));
+		CHECK(symmetric_square(sq, 4) == x * 8 + y);
+	}
+	// playing then turning the board is turning then playing the turned move
+	std::mt19937_64 rng(7);
+	for (int g = 0; g < 2000; ++g) {
+		Position p;
+		while (!p.game_over()) {
+			u64 m = p.moves();
+			int sq = kPass;
+			if (m) {
+				int k = static_cast<int>(rng() % std::popcount(m));
+				while (k--) m &= m - 1;
+				sq = std::countr_zero(m);
+			}
+			const Position q = p.play(sq);
+			for (int s = 0; s < 8; ++s)
+				CHECK(symmetric(q, s) == symmetric(p, s).play(symmetric_square(sq, s)));
+			p = q;
+		}
+	}
+	// the 8 boards of a position with no symmetry left are 8 different boards
+	Game g;
+	for (const char *mv : {"f5", "d6", "c3", "d3", "c4", "f4", "f6"}) g.play(parse_square(mv));
+	for (int a = 0; a < 8; ++a)
+		for (int b = a + 1; b < 8; ++b) CHECK(!(symmetric(g.now(), a) == symmetric(g.now(), b)));
+}
+
 // the test books' games: passes in the middle and at the end
 static void test_games_file(const char *path)
 {
@@ -161,6 +196,7 @@ int main(int argc, char **argv)
 	test_perft();
 	test_random_games();
 	test_game_record();
+	test_symmetry();
 	for (int i = 1; i < argc; ++i) test_games_file(argv[i]);
 	if (failures) {
 		std::printf("%d failures\n", failures);

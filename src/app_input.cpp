@@ -206,6 +206,11 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 		}
 		return;
 	}
+	if (inside(opening_rect_, fx, fy)) {
+		show_opening_ = !show_opening_;
+		invalidate();
+		return;
+	}
 	if (inside(lay_.log, fx, fy)) {
 		on_command(cmd::ToggleLog);
 		return;
@@ -426,6 +431,12 @@ void App::on_command(int id)
 		show_eval_ = !show_eval_;
 		update_menu();
 		position_changed();
+		break;
+	case cmd::Backward:
+		backward_ = !backward_;
+		update_menu();
+		request_analysis();
+		invalidate();
 		break;
 	case cmd::Recompute:
 		cache_.clear_search();

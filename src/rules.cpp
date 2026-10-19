@@ -135,3 +135,52 @@ int parse_square(std::string_view s) noexcept
 }
 
 }  // namespace ng
+
+namespace ng {
+
+namespace {
+
+u64 mirror_lr(u64 b) noexcept  // column x -> 7 - x
+{
+	b = ((b >> 1) & 0x5555555555555555ULL) | ((b & 0x5555555555555555ULL) << 1);
+	b = ((b >> 2) & 0x3333333333333333ULL) | ((b & 0x3333333333333333ULL) << 2);
+	return ((b >> 4) & 0x0f0f0f0f0f0f0f0fULL) | ((b & 0x0f0f0f0f0f0f0f0fULL) << 4);
+}
+
+u64 mirror_tb(u64 b) noexcept  // row y -> 7 - y
+{
+	return std::byteswap(b);
+}
+
+u64 transpose(u64 b) noexcept  // (x, y) -> (y, x)
+{
+	u64 t = (b ^ (b >> 7)) & 0x00aa00aa00aa00aaULL;
+	b ^= t ^ (t << 7);
+	t = (b ^ (b >> 14)) & 0x0000cccc0000ccccULL;
+	b ^= t ^ (t << 14);
+	t = (b ^ (b >> 28)) & 0x00000000f0f0f0f0ULL;
+	return b ^ t ^ (t << 28);
+}
+
+}  // namespace
+
+u64 symmetric(u64 b, int s) noexcept
+{
+	if (s & 4) b = transpose(b);
+	if (s & 1) b = mirror_lr(b);
+	if (s & 2) b = mirror_tb(b);
+	return b;
+}
+
+Position symmetric(const Position &p, int s) noexcept
+{
+	return {symmetric(p.black, s), symmetric(p.white, s), p.side};
+}
+
+int symmetric_square(int sq, int s) noexcept
+{
+	if (sq < 0 || sq >= 64) return sq;
+	return std::countr_zero(symmetric(1ULL << sq, s));
+}
+
+}  // namespace ng

@@ -18,6 +18,7 @@
 #include "gfx.h"
 #include "ini.h"
 #include "keys.h"
+#include "openings.h"
 #include "theme.h"
 
 namespace ng {
@@ -34,6 +35,7 @@ enum : int {
 	ToEnd,
 	ShowEval = 1100,
 	Recompute,
+	Backward,
 	UmiBest,
 	UmiLoss,
 	UmiOff,
@@ -114,6 +116,21 @@ struct CellView {
 	bool exact = false;     // a search to the end
 	bool pending = false;   // the value is being computed
 	bool best = false, good = false, selected = false;
+	bool improved = false;  // the value came back from the next position (backward analysis): a star by the level
+	int pv_num = 0;          // 1.. : this square is in the expected line of the move under the mouse
+	int pv_side = 0;         // the side who plays it there (0 black, 1 white)
+};
+
+// the game line after the backward analysis: position i (after i moves)
+struct LineEval {
+	bool known = false;      // a best value is known
+	bool complete = false;   // every move has a value (so the best value can go back)
+	int best = 0;            // from the side to move
+	bool exact = false;
+	bool played_known = false;  // the move played from here (the next move of the game)
+	int played = 0;
+	bool played_exact = false;
+	bool played_improved = false;
 };
 
 struct EngineSlot {
@@ -147,6 +164,9 @@ public:
 	Layout lay_;
 	Game game_;
 	AnalysisCache cache_;
+	Openings openings_;
+	bool show_opening_ = true;
+	D2D1_RECT_F opening_rect_{};   // the opening name in the bar (a click hides it)
 
 	Design design_ = Design::Standard;
 	Effects effects_ = Effects::On;
@@ -167,6 +187,7 @@ public:
 	bool count_ = true;        // ask the number of positions (heavier)
 	EngineKind kind_ = EngineKind::Nikque18;
 	bool search_engine_ = true;
+	bool backward_ = true;     // backward analysis of the game (and searching its positions in the background)
 
 	// engines: [0] main (reads the book), [1] search only (no book)
 	EngineSlot eng_[2];
@@ -179,6 +200,9 @@ public:
 	bool hint_busy_ = false, hint_accept_ = false;
 	PosKey hint_pos_{};
 	int hint_level_ = 0;
+	bool hint_background_ = false;  // the hint in progress is for another position of the game
+	int hint_end_id_ = 0;            // the marker sent after the hint
+	std::vector<LineEval> line_;    // computed with each full drawing
 	int engine_level_[2] = {0, 0};
 
 	// interaction
@@ -253,6 +277,10 @@ public:
 	void request_analysis();
 	void request_levels();
 	void pump_graph();
+	void pump_search();
+	void send_hint(const Position &p, bool background);
+	void compute_line();
+	bool move_exact(const MoveEval &m, const Position &p) const;
 	std::string book_params() const;
 	std::wstring engine_dir() const;
 	std::wstring engine_name() const;

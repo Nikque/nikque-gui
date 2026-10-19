@@ -72,6 +72,11 @@ std::wstring group(long long n)
 std::optional<int> black_value(const App &app, int i)
 {
 	const Position &p = app.game_.at(i);
+	// the line after the backward analysis
+	if (app.line_.size() == static_cast<size_t>(app.game_.size()) + 1) {
+		if (!app.line_[i].known) return std::nullopt;
+		return p.side == kBlack ? app.line_[i].best : -app.line_[i].best;
+	}
 	if (p.game_over()) {
 		const int b = std::popcount(p.black), w = std::popcount(p.white);
 		const int e = 64 - b - w;
@@ -228,7 +233,15 @@ void draw_moves_table(App &app, const Theme &th)
 		if (m.sq == app.selected_sq_) rounded(gx, row, 4 * L.scale, D2D1_COLOR_F{th.accent.r, th.accent.g, th.accent.b, 0.25f});
 		else if (m.sq == app.hover_sq_) rounded(gx, row, 4 * L.scale, D2D1_COLOR_F{th.text.r, th.text.g, th.text.b, 0.07f});
 		int v = 0;
-		const bool hv = shown_value(m, app.use_book_, &v);
+		bool hv = shown_value(m, app.use_book_, &v);
+		// the move played next in the game: the value that came back from the next position
+		const int cur = app.game_.cursor();
+		const bool improved = app.line_.size() == static_cast<size_t>(app.game_.size()) + 1 && cur < app.game_.size() &&
+		                      app.game_.moves()[cur] == m.sq && app.line_[cur].played_improved;
+		if (improved) {
+			v = app.line_[cur].played;
+			hv = true;
+		}
 		const int stage = (app.use_book_ && m.book_row) ? m.stage : -1;
 		for (auto &[c, hr] : app.col_rects_) {
 			const D2D1_RECT_F r{hr.left, y, hr.right, y + rh};
@@ -268,8 +281,9 @@ void draw_moves_table(App &app, const Theme &th)
 				const int lv = (app.use_book_ && m.in_book) ? m.book_level : shown_level(m, app.use_book_);
 				const bool exact = !(app.use_book_ && m.in_book) && m.searched && m.selectivity >= 100 &&
 				                   m.depth >= p.empties() - 1;
-				if (exact) gx.draw_text(lang::t("cell.exact"), gx.text(L.font, true, DWRITE_TEXT_ALIGNMENT_CENTER), r, th.text);
-				else if (lv > 0) gx.draw_text(std::to_wstring(lv), f, r, th.text);
+				std::wstring s = exact ? lang::t("cell.exact") : lv > 0 ? std::to_wstring(lv) : std::wstring();
+				if (improved) s += L"\x2605";
+				if (!s.empty()) gx.draw_text(s, gx.text(L.font, exact || improved, DWRITE_TEXT_ALIGNMENT_CENTER), r, th.text);
 				break;
 			}
 			case Column::Umi:
@@ -459,11 +473,20 @@ void draw_bar(App &app)
 	if (!app.eng_[0].alive && !app.eng_[1].alive) eng += L"  " + lang::t("bar.no_engine");
 	else if (app.use_book_ && app.eng_[0].alive && !app.eng_[0].loaded) eng += L"  " + lang::t("bar.loading");
 	if (!app.use_book_) eng += L"  " + lang::t("bar.book_off");
+	// the opening name (a click hides it; hidden, a short mark stays to click again)
+	size_t opening_part = SIZE_MAX;
+	if (const std::wstring *name = app.openings_.name_at(app.game_)) {
+		opening_part = parts.size();
+		parts.push_back(app.show_opening_ ? *name : lang::t("bar.opening_hidden"));
+	}
 	parts.push_back(eng);
+	app.opening_rect_ = {};
 	float x = L.bar.left + 10 * L.scale;
 	for (size_t i = 0; i < parts.size(); ++i) {
 		const float tw = gx.text_width(parts[i], f);
-		gx.draw_text(parts[i], f, D2D1::RectF(x, L.bar.top, x + tw + 2, L.bar.bottom), th.text, false);
+		const bool hidden = i == opening_part && !app.show_opening_;
+		gx.draw_text(parts[i], f, D2D1::RectF(x, L.bar.top, x + tw + 2, L.bar.bottom), hidden ? th.text_dim : th.text, false);
+		if (i == opening_part) app.opening_rect_ = {x, L.bar.top, x + tw + 2, L.bar.bottom};
 		x += tw + 12 * L.scale;
 		dc->DrawLine({x, L.bar.top + L.row * 0.25f}, {x, L.bar.bottom - L.row * 0.25f}, gx.brush(th.line), 1.0f);
 		x += 12 * L.scale;

@@ -101,6 +101,7 @@ int App::run(HINSTANCE inst, int show)
 	layout();
 	ShowWindow(hwnd_, ini_.get_bool("window", "max", false) ? SW_SHOWMAXIMIZED : show);
 	UpdateWindow(hwnd_);
+	if (!openings_.empty()) log(lang::f("log.openings", {std::to_wstring(openings_.positions() / 8)}));
 	start_engines();
 	position_changed();
 
@@ -247,6 +248,7 @@ void App::load_config()
 	if (stages_.empty() || stages_.find_first_not_of("0123456789/,") != std::string::npos)
 		stages_ = "1/1,2/2,3/3,4/4,5/5";
 	count_ = ini_.get_bool("analysis", "count", true);
+	backward_ = ini_.get_bool("analysis", "backward", true);
 	anim_fps_ = ini_.get_int("view", "fps", 20, 5, 60);
 	font_px_ = ini_.get_int("view", "font", 0, 0, 72);
 	kind_ = lower(ini_.get("engine", "kind", "nikque18")) == "newedax" ? EngineKind::Newedax : EngineKind::Nikque18;
@@ -267,6 +269,12 @@ void App::load_config()
 		}
 	}
 	lang::load(exe_dir_, ini_.get("view", "language", "ja"));
+	// opening names: a file next to the exe unless set
+	const std::string of = ini_.get("view", "opening_file");
+	const std::wstring opath = of.empty() ? exe_dir_ + L"\\opening.ini"
+	                                      : (of.size() > 1 && of[1] == ':' ? widen(of) : exe_dir_ + L"\\" + widen(of));
+	openings_.load(opath);
+	show_opening_ = ini_.get_bool("view", "opening", true);
 }
 
 void App::save_config()
@@ -276,6 +284,8 @@ void App::save_config()
 	ini_.set("view", "top_effect", top_effect_ == TopEffect::Strong ? "strong" : top_effect_ == TopEffect::Weak ? "weak" : "normal");
 	if (ini_.get("view", "language").empty()) ini_.set("view", "language", "ja");
 	ini_.set_int("view", "fps", anim_fps_);
+	ini_.set_int("view", "opening", show_opening_);
+	if (ini_.get("view", "opening_file").empty() && ini_.section("view").size() > 0) ini_.set("view", "opening_file", "");
 	ini_.set_int("view", "font", font_px_);
 	ini_.set_int("analysis", "show", show_eval_);
 	ini_.set_int("analysis", "book", use_book_);
@@ -287,6 +297,7 @@ void App::save_config()
 	ini_.set("analysis", "base", base_);
 	ini_.set("analysis", "stages", stages_);
 	ini_.set_int("analysis", "count", count_);
+	ini_.set_int("analysis", "backward", backward_);
 	ini_.set("engine", "kind", kind_ == EngineKind::Newedax ? "newedax" : "nikque18");
 	ini_.set_int("engine", "search", search_engine_);
 	WINDOWPLACEMENT wp{sizeof wp};
@@ -333,6 +344,7 @@ void App::build_menu()
 	HMENU an = CreatePopupMenu();
 	item(an, cmd::ShowEval, t("menu.analysis.show"), keys_.describe(Action::HideEval));
 	item(an, cmd::Recompute, t("menu.analysis.recompute"));
+	item(an, cmd::Backward, t("menu.analysis.backward"));
 	HMENU lv = CreatePopupMenu();
 	for (size_t i = 0; i < std::size(kLevels); ++i)
 		item(lv, cmd::Level0 + static_cast<int>(i), L"Lv " + std::to_wstring(kLevels[i]));
@@ -422,6 +434,7 @@ void App::update_menu()
 	auto check = [&](int id, bool on) { CheckMenuItem(m, id, MF_BYCOMMAND | (on ? MF_CHECKED : MF_UNCHECKED)); };
 	auto radio = [&](int first, int last, int on) { CheckMenuRadioItem(m, first, last, on, MF_BYCOMMAND); };
 	check(cmd::ShowEval, show_eval_);
+	check(cmd::Backward, backward_);
 	check(cmd::UseBook, use_book_);
 	check(cmd::CountOn, count_);
 	check(cmd::TogglePanel, panel_hidden_);
@@ -555,6 +568,7 @@ double App::now_s() const
 void App::paint()
 {
 	measure::Frame mf(true);
+	compute_line();
 	prepare_glows();
 	if (!gfx_.begin_frame()) return;
 	const Theme &th = theme(design_);
@@ -610,26 +624,62 @@ CellView App::cell_view(int sq) const
 		v.last = game_.moves()[i] == sq;
 		break;
 	}
-	if (!show_eval_ || v.stone || !p.can_play(sq)) return v;
-	v.selected = sq == selected_sq_;
+	if (!show_eval_ || v.stone) return v;
 	const PosInfo *info = cache_.peek(p);
+
+	// the expected line of the move under the mouse, from the reply on: numbers on the squares
+	if (info && hover_sq_ != kNoMove && hover_sq_ != sq) {
+		if (const MoveEval *h = info->find(hover_sq_); h && h->pv.size() > 1) {
+			int side = p.side ^ 1, num = 0;
+			for (size_t k = 1; k < h->pv.size() && num < 12; ++k) {
+				if (h->pv[k] == kPass) {
+					side ^= 1;
+					continue;
+				}
+				++num;
+				if (h->pv[k] == sq) {
+					v.pv_num = num;
+					v.pv_side = side;
+					break;
+				}
+				side ^= 1;
+			}
+		}
+	}
+	if (!p.can_play(sq)) return v;
+	v.selected = sq == selected_sq_;
 	const MoveEval *m = info ? info->find(sq) : nullptr;
 	if (!m) {
 		v.pending = eng_[0].alive || eng_[1].alive;
 		return v;
 	}
-	v.has_value = shown_value(*m, use_book_, &v.value);
+	// the move played next in the game takes the value that came back from the next position
+	const int cur = game_.cursor();
+	const LineEval *le = (line_.size() == static_cast<size_t>(game_.size()) + 1 && cur < game_.size()) ? &line_[cur] : nullptr;
+	const int played_sq = cur < game_.size() ? game_.moves()[cur] : kNoMove;
+	auto value_of = [&](const MoveEval &o, int *x) {
+		if (le && o.sq == played_sq && le->played_improved) {
+			*x = le->played;
+			return true;
+		}
+		return shown_value(o, use_book_, x);
+	};
+	v.has_value = value_of(*m, &v.value);
 	v.stage = (use_book_ && m->book_row && m->stage > 0) ? m->stage : 0;
 	if (v.has_value && v.stage == 0) {
 		v.level = shown_level(*m, use_book_);
-		v.exact = m->searched && m->selectivity >= 100 && m->depth >= p.empties() - 1;
+		v.exact = move_exact(*m, p);
+		if (le && sq == played_sq && le->played_improved) {
+			v.improved = true;
+			v.exact = le->played_exact;
+		}
 	}
 	v.pending = !v.has_value && (eng_[1].alive || (use_book_ && eng_[0].alive && !info->book_done));
 	if (v.has_value) {
 		int best = -999;
 		for (const auto &o : info->moves) {
 			int x;
-			if (shown_value(o, use_book_, &x)) best = std::max(best, x);
+			if (value_of(o, &x)) best = std::max(best, x);
 		}
 		v.best = v.value == best;
 		v.good = !v.best && v.value >= best - 2;
@@ -664,6 +714,84 @@ void App::set_status(const std::wstring &s)
 	if (s == status_) return;
 	status_ = s;
 	invalidate();
+}
+
+}  // namespace ng
+
+namespace ng {
+
+bool App::move_exact(const MoveEval &m, const Position &p) const
+{
+	return m.searched && m.selectivity >= 100 && m.depth >= p.empties() - 1;
+}
+
+// The values along the game, from the end backward: the value of the move played from a position is the best
+// value of the next position when every move there has a value (not for book values and searches to the end).
+void App::compute_line()
+{
+	const int n = game_.size();
+	line_.assign(n + 1, LineEval{});
+	for (int i = n; i >= 0; --i) {
+		const Position &p = game_.at(i);
+		LineEval &e = line_[i];
+		const LineEval *next = i < n ? &line_[i + 1] : nullptr;
+		const bool turn = i < n && game_.at(i + 1).side != p.side;  // the side changes to the next position
+		auto from_next = [&](int v) { return turn ? -v : v; };
+		if (p.game_over()) {
+			const int b = std::popcount(p.black), w = std::popcount(p.white), em = 64 - b - w;
+			const int diff = b > w ? b - w + em : b < w ? b - w - em : 0;
+			e.known = e.complete = e.exact = true;
+			e.best = p.side == kBlack ? diff : -diff;
+			continue;
+		}
+		if (p.must_pass()) {
+			if (next && next->known) {
+				e.known = true;
+				e.complete = next->complete;
+				e.best = e.played = from_next(next->best);
+				e.exact = e.played_exact = next->exact;
+				e.played_known = true;
+				e.played_improved = next->played_improved;
+			}
+			continue;
+		}
+		const PosInfo *info = cache_.peek(p);
+		if (!info) continue;
+		int best = -999;
+		bool all = !info->moves.empty(), best_exact = false;
+		for (const MoveEval &m : info->moves) {
+			int v;
+			bool known = shown_value(m, use_book_, &v);
+			bool ex = known && !(use_book_ && m.in_book) && move_exact(m, p);
+			bool improved = false;
+			const bool played = i < n && m.sq == game_.moves()[i];
+			if (played && backward_ && next && next->complete && !(use_book_ && m.in_book) && !ex) {
+				v = from_next(next->best);
+				ex = next->exact;
+				known = improved = true;
+			}
+			if (played) {
+				e.played_known = known;
+				e.played = v;
+				e.played_exact = ex;
+				e.played_improved = improved;
+			}
+			if (!known) {
+				all = false;
+				continue;
+			}
+			if (v > best) {
+				best = v;
+				best_exact = ex;
+			}
+		}
+		if (best != -999) {
+			e.known = true;
+			e.best = best;
+			e.exact = best_exact;
+		}
+		e.complete = all;
+	}
 }
 
 }  // namespace ng
