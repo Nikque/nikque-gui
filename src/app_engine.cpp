@@ -157,6 +157,10 @@ void App::start_engines()
 		}
 		send(role, "mode 3\n");
 		if (role == 0) send(0, learn_options_commands());  // the settings of book learning
+		s.version.clear();
+		s.ping_id = 0;
+		s.ping_sent = std::chrono::steady_clock::now();
+		if (role == 0) send(0, "version\n");
 		log(lang::f("log.engine_started", {lang::t(role ? "engine.search" : "engine.main"), exe,
 		                                   role == 0 ? book : lang::t("log.no_book")}));
 	}
@@ -430,6 +434,19 @@ void App::on_engine(WPARAM tag, bool ended)
 			if (req.pos == here) changed = true;
 			continue;
 		}
+		if (const int mark = echo_marker(line); mark >= 0 && mark == s.ping_id) {
+			s.ping_id = 0;  // the engine answers (watch)
+			continue;
+		}
+		if (line.starts_with("Edax version")) {
+			// "Edax version 4.5.5 Oct 19 2026 20:05:32 for Windows": the version and the day it was built
+			std::string v = line.substr(13);
+			if (const size_t f = v.find(" for "); f != std::string::npos) v.resize(f);
+			s.version = widen(v);
+			changed = true;
+			continue;
+		}
+		if (line.starts_with("copyright")) continue;
 		if (role == 1) {
 			if (const int mark = echo_marker(line); mark >= 0) {
 				if (mark == marker_id_) {
@@ -621,6 +638,49 @@ void App::request_missing(std::string &out, const Position &p)
 	missing_id_ = next_id_++;
 	out += "book missing id=" + std::to_string(missing_id_) + " sq=" + square_name(sq) + " " + params + " n=500\n";
 	requests_[missing_id_] = {Request::Missing, key, 0};
+}
+
+}  // namespace ng
+
+namespace ng {
+
+// Every few seconds: an engine with nothing to do is asked an echo marker; one that has not answered it after
+// 20 seconds does not answer and is closed and started again. (Busy engines are not asked: a learning command
+// or a hint keeps the engine's main loop, and the answer would only come after it.)
+void App::watch_engines()
+{
+	const auto now = std::chrono::steady_clock::now();
+	for (int role = 0; role < 2; ++role) {
+		EngineSlot &s = eng_[role];
+		if (!s.alive || !s.loaded) continue;
+		const bool busy = role == 0 ? learning_ : hint_busy_;
+		if (s.ping_id) {
+			if (busy) {
+				s.ping_id = 0;  // busy since: the answer comes later
+				continue;
+			}
+			if (now - s.ping_sent < std::chrono::seconds(20)) continue;
+			log(lang::f("log.engine_hung", {lang::t(role ? "engine.search" : "engine.main")}));
+			s.ping_id = 0;
+			s.proc.close(0);
+			s.alive = false;
+			s.board.reset();
+			if (role == 0) {
+				for (auto it = requests_.begin(); it != requests_.end();) it = it->second.engine == 0 ? requests_.erase(it) : std::next(it);
+				book_id_ = count_id_ = levels_id_ = graph_id_ = missing_id_ = 0;
+				missing_ = MissingList{};
+			} else {
+				hint_busy_ = hint_accept_ = hint_background_ = false;
+			}
+			start_engines();  // starts the one that is not running
+			position_changed();
+			continue;
+		}
+		if (busy || now - s.ping_sent < std::chrono::seconds(15)) continue;
+		s.ping_id = next_id_++;
+		s.ping_sent = now;
+		send(role, "echo M" + std::to_string(s.ping_id) + "\n");
+	}
 }
 
 }  // namespace ng

@@ -19,6 +19,7 @@ namespace ng {
 namespace {
 
 constexpr UINT_PTR kTimerAnim = 1;
+constexpr UINT_PTR kTimerWatch = 2;  // the engines are watched every 5 seconds
 
 LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -104,6 +105,7 @@ int App::run(HINSTANCE inst, int show)
 	if (!openings_.empty()) log(lang::f("log.openings", {std::to_wstring(openings_.positions() / 8)}));
 	start_engines();
 	position_changed();
+	SetTimer(hwnd_, kTimerWatch, 5000, nullptr);
 
 	MSG m;
 	while (GetMessageW(&m, nullptr, 0, 0) > 0) {
@@ -149,6 +151,7 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	}
 	case WM_TIMER:
 		if (wp == kTimerAnim) paint_animation();
+		else if (wp == kTimerWatch) watch_engines();
 		return 0;
 	case WM_ACTIVATEAPP:
 		active_ = wp != 0;
@@ -219,6 +222,7 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	case WM_CLOSE:
 		save_config();
 		KillTimer(hwnd, kTimerAnim);
+		KillTimer(hwnd, kTimerWatch);
 		stop_engines();
 		DestroyWindow(hwnd);
 		return 0;

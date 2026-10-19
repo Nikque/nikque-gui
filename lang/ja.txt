@@ -251,3 +251,4 @@ queue.ask=学習の列の {0} 件を順に行います（book：{1}）。止め�
 queue.left=列の残り {0} 件
 queue.done=学習の列が終わりました
 queue.cleared=学習の列を消しました
+log.engine_hung={0}が 20 秒たっても応えないので、閉じて起動し直しました

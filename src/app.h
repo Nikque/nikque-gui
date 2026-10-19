@@ -153,6 +153,9 @@ struct EngineSlot {
 	bool loaded = false;               // the first answer came (the book is read)
 	std::optional<PosKey> board;       // the position the engine has (setboard)
 	unsigned generation = 0;           // counts the starts: messages of a process closed before are ignored
+	int ping_id = 0;                   // the echo marker the engine has not answered yet (watch)
+	std::chrono::steady_clock::time_point ping_sent{};
+	std::wstring version;              // from "Edax version ..."
 	std::wstring error;
 };
 
@@ -340,6 +343,7 @@ public:
 	void start_learning_at(const std::string &command, const Position &start, const std::string &moves);
 	void queue_missing();
 	void next_in_queue();
+	void watch_engines();
 	void stop_learning();
 	void continue_learning();
 	void learning_line(const std::string &line);

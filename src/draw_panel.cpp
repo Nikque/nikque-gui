@@ -500,7 +500,9 @@ void draw_bar(App &app)
 		parts.push_back(lang::f("bar.ply", {std::to_wstring(p.ply() + 1)}) + L" " +
 		                lang::t(p.side == kBlack ? "bar.black" : "bar.white") + L"  " +
 		                lang::f("bar.discs", {std::to_wstring(b), std::to_wstring(w)}));
-	std::wstring eng = app.engine_name() + L" Lv" + std::to_wstring(app.level_);
+	std::wstring eng = app.engine_name();
+	if (!app.eng_[0].version.empty()) eng += L" " + app.eng_[0].version;
+	eng += L"  Lv" + std::to_wstring(app.level_);
 	if (!app.eng_[0].alive && !app.eng_[1].alive) eng += L"  " + lang::t("bar.no_engine");
 	else if (app.use_book_ && app.eng_[0].alive && !app.eng_[0].loaded) eng += L"  " + lang::t("bar.loading");
 	if (!app.use_book_) eng += L"  " + lang::t("bar.book_off");
