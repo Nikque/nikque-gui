@@ -168,7 +168,7 @@ void App::findline_answer(const Fields &f, bool end)
 		log(lang::t(f.num("unknown").value_or(0) ? "estimate.no_command" : "estimate.not_in_book"));
 		estimate_without_book(findline_target_);
 	}
-	pump_script();
+	schedule_script();
 }
 
 void App::estimate_without_book(const Position &target)

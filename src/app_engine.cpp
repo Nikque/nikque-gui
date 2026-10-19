@@ -419,8 +419,8 @@ void App::on_engine(WPARAM tag, bool ended)
 			const Request req = it->second;
 			if (req.kind == Request::FindLine) {
 				const bool end = f.kind() == "end" || f.kind() == "cancel";
+				if (end) requests_.erase(it);  // first: the answer may change the requests
 				findline_answer(f, end);
-				if (end) requests_.erase(it);
 				continue;
 			}
 			if (req.kind == Request::Missing) {

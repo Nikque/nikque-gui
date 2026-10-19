@@ -198,7 +198,7 @@ void App::learning_ended()
 	}
 	request_analysis();
 	invalidate();
-	pump_script();
+	schedule_script();
 }
 
 void App::stop_learning()
@@ -225,7 +225,7 @@ void App::stop_learning()
 	start_engines();
 	update_menu();
 	position_changed();
-	pump_script();
+	schedule_script();
 }
 
 void App::continue_learning()

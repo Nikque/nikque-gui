@@ -434,3 +434,12 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 }
 
 }  // namespace ng
+
+namespace ng {
+
+void App::schedule_script()
+{
+	if (!script_.empty() || script_wait_ != ScriptWait::None) PostMessageW(hwnd_, WM_SCRIPT, 0, 0);
+}
+
+}  // namespace ng

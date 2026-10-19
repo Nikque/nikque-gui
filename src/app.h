@@ -29,6 +29,7 @@ namespace ng {
 
 inline constexpr UINT WM_ENGINE = WM_APP + 1;
 inline constexpr UINT WM_TASK = WM_APP + 2;  // a background job has ended
+inline constexpr UINT WM_SCRIPT = WM_APP + 3;  // the command script goes on (after the work that it waited for)
 
 // menu commands
 namespace cmd {
@@ -576,6 +577,7 @@ public:
 	// ---- app_script.cpp: the command scripts
 	void run_script_file(const std::wstring &file, int depth);
 	void pump_script();
+	void schedule_script();  // pump_script later, from the message loop (never inside the reading of an engine's answers)
 	bool script_command(const std::string &line, int depth, std::wstring *error);
 	bool script_waiting() const;
 };

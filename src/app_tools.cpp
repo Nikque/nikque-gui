@@ -215,7 +215,7 @@ void App::tool_ended(bool stopped)
 	DeleteFileW((temp_dir_ + L"\\nobook-tool.dat").c_str());
 	update_menu();
 	invalidate();
-	pump_script();
+	schedule_script();
 }
 
 void App::stop_tool()

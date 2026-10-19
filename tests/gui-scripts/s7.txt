@@ -1,0 +1,21 @@
+# the line of a position through the book (book findline), on both engines
+log s7 start
+wait 40
+board -X----O---XX-O-----XX-----OOOX----OOOO------X-O------X---------- X
+estimate
+wait 20
+screenshot s7-01-nikque18-14.png
+board -X----O---XX-O-----XX-----OOOOO---OOOO-X----O-X-----OXX-----O-O- X
+estimate
+engine newedax
+wait 40
+board -X----O---XX-O-----XX-----OOOX----OOOO------X-O------X---------- X
+estimate
+board -X----O---XX-O-----XX-----OOOOO---OOOO-X----O-X-----OXX-----O-O- X
+estimate
+wait 20
+screenshot s7-02-newedax-20.png
+tab kept
+screenshot s7-03-kept.png
+savelog s7-log.txt
+quit
