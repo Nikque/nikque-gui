@@ -1,0 +1,13 @@
+# book subtree on a line in the book, the learning queue from a script (on the copy of the test book)
+log s4 start
+wait 40
+moves d3e3f5e6
+edax book info
+learn book store
+learn book deviate 1 1
+learn start
+edax book subtree
+edax book info
+edax book save D:\nikque-gui\_test\run-b1\s4-subtree.dat
+savelog s4-log.txt
+quit

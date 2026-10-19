@@ -1,0 +1,40 @@
+# the display of B: move numbers, square numbers, orientation, the book tab, kept lines, a position from text,
+# the paw design, the four languages
+log s1 start
+wait 40
+screenshot s1-01-initial.png
+moves f5d6c3d3c4f4c5b3c2e6c6b4b5d2e3a6c1b1
+wait 40
+numbers on
+cellinfo positions
+screenshot s1-02-numbers-positions.png
+rotate 5
+wait 40
+screenshot s1-03-rotate5.png
+rotate 0
+numbers off
+cellinfo umi
+tab book
+wait 40
+screenshot s1-04-umi-book.png
+keep
+tab kept
+screenshot s1-05-kept.png
+board ---------------------------OX------XO--------------------------- O
+wait 40
+screenshot s1-06-board-white.png
+design paw
+cellinfo stage
+screenshot s1-07-paw.png
+design standard
+cellinfo none
+tab moves
+lang en
+screenshot s1-08-en.png
+lang zh-Hans
+screenshot s1-09-zhhans.png
+lang zh-Hant
+screenshot s1-10-zhhant.png
+lang ja
+savelog s1-log.txt
+quit

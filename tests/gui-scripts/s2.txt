@@ -1,0 +1,39 @@
+# the game list, the search, the list work, the line of a position, the tool engine, the command box
+log s2 start
+list load D:\nikque-gui\_test\books\book2.games
+tab list
+list select 2
+goto 45
+wait 20
+screenshot s2-01-list.png
+search
+screenshot s2-02-search.png
+list normalize
+list save s2-list-normalized.txt
+list sort
+list save s2-list-sorted.txt
+list add D:\nikque-gui\_test\books\book2.games
+list unique
+list save s2-list-unique.txt
+list shuffle 7
+list save s2-list-shuffled.txt
+list scatter both 3
+list save s2-list-scattered.txt
+list truncate 10
+list save s2-list-truncated.txt
+# the line of a position at move 14 of the first game (as a board): the book first, else without the book
+board -X----O---XX-O-----XX-----OOOX----OOOO------X-O------X---------- X
+estimate
+wait 20
+screenshot s2-03-estimate14.png
+board -X----O---XX-O-----XX-----OOOOO---OOOO-X----O-X-----OXX-----O-O- X
+estimate
+log moves of the line: estimated (move 20)
+screenshot s2-04-estimate20.png
+# the tool engine and the command box
+tool count games 6
+tool perft 6
+tool bench 2
+edax book info
+savelog s2-log.txt
+quit

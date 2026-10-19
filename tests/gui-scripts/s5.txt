@@ -1,0 +1,19 @@
+# a large game list (1,000,000 random games): reading, searching, the list work, memory
+log s5 start
+wait 40
+list load D:\nikque-gui\_test\run-b1\big1m.txt
+moves f5d6
+search
+moves f5d6c3d3c4f4c5b3c2e6c6b4b5d2e3a6c1b1
+search
+list normalize
+list sort
+list unique
+list shuffle 5
+list scatter both 3
+list truncate 30
+list save D:\nikque-gui\_test\run-b1\big1m-out.txt
+tab list
+screenshot s5-list.png
+savelog s5-log.txt
+quit

@@ -1,0 +1,25 @@
+# the nikque.18 engine on a copy of the test book: book lines into the list, the line of a position, book
+# commands (export, subtree, save), the base commands and solve on the tool engine
+log s3 start
+engine nikque18
+wait 40
+list book 0 60 1000
+tab list
+screenshot s3-01-booklines.png
+list book 1 20 50 add
+list save s3-booklines.txt
+board -X----O---XX-O-----XX-----OOOX----OOOO------X-O------X---------- X
+estimate
+new
+moves f5d6c3d3c4
+edax book info
+edax book export D:\nikque-gui\_test\run-b1\s3-export.txt
+edax book subtree
+edax book info
+edax book save D:\nikque-gui\_test\run-b1\s3-subtree.dat
+tool base convert D:\nikque-gui\_test\run-b1\games.txt D:\nikque-gui\_test\run-b1\games.sgf
+tool base unique D:\nikque-gui\_test\run-b1\games.txt D:\nikque-gui\_test\run-b1\uniq.txt
+tool base compare D:\nikque-gui\_test\run-b1\games.txt D:\nikque-gui\_test\run-b1\uniq.txt
+tool solve D:\nikque-gui\_test\run-b1\p.obf
+savelog s3-log.txt
+quit
