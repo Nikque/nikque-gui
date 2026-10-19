@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <optional>
+#include <span>
 
 #include "app.h"
 #include "lang.h"
@@ -119,11 +121,11 @@ void draw_tabs(App &app, const Theme &th)
 	Gfx &gx = app.gfx_;
 	const Layout &L = app.lay_;
 	IDWriteTextFormat *f = gx.text(L.font, false, DWRITE_TEXT_ALIGNMENT_CENTER);
-	const char *keys[] = {"tab.moves", "tab.book", "tab.record"};
+	const char *keys[] = {"tab.moves", "tab.book", "tab.record", "tab.list", "tab.kept"};
 	app.tab_rects_.clear();
 	float x = L.tabs.left;
 	const float h = L.tabs.bottom - L.tabs.top;
-	for (int i = 0; i < 3; ++i) {
+	for (int i = 0; i < 5; ++i) {
 		const std::wstring &s = lang::t(keys[i]);
 		const float w = gx.text_width(s, f) + L.font * 1.6f;
 		const D2D1_RECT_F r{x, L.tabs.top, x + w, L.tabs.bottom};
@@ -414,6 +416,101 @@ void draw_record_tab(App &app, const Theme &th)
 		gx.draw_text(lang::t("record.empty"), gx.text(L.font, false), D2D1::RectF(T.left + 4, T.top, T.right, T.top + rh), th.text_dim);
 }
 
+// the moves of a game as text, cut to the first n
+std::wstring moves_text(std::span<const std::uint8_t> mv, size_t n)
+{
+	std::wstring s;
+	for (size_t k = 0; k < mv.size() && k < n; ++k) s += widen(square_name(mv[k]));
+	if (mv.size() > n) s += L"…";
+	return s;
+}
+
+void draw_list_tab(App &app, const Theme &th)
+{
+	Gfx &gx = app.gfx_;
+	auto *dc = gx.dc();
+	const Layout &L = app.lay_;
+	const D2D1_RECT_F T = L.table;
+	IDWriteTextFormat *f = gx.text(L.font, false);
+	IDWriteTextFormat *fm = gx.text(L.font, false, DWRITE_TEXT_ALIGNMENT_LEADING, Face::Number);
+	const float rh = L.row;
+	float y = T.top;
+	app.list_rects_.clear();
+	auto line = [&](const std::wstring &s, const D2D1_COLOR_F &c) {
+		gx.draw_text(s, f, D2D1::RectF(T.left + 4, y, T.right, y + rh), c);
+		y += rh;
+	};
+	if (app.task_busy_) line(lang::f("task.running", {app.task_label_}), th.text_dim);
+	if (app.list_.empty()) {
+		if (!app.task_busy_) line(lang::t("list.empty"), th.text_dim);
+		return;
+	}
+	std::wstring head = lang::f("list.head", {group(static_cast<long long>(app.list_.size()))});
+	if (!app.list_file_.empty()) head += L"  " + app.list_file_.substr(app.list_file_.find_last_of(L"\\/") + 1);
+	if (app.list_index_ >= 0) head += L"  " + lang::f("list.at", {std::to_wstring(app.list_index_ + 1), group(static_cast<long long>(app.list_.size()))});
+	line(head, th.text);
+	const bool hits = app.hits_shown_;
+	if (hits) line(lang::f("list.hits", {group(static_cast<long long>(app.hits_.size()))}), th.text);
+	const int count = hits ? static_cast<int>(app.hits_.size()) : static_cast<int>(app.list_.size());
+	const int fit = std::max(1, static_cast<int>((T.bottom - y) / rh));
+	app.list_scroll_ = std::clamp(app.list_scroll_, 0, std::max(0, count - fit));
+	// the game on the board is shown when the list opens on it
+	dc->PushAxisAlignedClip(D2D1::RectF(T.left, y, T.right, T.bottom), D2D1_ANTIALIAS_MODE_ALIASED);
+	for (int k = app.list_scroll_; k < count && y < T.bottom; ++k, y += rh) {
+		const int g = hits ? static_cast<int>(app.hits_[k].game) : k;
+		const D2D1_RECT_F r{T.left, y, T.right, y + rh};
+		if (g == app.list_index_) rounded(gx, r, 4 * L.scale, D2D1_COLOR_F{th.accent.r, th.accent.g, th.accent.b, 0.25f});
+		else if (inside_rect(r, app.mouse_)) rounded(gx, r, 4 * L.scale, D2D1_COLOR_F{th.text.r, th.text.g, th.text.b, 0.07f});
+		const auto mv = app.list_.moves(static_cast<size_t>(g));
+		std::wstring s = std::to_wstring(g + 1) + L". ";
+		if (hits) s += lang::f("list.hit_ply", {std::to_wstring(app.hits_[k].ply)}) + L"  ";
+		s += moves_text(mv, 24) + L"  (" + std::to_wstring(mv.size()) + L")";
+		gx.draw_text(s, fm, D2D1::RectF(r.left + 8 * L.scale, r.top, r.right, r.bottom), th.text);
+		app.list_rects_.emplace_back(k, r);
+	}
+	dc->PopAxisAlignedClip();
+}
+
+void draw_kept_tab(App &app, const Theme &th)
+{
+	Gfx &gx = app.gfx_;
+	auto *dc = gx.dc();
+	const Layout &L = app.lay_;
+	const D2D1_RECT_F T = L.table;
+	IDWriteTextFormat *f = gx.text(L.font, false);
+	IDWriteTextFormat *fm = gx.text(L.font, false, DWRITE_TEXT_ALIGNMENT_LEADING, Face::Number);
+	const float rh = L.row;
+	float y = T.top;
+	app.kept_rects_.clear();
+	gx.draw_text(lang::f("kept.head", {std::to_wstring(app.kept_.size()), app.keys_.describe(Action::Keep)}), f,
+	             D2D1::RectF(T.left + 4, y, T.right, y + rh), app.kept_.empty() ? th.text_dim : th.text);
+	y += rh;
+	const int count = static_cast<int>(app.kept_.size());
+	const int fit = std::max(1, static_cast<int>((T.bottom - y) / rh));
+	app.kept_scroll_ = std::clamp(app.kept_scroll_, 0, std::max(0, count - fit));
+	dc->PushAxisAlignedClip(D2D1::RectF(T.left, y, T.right, T.bottom), D2D1_ANTIALIAS_MODE_ALIASED);
+	// the newest first
+	for (int k = app.kept_scroll_; k < count && y < T.bottom; ++k, y += rh) {
+		const int i = count - 1 - k;
+		const App::Kept &e = app.kept_[static_cast<size_t>(i)];
+		const D2D1_RECT_F r{T.left, y, T.right, y + rh};
+		if (i == app.kept_sel_) rounded(gx, r, 4 * L.scale, D2D1_COLOR_F{th.accent.r, th.accent.g, th.accent.b, 0.25f});
+		else if (inside_rect(r, app.mouse_)) rounded(gx, r, 4 * L.scale, D2D1_COLOR_F{th.text.r, th.text.g, th.text.b, 0.07f});
+		const std::time_t tt = static_cast<std::time_t>(e.time);
+		std::tm tm{};
+		localtime_s(&tm, &tt);
+		wchar_t when[32];
+		wcsftime(when, 32, L"%m/%d %H:%M", &tm);
+		std::vector<std::uint8_t> mv;
+		for (const int m : e.moves)
+			if (m != kPass) mv.push_back(static_cast<std::uint8_t>(m));
+		std::wstring s = std::to_wstring(i + 1) + L". " + when + L"  " + moves_text(mv, 20) + L"  (" + std::to_wstring(mv.size()) + L")";
+		gx.draw_text(s, fm, D2D1::RectF(r.left + 8 * L.scale, r.top, r.right, r.bottom), th.text);
+		app.kept_rects_.emplace_back(i, r);
+	}
+	dc->PopAxisAlignedClip();
+}
+
 void draw_graph(App &app, const Theme &th)
 {
 	Gfx &gx = app.gfx_;
@@ -485,6 +582,8 @@ void draw_panel(App &app)
 	switch (app.tab_) {
 	case Tab::Moves: draw_moves_table(app, th); break;
 	case Tab::Book: draw_book_tab(app, th); break;
+	case Tab::List: draw_list_tab(app, th); break;
+	case Tab::Kept: draw_kept_tab(app, th); break;
 	default: draw_record_tab(app, th); break;
 	}
 	const float cy = (L.splitter.top + L.splitter.bottom) / 2;
@@ -505,7 +604,11 @@ void draw_bar(App &app)
 	const Position &p = app.game_.now();
 	const int b = std::popcount(p.black), w = std::popcount(p.white);
 	std::vector<std::wstring> parts;
-	if (p.game_over()) parts.push_back(lang::t("bar.game_over") + L"  " + lang::f("bar.discs", {std::to_wstring(b), std::to_wstring(w)}));
+	if (app.editing_) {
+		const Position &e = app.edit_pos_;
+		parts.push_back(lang::f("bar.editing", {lang::t(e.side == kBlack ? "bar.black" : "bar.white"),
+		                                        std::to_wstring(std::popcount(e.black)), std::to_wstring(std::popcount(e.white))}));
+	} else if (p.game_over()) parts.push_back(lang::t("bar.game_over") + L"  " + lang::f("bar.discs", {std::to_wstring(b), std::to_wstring(w)}));
 	else
 		parts.push_back(lang::f("bar.ply", {std::to_wstring(p.ply() + 1)}) + L" " +
 		                lang::t(p.side == kBlack ? "bar.black" : "bar.white") + L"  " +
@@ -583,11 +686,25 @@ void draw_log(App &app)
 	const float rh = std::round(L.font_s * 1.6f);
 	// the learning in progress, on the right of the row
 	float right = L.log.right - 10 * L.scale;
-	if (app.learning_) {
-		const auto s = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - app.learn_t0_).count();
+	auto elapsed = [](std::chrono::steady_clock::time_point t0) {
+		const auto s = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - t0).count();
 		wchar_t el[32];
 		swprintf(el, 32, L"%lld:%02lld", static_cast<long long>(s / 60), static_cast<long long>(s % 60));
-		std::wstring txt = lang::f("learn.bar", {widen(app.learn_cmd_), app.learn_progress_, el});
+		return std::wstring(el);
+	};
+	std::wstring busy;  // the tool, the background job, the script
+	if (app.tool_busy_) busy += lang::f("tool.bar", {app.tool_label_, elapsed(app.tool_t0_)});
+	if (app.task_busy_) busy += (busy.empty() ? L"" : L"　") + lang::f("task.bar", {app.task_label_, elapsed(app.task_t0_)});
+	if (!app.script_.empty() || app.script_wait_ != App::ScriptWait::None)
+		busy += (busy.empty() ? L"" : L"　") + lang::f("script.bar", {std::to_wstring(app.script_.size())});
+	if (!busy.empty()) {
+		const float tw = std::min(gx.text_width(busy, f) + 4, (L.log.right - L.log.left) * 0.45f);
+		const D2D1_RECT_F r{right - tw, L.log.bottom - rh - 2 * L.scale, right, L.log.bottom - 2 * L.scale};
+		gx.draw_text(busy, f, r, th.accent);
+		right = r.left - 10 * L.scale;
+	}
+	if (app.learning_) {
+		std::wstring txt = lang::f("learn.bar", {widen(app.learn_cmd_), app.learn_progress_, elapsed(app.learn_t0_)});
 		if (app.queue_running_) txt += L"　" + lang::f("queue.left", {std::to_wstring(app.learn_queue_.size())});
 		const float tw = std::min(gx.text_width(txt, f) + 4, (L.log.right - L.log.left) * 0.6f);
 		const D2D1_RECT_F r{right - tw, L.log.bottom - rh - 2 * L.scale, right, L.log.bottom - 2 * L.scale};

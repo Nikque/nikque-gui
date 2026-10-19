@@ -341,7 +341,12 @@ void draw_cell(App &app, int sq, double t)
 		dc->FillEllipse(D2D1::Ellipse(center, r, r), gx.brush(black ? th.black_stone : th.white_stone));
 		const float rw = black ? 1.0f : th.white_rim_px;
 		dc->DrawEllipse(D2D1::Ellipse(center, r - rw / 2, r - rw / 2), gx.brush(black ? th.black_rim : th.white_rim), rw);
-		if (v.last) {
+		if (v.number > 0) {
+			// the number of the move (the last move in its color)
+			const D2D1_COLOR_F col = v.last ? (black ? th.last_on_black : th.last_on_white) : (black ? rgb(0xffffff) : rgb(0x09090b));
+			IDWriteTextFormat *f = gx.text(std::round(c * (v.number >= 10 ? 0.36f : 0.42f)), true, DWRITE_TEXT_ALIGNMENT_CENTER, Face::Number);
+			gx.draw_text(std::to_wstring(v.number), f, rc, col);
+		} else if (v.last) {
 			const float d = std::max(2.0f, c * 0.075f);
 			dc->FillEllipse(D2D1::Ellipse(center, d, d), gx.brush(black ? th.last_on_black : th.last_on_white));
 		}
@@ -367,6 +372,20 @@ void draw_cell(App &app, int sq, double t)
 		const bool faint = app.learning_ && v.stage > 0;
 		if (faint) dc->PushLayer(D2D1::LayerParameters1(rc, nullptr, D2D1_ANTIALIAS_MODE_ALIASED, D2D1::IdentityMatrix(), 0.45f), nullptr);
 		draw_value(app, th, rc, v, t);
+		if (!v.info.empty()) {
+			// the number chosen for the squares, small at the lower left
+			float sem = std::round(c * 0.19f * 2) / 2;
+			const NumberShape *ls = &gx.shape(v.info, sem, Face::Number);
+			const float lw = ls->bounds.right - ls->bounds.left;
+			if (lw > c * 0.56f) {
+				sem = std::max(4.0f, std::round(sem * c * 0.56f / lw * 2) / 2);
+				ls = &gx.shape(v.info, sem, Face::Number);
+			}
+			dc->SetTransform(D2D1::Matrix3x2F::Translation(rc.left + c * 0.07f - ls->bounds.left, rc.bottom - c * 0.07f - ls->bounds.bottom));
+			gx.stroke_shape(*ls, gx.brush(rgb(0x09090b)), sem * 0.2f);
+			gx.fill_shape(*ls, gx.brush(rgb(0xe4e4e7)));
+			dc->SetTransform(D2D1::Matrix3x2F::Identity());
+		}
 		if (faint) dc->PopLayer();
 	} else if (v.pending) {
 		draw_pending(app, th, rc, t);

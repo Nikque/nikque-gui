@@ -127,9 +127,9 @@ size_t GameList::bytes() const noexcept
 	return games_.capacity() * sizeof(Entry) + pool_.capacity() + starts_.capacity() * sizeof(Position);
 }
 
-bool parse_list_line(std::string_view line, Position *start, std::vector<std::uint8_t> *moves, bool *cut)
+bool parse_list_line(std::string_view line, Position *start, std::vector<std::uint8_t> *moves, bool *cut, const Position &usual)
 {
-	*start = Position{};
+	*start = usual;
 	moves->clear();
 	*cut = false;
 	size_t i = 0;
@@ -202,7 +202,7 @@ std::string list_line(const Position &start, std::span<const std::uint8_t> moves
 namespace {
 
 // reads lines from text, the last one may be incomplete when `final` is false (it is left in `text`)
-void take_lines(std::string &text, bool final, GameList &list, ListReadStats &st, std::stop_token stop)
+void take_lines(std::string &text, bool final, GameList &list, ListReadStats &st, std::stop_token stop, const Position &usual)
 {
 	Position start;
 	std::vector<std::uint8_t> moves;
@@ -216,7 +216,7 @@ void take_lines(std::string &text, bool final, GameList &list, ListReadStats &st
 		std::string_view line(text.data() + i, e - i);
 		if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
 		bool cut = false;
-		if (parse_list_line(line, &start, &moves, &cut)) {
+		if (parse_list_line(line, &start, &moves, &cut, usual)) {
 			++st.lines;
 			list.add(start, moves);
 			++st.games;
@@ -238,16 +238,16 @@ void take_lines(std::string &text, bool final, GameList &list, ListReadStats &st
 
 }  // namespace
 
-ListReadStats read_list_text(std::string_view text, GameList &list, std::stop_token stop)
+ListReadStats read_list_text(std::string_view text, GameList &list, std::stop_token stop, const Position &usual)
 {
 	ListReadStats st;
 	st.opened = true;
 	std::string t(text);
-	take_lines(t, true, list, st, stop);
+	take_lines(t, true, list, st, stop, usual);
 	return st;
 }
 
-ListReadStats read_list(const std::wstring &path, GameList &list, std::stop_token stop)
+ListReadStats read_list(const std::wstring &path, GameList &list, std::stop_token stop, const Position &usual)
 {
 	ListReadStats st;
 	FILE *f = nullptr;
@@ -262,9 +262,9 @@ ListReadStats read_list(const std::wstring &path, GameList &list, std::stop_toke
 		if (first && n >= 3 && buf[0] == '\xEF' && buf[1] == '\xBB' && buf[2] == '\xBF') skip = 3;
 		first = false;
 		text.append(buf + skip, n - skip);
-		take_lines(text, false, list, st, stop);
+		take_lines(text, false, list, st, stop, usual);
 	}
-	if (!st.cancelled) take_lines(text, true, list, st, stop);
+	if (!st.cancelled) take_lines(text, true, list, st, stop, usual);
 	fclose(f);
 	return st;
 }

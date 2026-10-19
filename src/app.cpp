@@ -20,6 +20,7 @@ namespace {
 
 constexpr UINT_PTR kTimerAnim = 1;
 constexpr UINT_PTR kTimerWatch = 2;  // the engines are watched every 5 seconds
+constexpr UINT_PTR kTimerScript = 3; // a script waiting for the analysis of the position looks again
 
 LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -38,6 +39,41 @@ std::string lower(std::string s)
 	for (auto &c : s)
 		if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
 	return s;
+}
+
+// 974, 12.3K, 974K, 1.2M, 3.4G
+std::wstring compact(long long n)
+{
+	wchar_t b[32];
+	if (n < 1000) return std::to_wstring(n);
+	if (n < 10'000) swprintf(b, 32, L"%.1fK", n / 1e3);
+	else if (n < 1'000'000) swprintf(b, 32, L"%lldK", n / 1000);
+	else if (n < 10'000'000) swprintf(b, 32, L"%.1fM", n / 1e6);
+	else if (n < 1'000'000'000) swprintf(b, 32, L"%lldM", n / 1'000'000);
+	else swprintf(b, 32, L"%.1fG", n / 1e9);
+	return b;
+}
+
+// the small number of a move's square chosen in the view menu
+std::wstring cell_info_text(const MoveEval &m, CellInfo what, bool use_book)
+{
+	const bool book = use_book && m.in_book;
+	switch (what) {
+	case CellInfo::Positions:
+		if (!book) return {};
+		if (m.positions >= 0) return compact(m.positions);
+		return m.lines >= 0 ? L"\x2248" + compact(m.lines) : std::wstring();  // the lines of the book until counted
+	case CellInfo::Level: {
+		const int lv = book ? m.book_level : shown_level(m, use_book);
+		return lv > 0 ? L"L" + std::to_wstring(lv) : std::wstring();
+	}
+	case CellInfo::Stage:
+		return use_book && m.book_row && m.stage >= 0 ? L"S" + std::to_wstring(m.stage) : std::wstring();
+	case CellInfo::Umi:
+		if (!m.umi_known) return {};
+		return m.umi_none ? L"-" : std::to_wstring(m.umi_black) + L":" + std::to_wstring(m.umi_white);
+	default: return {};
+	}
 }
 
 }  // namespace
@@ -103,9 +139,13 @@ int App::run(HINSTANCE inst, int show)
 	ShowWindow(hwnd_, ini_.get_bool("window", "max", false) ? SW_SHOWMAXIMIZED : show);
 	UpdateWindow(hwnd_);
 	if (!openings_.empty()) log(lang::f("log.openings", {std::to_wstring(openings_.positions() / 8)}));
+	load_kept();
 	start_engines();
 	position_changed();
 	SetTimer(hwnd_, kTimerWatch, 5000, nullptr);
+	// the commands to run at the start (config.ini [script] startup)
+	if (const std::string st = ini_.get("script", "startup"); !st.empty())
+		run_script_file(st.size() > 1 && st[1] == ':' ? widen(st) : exe_dir_ + L"\\" + widen(st), 0);
 
 	MSG m;
 	while (GetMessageW(&m, nullptr, 0, 0) > 0) {
@@ -120,6 +160,10 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
 	switch (msg) {
 	case WM_SIZE:
+		if (wp == SIZE_MINIMIZED) {  // the frame keeps its size (images can still be made)
+			update_animation_timer();
+			return 0;
+		}
 		gfx_.resize();
 		layout();
 		update_animation_timer();
@@ -152,6 +196,10 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	case WM_TIMER:
 		if (wp == kTimerAnim) paint_animation();
 		else if (wp == kTimerWatch) watch_engines();
+		else if (wp == kTimerScript) pump_script();
+		return 0;
+	case WM_TASK:
+		task_ended();
 		return 0;
 	case WM_ACTIVATEAPP:
 		active_ = wp != 0;
@@ -223,6 +271,12 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		save_config();
 		KillTimer(hwnd, kTimerAnim);
 		KillTimer(hwnd, kTimerWatch);
+		KillTimer(hwnd, kTimerScript);
+		script_.clear();
+		if (task_.joinable()) {
+			task_.request_stop();
+			task_.join();
+		}
 		stop_engines();
 		DestroyWindow(hwnd);
 		return 0;
@@ -273,7 +327,18 @@ void App::load_config()
 	log_open_ = ini_.get_bool("window", "log", false);
 	panel_hidden_ = ini_.get_bool("window", "panel_hidden", false);
 	const std::string t = lower(ini_.get("window", "tab", "moves"));
-	tab_ = t == "book" ? Tab::Book : t == "record" ? Tab::Record : Tab::Moves;
+	tab_ = t == "book" ? Tab::Book : t == "record" ? Tab::Record : t == "list" ? Tab::List : t == "kept" ? Tab::Kept : Tab::Moves;
+	hash_bits_ = ini_.get_int("analysis", "hash", 0, 0, 30);
+	if (hash_bits_ > 0 && hash_bits_ < 10) hash_bits_ = 10;
+	move_numbers_ = ini_.get_bool("view", "numbers", false);
+	const std::string ci = lower(ini_.get("view", "cell_info", "none"));
+	cell_info_ = ci == "positions" ? CellInfo::Positions : ci == "level" ? CellInfo::Level : ci == "stage" ? CellInfo::Stage
+	           : ci == "umi" ? CellInfo::Umi : CellInfo::None;
+	list_start_ply_ = ini_.get_int("list", "start_ply", -1, -1, 60);
+	lang_ = ini_.get("view", "language", "ja");
+	if (lang_ != "en" && lang_ != "zh-Hans" && lang_ != "zh-Hant") lang_ = "ja";
+	// listed even when empty, so that config.ini shows them
+	if (ini_.section("script").empty()) ini_.set("script", "startup", "");
 	keys_.load(ini_);
 	// the engine folders are listed even when empty (empty: next to the exe, engines\nikque18 and engines\newedax)
 	for (const char *sec : {"nikque18", "newedax"}) {
@@ -283,7 +348,7 @@ void App::load_config()
 			if (!listed) ini_.set(sec, k, std::strcmp(k, "exe") ? "" : "auto");
 		}
 	}
-	lang::load(exe_dir_, ini_.get("view", "language", "ja"));
+	lang::load(exe_dir_, lang_);
 	// opening names: a file next to the exe unless set
 	const std::string of = ini_.get("view", "opening_file");
 	const std::wstring opath = of.empty() ? exe_dir_ + L"\\opening.ini"
@@ -297,7 +362,14 @@ void App::save_config()
 	ini_.set("view", "design", design_ == Design::Paw ? "paw" : "standard");
 	ini_.set("view", "effects", effects_ == Effects::Off ? "off" : effects_ == Effects::Subdued ? "subdued" : "on");
 	ini_.set("view", "top_effect", top_effect_ == TopEffect::Strong ? "strong" : top_effect_ == TopEffect::Weak ? "weak" : "normal");
-	if (ini_.get("view", "language").empty()) ini_.set("view", "language", "ja");
+	ini_.set("view", "language", lang_);
+	ini_.set_int("view", "numbers", move_numbers_);
+	{
+		const char *names[] = {"none", "positions", "level", "stage", "umi"};
+		ini_.set("view", "cell_info", names[static_cast<int>(cell_info_)]);
+	}
+	ini_.set_int("analysis", "hash", hash_bits_);
+	ini_.set_int("list", "start_ply", list_start_ply_);
 	ini_.set_int("view", "fps", anim_fps_);
 	ini_.set_int("view", "opening", show_opening_);
 	if (ini_.get("view", "opening_file").empty() && ini_.section("view").size() > 0) ini_.set("view", "opening_file", "");
@@ -331,7 +403,10 @@ void App::save_config()
 	ini_.set_int("window", "graph", static_cast<int>(std::lround(graph_ratio_ * 100)));
 	ini_.set_int("window", "log", log_open_);
 	ini_.set_int("window", "panel_hidden", panel_hidden_);
-	ini_.set("window", "tab", tab_ == Tab::Book ? "book" : tab_ == Tab::Record ? "record" : "moves");
+	{
+		const char *names[] = {"moves", "book", "record", "list", "kept"};
+		ini_.set("window", "tab", names[static_cast<int>(tab_)]);
+	}
 	if (ini_.dirty()) ini_.save(ini_path_);
 }
 
@@ -348,15 +423,18 @@ void App::build_menu()
 	auto sub = [](HMENU parent, HMENU m, const std::wstring &text) {
 		AppendMenuW(parent, MF_POPUP, reinterpret_cast<UINT_PTR>(m), text.c_str());
 	};
+	auto sep = [](HMENU m) { AppendMenuW(m, MF_SEPARATOR, 0, nullptr); };
 	HMENU bar = CreateMenu();
 
 	HMENU game = CreatePopupMenu();
 	item(game, cmd::NewGame, t("menu.game.new"));
-	AppendMenuW(game, MF_SEPARATOR, 0, nullptr);
+	sep(game);
 	item(game, cmd::Undo, t("menu.game.undo"), keys_.describe(Action::Back) + L" / " + t("key.right_click"));
 	item(game, cmd::Redo, t("menu.game.redo"), keys_.describe(Action::Forward));
 	item(game, cmd::ToStart, t("menu.game.start"), keys_.describe(Action::Start));
 	item(game, cmd::ToEnd, t("menu.game.end"), keys_.describe(Action::End));
+	sep(game);
+	item(game, cmd::KeepNow, t("menu.kept.keep"), keys_.describe(Action::Keep));
 	sub(bar, game, t("menu.game"));
 
 	HMENU an = CreatePopupMenu();
@@ -373,6 +451,8 @@ void App::build_menu()
 	item(umi, cmd::UmiOff, t("menu.analysis.umi.off"));
 	sub(an, umi, t("menu.analysis.umi"));
 	item(an, cmd::CountOn, t("menu.analysis.count"));
+	sep(an);
+	item(an, cmd::RangeSettings, t("menu.settings.range"));
 	sub(bar, an, t("menu.analysis"));
 
 	HMENU book = CreatePopupMenu();
@@ -396,9 +476,31 @@ void App::build_menu()
 	item(base, cmd::BaseDeviate2, L"book deviate2");
 	item(base, cmd::BaseDeviate3, L"book deviate3");
 	sub(book, base, t("menu.book.base"));
+	sep(book);
 	item(book, cmd::BookInfo, t("menu.book.info"));
+	HMENU show = CreatePopupMenu();
+	item(show, cmd::BookShowInfo, t("menu.book.show_info"));
+	item(show, cmd::BookShowStats, t("menu.book.show_stats"));
+	item(show, cmd::BookShowPosition, t("menu.book.show_position"));
+	sub(book, show, t("menu.book.show"));
 	item(book, cmd::ExportMissing, t("menu.book.export_missing"));
 	item(book, cmd::ExportBest, t("menu.book.export_best"));
+	sep(book);
+	HMENU keep = CreatePopupMenu();
+	item(keep, cmd::BookSave, t("menu.book.save"));
+	item(keep, cmd::BookSaveAs, t("menu.book.save_as"));
+	item(keep, cmd::BookNewEmpty, t("menu.book.new"));
+	item(keep, cmd::BookDepth, t("menu.book.depth"));
+	sep(keep);
+	item(keep, cmd::LearnMerge, t("menu.learn.merge"));
+	item(keep, cmd::LearnSubtree, t("menu.learn.subtree"));
+	item(keep, cmd::LearnPrune, t("menu.learn.prune"));
+	sep(keep);
+	item(keep, cmd::LearnExport, t("menu.learn.export"));
+	item(keep, cmd::LearnImport, t("menu.learn.import"));
+	item(keep, cmd::LearnExtract, t("menu.learn.extract"));
+	item(keep, cmd::BookProblem, t("menu.book.problem"));
+	sub(book, keep, t("menu.book.keep"));
 	sub(bar, book, t("menu.book"));
 
 	HMENU learn = CreatePopupMenu();
@@ -410,20 +512,27 @@ void App::build_menu()
 	item(learn, cmd::LearnFill, t("menu.learn.fill"));
 	item(learn, cmd::LearnFill2, t("menu.learn.fill2"));
 	item(learn, cmd::LearnPlay, t("menu.learn.play"));
-	AppendMenuW(learn, MF_SEPARATOR, 0, nullptr);
+	sep(learn);
 	item(learn, cmd::LearnStore, t("menu.learn.store"));
 	item(learn, cmd::LearnAdd, t("menu.learn.add"));
 	item(learn, cmd::LearnLearn, t("menu.learn.learn"));
 	item(learn, cmd::LearnCheck, t("menu.learn.check"));
-	AppendMenuW(learn, MF_SEPARATOR, 0, nullptr);
+	sep(learn);
 	item(learn, cmd::LearnNegamax, t("menu.learn.negamax"));
 	item(learn, cmd::LearnFix, t("menu.learn.fix"));
-	AppendMenuW(learn, MF_SEPARATOR, 0, nullptr);
+	item(learn, cmd::LearnCorrect, t("menu.learn.correct"));
+	HMENU leaf = CreatePopupMenu();
+	item(leaf, cmd::LearnLeafRecalc1, t("menu.learn.leaf1"));
+	item(leaf, cmd::LearnLeafRecalc2, t("menu.learn.leaf2"));
+	item(leaf, cmd::LearnLeafRecalc3, t("menu.learn.leaf3"));
+	item(leaf, cmd::LearnLeafRecalc4, t("menu.learn.leaf4"));
+	sub(learn, leaf, t("menu.learn.leaf"));
+	sep(learn);
 	item(learn, cmd::LearnStop, t("menu.learn.stop"));
 	item(learn, cmd::LearnContinue, t("menu.learn.continue"));
-	AppendMenuW(learn, MF_SEPARATOR, 0, nullptr);
+	sep(learn);
 	item(learn, cmd::LearnSettings, t("menu.learn.settings"));
-	AppendMenuW(learn, MF_SEPARATOR, 0, nullptr);
+	sep(learn);
 	item(learn, cmd::QueueMissing, t("menu.queue.add"));
 	item(learn, cmd::QueueStart, t("menu.queue.start"));
 	item(learn, cmd::QueueClear, t("menu.queue.clear"));
@@ -432,15 +541,84 @@ void App::build_menu()
 	HMENU eng = CreatePopupMenu();
 	item(eng, cmd::EngineNikque, t("menu.engine.nikque"));
 	item(eng, cmd::EngineNewedax, t("menu.engine.newedax"));
-	AppendMenuW(eng, MF_SEPARATOR, 0, nullptr);
+	sep(eng);
 	item(eng, cmd::RestartEngines, t("menu.engine.restart"));
 	item(eng, cmd::EngineVersion, t("menu.engine.version"));
+	sep(eng);
+	item(eng, cmd::ToolSolve, t("menu.tool.solve"));
+	item(eng, cmd::ToolBench, t("menu.tool.bench"));
+	item(eng, cmd::ToolCount, t("menu.tool.count"));
+	item(eng, cmd::ToolPerft, t("menu.tool.perft"));
+	item(eng, cmd::ToolEstimate, t("menu.tool.estimate"));
+	item(eng, cmd::ToolStop, t("menu.tool.stop"));
+	sep(eng);
+	item(eng, cmd::EngineCommand, t("menu.engine.command"));
 	sub(bar, eng, t("menu.engine"));
 
 	HMENU io = CreatePopupMenu();
 	item(io, cmd::CopyMoves, t("menu.io.copy"), keys_.describe(Action::CopyMoves));
 	item(io, cmd::PasteMoves, t("menu.io.paste"), keys_.describe(Action::PasteMoves));
 	item(io, cmd::FixRecord, t("menu.io.fix"));
+	HMENU pos = CreatePopupMenu();
+	item(pos, cmd::CopyBoardText, t("menu.io.copy_board"));
+	item(pos, cmd::CopyObf, t("menu.io.copy_obf"));
+	item(pos, cmd::CopyBitDecimal, t("menu.io.copy_dec"));
+	item(pos, cmd::CopyBitHex, t("menu.io.copy_hex"));
+	item(pos, cmd::CopyBitNtest, t("menu.io.copy_ntest"));
+	sep(pos);
+	item(pos, cmd::ImportPosition, t("menu.io.import"));
+	sub(io, pos, t("menu.io.position"));
+	HMENU ed = CreatePopupMenu();
+	item(ed, cmd::EditBoard, t("menu.edit.start"), keys_.describe(Action::EditBoard));
+	item(ed, cmd::EditDone, t("menu.edit.done"), L"Enter");
+	item(ed, cmd::EditCancel, t("menu.edit.cancel"), L"Esc");
+	item(ed, cmd::EditSide, t("menu.edit.side"), L"T");
+	item(ed, cmd::EditClear, t("menu.edit.clear"), L"Delete");
+	item(ed, cmd::EditInitial, t("menu.edit.initial"), L"I");
+	sub(io, ed, t("menu.edit"));
+	item(io, cmd::EstimateLine, t("menu.io.estimate"));
+	sep(io);
+	item(io, cmd::Screenshot, t("menu.io.screenshot"), keys_.describe(Action::Screenshot));
+	item(io, cmd::SaveBoardImage, t("menu.io.board_image"));
+	sep(io);
+	HMENU lst = CreatePopupMenu();
+	item(lst, cmd::ListOpen, t("menu.list.open"));
+	item(lst, cmd::ListAdd, t("menu.list.add"));
+	item(lst, cmd::ListSave, t("menu.list.save"));
+	item(lst, cmd::ListAddGame, t("menu.list.add_game"));
+	item(lst, cmd::ListFromBook, t("menu.list.book"));
+	sep(lst);
+	item(lst, cmd::ListSort, t("menu.list.sort"));
+	item(lst, cmd::ListUnique, t("menu.list.unique"));
+	item(lst, cmd::ListTruncate, t("menu.list.truncate"));
+	item(lst, cmd::ListShuffle, t("menu.list.shuffle"));
+	item(lst, cmd::ListNormalize, t("menu.list.normalize"));
+	item(lst, cmd::ListScatter, t("menu.list.scatter"));
+	sep(lst);
+	item(lst, cmd::ListPrev, t("menu.list.prev"), keys_.describe(Action::ListPrev));
+	item(lst, cmd::ListNext, t("menu.list.next"), keys_.describe(Action::ListNext));
+	item(lst, cmd::ListReload, t("menu.list.reload"), keys_.describe(Action::ListReload));
+	item(lst, cmd::ListDelete, t("menu.list.delete"), keys_.describe(Action::ListDelete));
+	item(lst, cmd::ListClear, t("menu.list.clear"));
+	item(lst, cmd::ListStartPly, t("menu.list.start"));
+	sub(io, lst, t("menu.list"));
+	item(io, cmd::ListSearch, t("menu.list.search"));
+	item(io, cmd::ListSearchClear, t("menu.list.search_clear"));
+	item(io, cmd::TaskCancel, t("menu.task.cancel"));
+	sep(io);
+	HMENU bs = CreatePopupMenu();
+	item(bs, cmd::BaseConvert, t("menu.base.convert"));
+	item(bs, cmd::BaseUnique, t("menu.base.unique"));
+	item(bs, cmd::BaseCompare, t("menu.base.compare"));
+	item(bs, cmd::BaseCheck, t("menu.base.check"));
+	item(bs, cmd::BaseCorrect, t("menu.base.correct"));
+	item(bs, cmd::BaseComplete, t("menu.base.complete"));
+	item(bs, cmd::BaseProblem, t("menu.base.problem"));
+	item(bs, cmd::BaseTofen, t("menu.base.tofen"));
+	sub(io, bs, t("menu.base"));
+	sep(io);
+	item(io, cmd::RunScript, t("menu.io.script"));
+	item(io, cmd::StopScript, t("menu.io.script_stop"));
 	sub(bar, io, t("menu.io"));
 
 	HMENU view = CreatePopupMenu();
@@ -458,20 +636,47 @@ void App::build_menu()
 	item(top, cmd::TopNormal, t("menu.view.top.normal"));
 	item(top, cmd::TopWeak, t("menu.view.top.weak"));
 	sub(view, top, t("menu.view.top"));
-	AppendMenuW(view, MF_SEPARATOR, 0, nullptr);
+	sep(view);
+	HMENU ori = CreatePopupMenu();
+	for (int s = 0; s < 8; ++s) item(ori, cmd::Rotate0 + s, t("orient." + std::to_string(s)));
+	sep(ori);
+	item(ori, cmd::RotateNext, t("menu.view.orient.next"), keys_.describe(Action::Rotate));
+	sub(view, ori, t("menu.view.orient"));
+	item(view, cmd::MoveNumbers, t("menu.view.numbers"));
+	HMENU ci = CreatePopupMenu();
+	item(ci, cmd::CellInfoNone, t("menu.view.cell.none"));
+	item(ci, cmd::CellInfoPositions, t("menu.view.cell.positions"));
+	item(ci, cmd::CellInfoLevel, t("menu.view.cell.level"));
+	item(ci, cmd::CellInfoStage, t("menu.view.cell.stage"));
+	item(ci, cmd::CellInfoUmi, t("menu.view.cell.umi"));
+	sub(view, ci, t("menu.view.cell"));
+	sep(view);
 	item(view, cmd::TabMoves, t("menu.view.tab.moves"));
 	item(view, cmd::TabBook, t("menu.view.tab.book"));
 	item(view, cmd::TabRecord, t("menu.view.tab.record"));
-	AppendMenuW(view, MF_SEPARATOR, 0, nullptr);
+	item(view, cmd::TabList, t("menu.view.tab.list"));
+	item(view, cmd::TabKept, t("menu.view.tab.kept"));
+	HMENU kp = CreatePopupMenu();
+	item(kp, cmd::KeepNow, t("menu.kept.keep"), keys_.describe(Action::Keep));
+	item(kp, cmd::KeptShow, t("menu.kept.show"));
+	item(kp, cmd::KeptCompare, t("menu.kept.compare"));
+	item(kp, cmd::KeptDelete, t("menu.kept.delete"), L"Delete");
+	item(kp, cmd::KeptClear, t("menu.kept.clear"));
+	sub(view, kp, t("menu.kept"));
+	sep(view);
 	item(view, cmd::TogglePanel, t("menu.view.panel"), keys_.describe(Action::TogglePanel));
 	item(view, cmd::ToggleLog, t("menu.view.log"), keys_.describe(Action::ToggleLog));
 	sub(bar, view, t("menu.view"));
 
 	HMENU set = CreatePopupMenu();
 	item(set, cmd::RangeSettings, t("menu.settings.range"));
+	item(set, cmd::LearnSettings, t("menu.learn.settings"));
 	item(set, cmd::OpenConfig, t("menu.settings.config"));
 	HMENU lg = CreatePopupMenu();
 	item(lg, cmd::LangJa, L"日本語");
+	item(lg, cmd::LangEn, L"English");
+	item(lg, cmd::LangZhHans, L"简体中文");
+	item(lg, cmd::LangZhHant, L"繁體中文");
 	sub(set, lg, t("menu.settings.lang"));
 	sub(bar, set, t("menu.settings"));
 
@@ -492,19 +697,41 @@ void App::update_menu()
 	if (!m) return;
 	auto check = [&](int id, bool on) { CheckMenuItem(m, id, MF_BYCOMMAND | (on ? MF_CHECKED : MF_UNCHECKED)); };
 	auto radio = [&](int first, int last, int on) { CheckMenuRadioItem(m, first, last, on, MF_BYCOMMAND); };
+	auto enable = [&](int id, bool on) { EnableMenuItem(m, id, MF_BYCOMMAND | (on ? MF_ENABLED : MF_GRAYED)); };
 	check(cmd::ShowEval, show_eval_);
 	check(cmd::Backward, backward_);
 	check(cmd::FixRecord, fixed_on_);
-	EnableMenuItem(m, cmd::LearnStop, MF_BYCOMMAND | (learning_ ? MF_ENABLED : MF_GRAYED));
-	for (int id = cmd::LearnDeviate; id <= cmd::LearnFix; ++id) EnableMenuItem(m, id, MF_BYCOMMAND | (learning_ ? MF_GRAYED : MF_ENABLED));
-	EnableMenuItem(m, cmd::LearnContinue, MF_BYCOMMAND | (learning_ ? MF_GRAYED : MF_ENABLED));
-	EnableMenuItem(m, cmd::ExportBest, MF_BYCOMMAND | (learning_ ? MF_GRAYED : MF_ENABLED));
-	EnableMenuItem(m, cmd::QueueStart, MF_BYCOMMAND | (learning_ || learn_queue_.empty() ? MF_GRAYED : MF_ENABLED));
-	EnableMenuItem(m, cmd::QueueClear, MF_BYCOMMAND | (learn_queue_.empty() ? MF_GRAYED : MF_ENABLED));
+	enable(cmd::LearnStop, learning_);
+	for (int id = cmd::LearnDeviate; id <= cmd::LearnJobLast; ++id) enable(id, !learning_);
+	enable(cmd::LearnContinue, !learning_);
+	enable(cmd::ExportBest, !learning_);
+	enable(cmd::ListFromBook, !learning_ && !task_busy_);
+	enable(cmd::QueueStart, !learning_ && !learn_queue_.empty());
+	enable(cmd::QueueClear, !learn_queue_.empty());
+	for (int id = cmd::ToolSolve; id < cmd::ToolStop; ++id) enable(id, !tool_busy_);
+	for (int id = cmd::BaseConvert; id <= cmd::BaseTofen; ++id) enable(id, !tool_busy_);
+	enable(cmd::ToolStop, tool_busy_);
+	// the list waits for the job in progress
+	for (int id = cmd::ListOpen; id < cmd::TaskCancel; ++id) enable(id, !task_busy_);
+	const bool have_list = !list_.empty() && !task_busy_;
+	for (int id : {cmd::ListSave, cmd::ListSort, cmd::ListUnique, cmd::ListTruncate, cmd::ListShuffle, cmd::ListNormalize,
+	               cmd::ListScatter, cmd::ListClear, cmd::ListPrev, cmd::ListNext, cmd::ListSearch})
+		enable(id, have_list);
+	enable(cmd::ListDelete, have_list && list_index_ >= 0);
+	enable(cmd::ListReload, have_list && list_index_ >= 0);
+	enable(cmd::ListSearchClear, hits_shown_);
+	enable(cmd::TaskCancel, task_busy_);
+	enable(cmd::StopScript, !script_.empty() || script_wait_ != ScriptWait::None);
+	for (int id : {cmd::KeptShow, cmd::KeptCompare, cmd::KeptDelete}) enable(id, kept_sel_ >= 0 && kept_sel_ < static_cast<int>(kept_.size()));
+	enable(cmd::KeptClear, !kept_.empty());
+	for (int id = cmd::EditDone; id <= cmd::EditInitial; ++id) enable(id, editing_);
+	check(cmd::EditBoard, editing_);
+	enable(cmd::EstimateLine, !editing_ && !findline_id_ && !task_busy_);
 	check(cmd::UseBook, use_book_);
 	check(cmd::CountOn, count_);
 	check(cmd::TogglePanel, panel_hidden_);
 	check(cmd::ToggleLog, log_open_);
+	check(cmd::MoveNumbers, move_numbers_);
 	int lv = -1;
 	for (size_t i = 0; i < std::size(kLevels); ++i)
 		if (kLevels[i] == level_) lv = static_cast<int>(i);
@@ -517,8 +744,23 @@ void App::update_menu()
 	radio(cmd::EffectsOn, cmd::EffectsOff,
 	      effects_ == Effects::On ? cmd::EffectsOn : effects_ == Effects::Subdued ? cmd::EffectsSubdued : cmd::EffectsOff);
 	radio(cmd::TopStrong, cmd::TopWeak, cmd::TopStrong + static_cast<int>(top_effect_));
-	radio(cmd::TabMoves, cmd::TabRecord, cmd::TabMoves + static_cast<int>(tab_));
-	radio(cmd::LangJa, cmd::LangJa, cmd::LangJa);
+	radio(cmd::TabMoves, cmd::TabKept, cmd::TabMoves + static_cast<int>(tab_));
+	radio(cmd::Rotate0, cmd::Rotate0 + 7, cmd::Rotate0 + orient_);
+	radio(cmd::CellInfoNone, cmd::CellInfoUmi, cmd::CellInfoNone + static_cast<int>(cell_info_));
+	const int lang_id = lang_ == "en" ? cmd::LangEn : lang_ == "zh-Hans" ? cmd::LangZhHans : lang_ == "zh-Hant" ? cmd::LangZhHant : cmd::LangJa;
+	radio(cmd::LangJa, cmd::LangZhHant, lang_id);
+}
+
+void App::set_language(const std::string &code)
+{
+	lang_ = code;
+	ini_.set("view", "language", code);
+	lang::load(exe_dir_, code);
+	gfx_.clear_fonts();
+	SetWindowTextW(hwnd_, lang::t("app.title").c_str());
+	build_menu();
+	layout();
+	invalidate();
 }
 
 void App::set_window_icon()
@@ -681,6 +923,11 @@ void App::update_animation_timer()
 CellView App::cell_view(int sq) const
 {
 	CellView v;
+	if (editing_) {  // a position being set up: its discs only
+		if ((edit_pos_.black >> sq) & 1) v.stone = 1;
+		else if ((edit_pos_.white >> sq) & 1) v.stone = 2;
+		return v;
+	}
 	const Position &p = game_.now();
 	if ((p.black >> sq) & 1) v.stone = 1;
 	else if ((p.white >> sq) & 1) v.stone = 2;
@@ -690,6 +937,7 @@ CellView App::cell_view(int sq) const
 		v.last = game_.moves()[i] == sq;
 		break;
 	}
+	if (v.stone && move_numbers_) v.number = move_number_at(sq);
 	if (!show_eval_ || v.stone) return v;
 	const PosInfo *info = cache_.peek(p);
 
@@ -741,6 +989,7 @@ CellView App::cell_view(int sq) const
 		}
 	}
 	v.pending = !v.has_value && (eng_[1].alive || (use_book_ && eng_[0].alive && !info->book_done));
+	if (cell_info_ != CellInfo::None && v.has_value) v.info = cell_info_text(*m, cell_info_, use_book_);
 	int best = -999;
 	for (const auto &o : info->moves) {
 		int x;

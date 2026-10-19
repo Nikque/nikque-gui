@@ -85,6 +85,7 @@ void App::learn_command(int id)
 	}
 	const std::string xy = " " + std::to_string(loss_x_) + " " + std::to_string(loss_y_);
 	std::string c;
+	std::wstring warning;
 	switch (id) {
 	case cmd::LearnDeviate: c = "book deviate" + xy; break;
 	case cmd::LearnDeviate2: c = "book deviate2" + xy; break;
@@ -102,17 +103,19 @@ void App::learn_command(int id)
 	case cmd::LearnCheck: {
 		const std::wstring f = pick_file(hwnd_);
 		if (f.empty()) return;
-		if (f.find(L' ') != std::wstring::npos) {  // the engine reads the name up to a space
-			MessageBoxW(hwnd_, lang::t("learn.space_in_path").c_str(), lang::t("app.title").c_str(), MB_ICONWARNING);
-			return;
-		}
-		c = std::string(id == cmd::LearnAdd ? "book add " : id == cmd::LearnLearn ? "book learn " : "book check ") + narrow(f);
+		const auto p = engine_path_or_say(f, true);  // the engine reads the name up to a space
+		if (!p) return;
+		c = std::string(id == cmd::LearnAdd ? "book add " : id == cmd::LearnLearn ? "book learn " : "book check ") + *p;
 		break;
 	}
-	default: return;
+	default:
+		if (!book_job(id, &c, &warning)) return;
+		break;
 	}
-	if (MessageBoxW(hwnd_, lang::f("learn.ask", {widen(c), book_file()}).c_str(), lang::t("app.title").c_str(),
-	                MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
+	std::wstring ask = lang::f("learn.ask", {widen(c), book_file()});
+	if (!warning.empty()) ask += L"\n\n" + warning;
+	if (MessageBoxW(hwnd_, ask.c_str(), lang::t("app.title").c_str(),
+	                MB_OKCANCEL | (warning.empty() ? MB_ICONQUESTION : MB_ICONWARNING)) != IDOK)
 		return;
 	start_learning(c);
 }
@@ -190,6 +193,7 @@ void App::learning_ended()
 	}
 	request_analysis();
 	invalidate();
+	pump_script();
 }
 
 void App::stop_learning()
@@ -216,6 +220,7 @@ void App::stop_learning()
 	start_engines();
 	update_menu();
 	position_changed();
+	pump_script();
 }
 
 void App::continue_learning()
@@ -235,11 +240,9 @@ void App::continue_learning()
 	if (MessageBoxW(hwnd_, lang::f("learn.ask_continue", {saved.path, local_time(saved.time), widen(last)}).c_str(),
 	                lang::t("app.title").c_str(), MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
 		return;
-	if (saved.path.find(L' ') != std::wstring::npos) {  // the engine reads the name up to a space
-		MessageBoxW(hwnd_, lang::t("learn.space_in_path").c_str(), lang::t("app.title").c_str(), MB_ICONWARNING);
-		return;
-	}
-	send(0, "book load " + narrow(saved.path) + "\n");
+	const auto path = engine_path_or_say(saved.path, true);  // the engine reads the name up to a space
+	if (!path) return;
+	send(0, "book load " + *path + "\n");
 	cache_.clear_book();
 	if (last.empty()) {
 		request_analysis();

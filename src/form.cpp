@@ -1,5 +1,7 @@
 #include "form.h"
 
+#include "lang.h"
+
 #include <commctrl.h>
 
 #include <algorithm>
@@ -90,8 +92,8 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 	}
 	const UINT dpi = GetDpiForWindow(owner);
 	auto px = [&](int v) { return MulDiv(v, static_cast<int>(dpi), 96); };
-	HFONT font = CreateFontW(-px(14), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Yu Gothic UI");
-	HFONT bold = CreateFontW(-px(14), 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, L"Yu Gothic UI");
+	HFONT font = CreateFontW(-px(14), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, lang::ui_font());
+	HFONT bold = CreateFontW(-px(14), 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, lang::ui_font());
 
 	const int label_w = px(230), field_w = px(150), note_w = px(360), row = px(30), pad = px(14);
 	const int width = pad * 2 + label_w + field_w + px(10) + note_w;

@@ -1,9 +1,13 @@
 #include "gfx.h"
 
+#include "lang.h"
+
 #include <d2d1_1helper.h>
 #include <d2d1effects.h>
+#include <wincodec.h>
 
 #include <cmath>
+#include <cstring>
 #include <numbers>
 
 namespace ng {
@@ -236,9 +240,9 @@ IDWriteTextFormat *Gfx::text(float px, bool bold, DWRITE_TEXT_ALIGNMENT align, F
 	auto it = formats_.find(key);
 	if (it != formats_.end()) return it->second.Get();
 	ComPtr<IDWriteTextFormat> f;
-	dwrite_->CreateTextFormat(face == Face::Number ? L"Segoe UI" : L"Yu Gothic UI", nullptr,
+	dwrite_->CreateTextFormat(face == Face::Number ? L"Segoe UI" : lang::ui_font(), nullptr,
 	                          bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-	                          DWRITE_FONT_STRETCH_NORMAL, px, L"ja-jp", &f);
+	                          DWRITE_FONT_STRETCH_NORMAL, px, lang::locale(), &f);
 	f->SetTextAlignment(align);
 	f->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 	f->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -269,7 +273,7 @@ ComPtr<IDWriteFontFace> Gfx::font_face(Face face)
 	dwrite_->GetSystemFontCollection(&fc);
 	UINT32 index = 0;
 	BOOL exists = FALSE;
-	fc->FindFamilyName(face == Face::Number ? L"Segoe UI" : L"Yu Gothic UI", &index, &exists);
+	fc->FindFamilyName(face == Face::Number ? L"Segoe UI" : lang::ui_font(), &index, &exists);
 	if (!exists) fc->FindFamilyName(L"Segoe UI", &index, &exists);
 	if (!exists) index = 0;
 	ComPtr<IDWriteFontFamily> fam;
@@ -391,6 +395,13 @@ void Gfx::clear_shapes()
 	glows_.clear();
 }
 
+void Gfx::clear_fonts()
+{
+	formats_.clear();
+	ui_face_.Reset();
+	clear_shapes();
+}
+
 }  // namespace ng
 
 namespace ng {
@@ -417,6 +428,64 @@ void Gfx::stroke_shape(const NumberShape &s, ID2D1Brush *b, float stroke_w)
 	}
 	if (s.stroke_real) dc1_->DrawGeometryRealization(s.stroke_real.Get(), b);
 	else dc_->DrawGeometry(s.geom.Get(), b, stroke_w, round_join_.Get());
+}
+
+}  // namespace ng
+
+namespace ng {
+
+bool Gfx::save_png(const std::wstring &path, const D2D1_RECT_U &crop, const std::function<void()> &draw)
+{
+	if (!dc_ || drawing_ || width_ == 0 || height_ == 0) return false;
+	if (crop.right <= crop.left || crop.bottom <= crop.top || crop.right > width_ || crop.bottom > height_) return false;
+	const D2D1_PIXEL_FORMAT pf = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
+	ComPtr<ID2D1Bitmap1> frame, read;
+	if (FAILED(dc_->CreateBitmap({width_, height_}, nullptr, 0, D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET, pf, 96, 96), &frame)))
+		return false;
+	ComPtr<ID2D1Image> old;
+	dc_->GetTarget(&old);
+	dc_->SetTarget(frame.Get());
+	dc_->BeginDraw();
+	dc_->SetTransform(D2D1::Matrix3x2F::Identity());
+	drawing_ = true;
+	draw();
+	drawing_ = false;
+	const HRESULT hr = dc_->EndDraw();
+	dc_->SetTarget(old.Get());
+	if (FAILED(hr)) return false;
+	const D2D1_SIZE_U size{crop.right - crop.left, crop.bottom - crop.top};
+	if (FAILED(dc_->CreateBitmap(size, nullptr, 0,
+	                             D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_CPU_READ | D2D1_BITMAP_OPTIONS_CANNOT_DRAW, pf, 96, 96),
+	                             &read)))
+		return false;
+	const D2D1_POINT_2U at{0, 0};
+	if (FAILED(read->CopyFromBitmap(&at, frame.Get(), &crop))) return false;
+	D2D1_MAPPED_RECT mr{};
+	if (FAILED(read->Map(D2D1_MAP_OPTIONS_READ, &mr))) return false;
+	// the frame is opaque: every alpha 255
+	std::vector<BYTE> px(static_cast<size_t>(size.width) * 4 * size.height);
+	for (UINT y = 0; y < size.height; ++y) {
+		const BYTE *src = mr.bits + static_cast<size_t>(y) * mr.pitch;
+		BYTE *dst = px.data() + static_cast<size_t>(y) * size.width * 4;
+		std::memcpy(dst, src, static_cast<size_t>(size.width) * 4);
+		for (UINT x = 0; x < size.width; ++x) dst[x * 4 + 3] = 255;
+	}
+	read->Unmap();
+
+	ComPtr<IWICImagingFactory> wic;
+	ComPtr<IWICStream> stream;
+	ComPtr<IWICBitmapEncoder> enc;
+	ComPtr<IWICBitmapFrameEncode> fe;
+	if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&wic)))) return false;
+	if (FAILED(wic->CreateStream(&stream)) || FAILED(stream->InitializeFromFilename(path.c_str(), GENERIC_WRITE))) return false;
+	if (FAILED(wic->CreateEncoder(GUID_ContainerFormatPng, nullptr, &enc)) ||
+	    FAILED(enc->Initialize(stream.Get(), WICBitmapEncoderNoCache)) || FAILED(enc->CreateNewFrame(&fe, nullptr)) ||
+	    FAILED(fe->Initialize(nullptr)) || FAILED(fe->SetSize(size.width, size.height)))
+		return false;
+	WICPixelFormatGUID fmt = GUID_WICPixelFormat32bppBGRA;
+	if (FAILED(fe->SetPixelFormat(&fmt)) || fmt != GUID_WICPixelFormat32bppBGRA) return false;
+	if (FAILED(fe->WritePixels(size.height, size.width * 4, static_cast<UINT>(px.size()), px.data()))) return false;
+	return SUCCEEDED(fe->Commit()) && SUCCEEDED(enc->Commit());
 }
 
 }  // namespace ng

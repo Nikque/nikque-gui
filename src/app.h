@@ -7,14 +7,18 @@
 
 #include <chrono>
 #include <deque>
+#include <functional>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
 #include "analysis.h"
 #include "engine.h"
 #include "game.h"
+#include "gamelist.h"
 #include "gfx.h"
 #include "ini.h"
 #include "keys.h"
@@ -24,6 +28,7 @@
 namespace ng {
 
 inline constexpr UINT WM_ENGINE = WM_APP + 1;
+inline constexpr UINT WM_TASK = WM_APP + 2;  // a background job has ended
 
 // menu commands
 namespace cmd {
@@ -65,19 +70,71 @@ enum : int {
 	LearnCheck,
 	LearnNegamax,
 	LearnFix,
-	LearnStop,
+	LearnCorrect,
+	LearnLeafRecalc1,
+	LearnLeafRecalc2,
+	LearnLeafRecalc3,
+	LearnLeafRecalc4,
+	LearnMerge,
+	LearnSubtree,
+	LearnPrune,
+	LearnExport,
+	LearnImport,
+	LearnExtract,
+	BookNewEmpty,
+	BookSave,
+	BookSaveAs,
+	BookDepth,
+	BookProblem,
+	EngineCommand,  // the command box: any command for the main engine
+	LearnJobLast = EngineCommand,
+	LearnStop = 1350,
 	LearnContinue,
 	LearnSettings,
 	QueueMissing,
 	QueueStart,
 	QueueClear,
+	BookShowInfo = 1270,  // answered at once, beside the analyses
+	BookShowStats,
+	BookShowPosition,
 	EngineNikque = 1400,
 	EngineNewedax,
 	RestartEngines,
 	EngineVersion,
+	ToolSolve = 1420,
+	ToolBench,
+	ToolCount,
+	ToolPerft,
+	ToolEstimate,
+	ToolStop,
+	BaseConvert = 1440,
+	BaseUnique,
+	BaseCompare,
+	BaseCheck,
+	BaseCorrect,
+	BaseComplete,
+	BaseProblem,
+	BaseTofen,
 	CopyMoves = 1500,
 	PasteMoves,
 	FixRecord,
+	CopyBoardText,
+	CopyObf,
+	CopyBitDecimal,
+	CopyBitHex,
+	CopyBitNtest,
+	ImportPosition,
+	EditBoard,
+	EditDone,
+	EditCancel,
+	EditSide,
+	EditClear,
+	EditInitial,
+	EstimateLine,
+	Screenshot,
+	SaveBoardImage,
+	RunScript,
+	StopScript,
 	DesignStandard = 1600,
 	DesignPaw,
 	EffectsOn,
@@ -91,11 +148,49 @@ enum : int {
 	TabMoves,
 	TabBook,
 	TabRecord,
+	TabList,
+	TabKept,
+	MoveNumbers,
+	RotateNext,
+	Rotate0 = 1640,  // + symmetry 0..7
+	CellInfoNone = 1650,
+	CellInfoPositions,
+	CellInfoLevel,
+	CellInfoStage,
+	CellInfoUmi,
 	OpenConfig = 1700,
 	RangeSettings,
 	LangJa,
+	LangEn,
+	LangZhHans,
+	LangZhHant,
 	HelpKeys = 1800,
 	HelpAbout,
+	ListOpen = 1900,
+	ListAdd,
+	ListSave,
+	ListAddGame,
+	ListSort,
+	ListUnique,
+	ListTruncate,
+	ListShuffle,
+	ListNormalize,
+	ListScatter,
+	ListDelete,
+	ListClear,
+	ListStartPly,
+	ListFromBook,
+	ListPrev,
+	ListNext,
+	ListReload,
+	ListSearch,
+	ListSearchClear,
+	TaskCancel,
+	KeepNow = 1950,
+	KeptShow,
+	KeptCompare,
+	KeptDelete,
+	KeptClear,
 };
 }
 inline constexpr int kLevels[] = {1, 5, 10, 15, 18, 21, 24, 27, 30, 35, 40, 60};
@@ -103,7 +198,9 @@ inline constexpr int kLevels[] = {1, 5, 10, 15, 18, 21, 24, 27, 30, 35, 40, 60};
 enum class Effects : int { On = 0, Subdued = 1, Off = 2 };
 // how much of its effects the top stage (7) shows
 enum class TopEffect : int { Strong = 0, Normal = 1, Weak = 2 };
-enum class Tab : int { Moves = 0, Book = 1, Record = 2, Count };
+enum class Tab : int { Moves = 0, Book = 1, Record = 2, List = 3, Kept = 4, Count };
+// the small number at the lower left of a move's square
+enum class CellInfo : int { None = 0, Positions, Level, Stage, Umi };
 enum class EngineKind : int { Nikque18 = 0, Newedax = 1 };
 enum class UmiMode : int { Best = 0, Loss = 1, Off = 2, Range = 3 };
 enum class Column : int { Move, Value, Stage, Missing, Positions, Level, Umi, Count };
@@ -146,6 +243,8 @@ struct CellView {
 	bool improved = false;  // the value came back from the next position (backward analysis): a star by the level
 	int pv_num = 0;          // 1.. : this square is in the expected line of the move under the mouse
 	int pv_side = 0;         // the side who plays it there (0 black, 1 white)
+	int number = 0;          // the number of the move that put the disc here (numbers shown)
+	std::wstring info;       // the small number at the lower left (the setting of the squares)
 };
 
 struct EngineSlot {
@@ -171,7 +270,7 @@ struct MissingList {
 
 // a request to the main engine, by id
 struct Request {
-	enum Kind { Book, Count, Levels, Marker, Graph, Missing, Best, BestExport } kind;
+	enum Kind { Book, Count, Levels, Marker, Graph, Missing, Best, BestExport, FindLine, ListBook, ListBookAdd } kind;
 	PosKey pos;
 	int engine;
 };
@@ -218,8 +317,13 @@ public:
 	bool search_engine_ = true;
 	bool backward_ = true;     // backward analysis of the game (and searching its positions in the background)
 
-	// engines: [0] main (reads the book), [1] search only (no book)
-	EngineSlot eng_[2];
+	// engines: [0] main (reads the book), [1] search only (no book), [2] tools (started for one job, no book)
+	EngineSlot eng_[3];
+	bool tool_busy_ = false;
+	int tool_end_id_ = 0;
+	std::wstring tool_label_;
+	std::chrono::steady_clock::time_point tool_t0_{};
+	int hash_bits_ = 0;        // hash-table-size given to the engines (0: their own)
 	int next_id_ = 1;
 	std::unordered_map<int, Request> requests_;
 	int book_id_ = 0, count_id_ = 0, levels_id_ = 0, best_id_ = 0;   // running on the main engine
@@ -255,7 +359,59 @@ public:
 	bool hint_background_ = false;  // the hint in progress is for another position of the game
 	int hint_end_id_ = 0;            // the marker sent after the hint
 	std::vector<LineEval> line_;    // computed with each full drawing
-	int engine_level_[2] = {0, 0};
+	int engine_level_[3] = {0, 0, 0};
+
+	// the board
+	int orient_ = 0;               // the symmetry the game is shown in (from the game as it came)
+	bool move_numbers_ = false;    // the numbers of the moves on the discs
+	CellInfo cell_info_ = CellInfo::None;
+	bool editing_ = false;         // setting up a position
+	Position edit_pos_{};
+	int findline_id_ = 0;          // book findline asked of the main engine
+	Position findline_target_{};
+	bool findline_found_ = false;
+
+	// the game list
+	GameList list_;
+	int list_index_ = -1;          // the game of the list on the board
+	int list_start_ply_ = -1;      // a game from the list opens after this many moves (-1: at its end)
+	std::wstring list_file_;
+	int list_scroll_ = 0;
+	std::vector<ListHit> hits_;    // the games where the position searched appears
+	bool hits_shown_ = false;
+	int list_book_limit_ = 10000;     // the lines of the book read into the list, at most
+	Position list_book_start_{};
+	std::vector<std::pair<int, D2D1_RECT_F>> list_rects_;
+	// the kept lines (no limit), saved next to the exe
+	struct Kept {
+		Position start;
+		std::vector<int> moves;    // with the passes
+		int cursor = 0;
+		long long time = 0;        // seconds since 1970
+	};
+	std::vector<Kept> kept_;
+	int kept_sel_ = -1;
+	int kept_scroll_ = 0;
+	std::vector<std::pair<int, D2D1_RECT_F>> kept_rects_;
+
+	// one background job at a time (work on the list, the search of a line); its end runs on the window's thread
+	std::jthread task_;
+	bool task_busy_ = false;
+	std::wstring task_label_;
+	std::chrono::steady_clock::time_point task_t0_{};
+	std::mutex task_mutex_;
+	std::function<void()> task_done_;
+
+	// the command script: lines run one after another; a line that starts work waits for its end
+	struct ScriptLine {
+		int depth;
+		std::string text;
+	};
+	std::deque<ScriptLine> script_;
+	enum class ScriptWait { None, Task, Learn, Tool, Analysis, FindLine } script_wait_ = ScriptWait::None;
+	std::chrono::steady_clock::time_point script_until_{};
+	std::wstring script_dir_;     // relative names in a script are from its folder
+	std::string lang_ = "ja";
 
 	// interaction
 	Column sort_col_ = Column::Value;
@@ -304,6 +460,7 @@ public:
 	void log(const std::wstring &line);
 	void set_status(const std::wstring &s);
 	void set_window_icon();
+	void set_language(const std::string &code);
 
 	// ---- app_input.cpp
 	void on_key(WPARAM vk);
@@ -317,6 +474,7 @@ public:
 	void position_changed();
 	void copy_moves();
 	void paste_moves();
+	bool paste_text(const std::string &utf8);  // moves, a board or bitboards; false when none
 	void commit_edit();
 	void set_loss(int x, int y);
 	std::vector<const MoveEval *> sorted_moves(const PosInfo &info) const;
@@ -356,7 +514,64 @@ public:
 	std::string book_params() const;
 	std::wstring engine_dir() const;
 	std::wstring engine_name() const;
+	std::wstring engine_exe() const;   // empty when there is none
+	std::wstring engine_eval() const;
+	std::wstring engine_args() const;  // eval file, threads, level, hash
 	void send(int role, const std::string &text);
+
+	// ---- app_tools.cpp: the tool engine, the book commands of the menus, the base commands, file dialogs
+	bool start_tool(const std::string &commands, const std::wstring &label);
+	void tool_line(const std::string &line);
+	void tool_ended(bool stopped);
+	void stop_tool();
+	void tool_command(int id);
+	void base_command(int id);
+	bool book_job(int id, std::string *command, std::wstring *warning);  // the command of a book menu item (false: nothing to do)
+	std::wstring pick_open(const wchar_t *filter, const std::wstring &title = {});
+	std::wstring pick_save(const wchar_t *filter, const wchar_t *ext, const std::wstring &name, const std::wstring &title = {});
+	std::optional<std::string> engine_path_or_say(const std::wstring &path, bool exists);
+	void open_log();
+
+	// ---- app_board.cpp: orientation, board setup, the line of a position, bitboards, images
+	void orient_to(int s);
+	void begin_edit();
+	void end_edit(bool keep);
+	void edit_click(int sq, bool right);
+	bool edit_key(WPARAM vk);
+	void estimate_line();
+	void findline_answer(const Fields &f, bool end);
+	void estimate_without_book(const Position &target);
+	void copy_position(int id);
+	void import_position();
+	bool take_position_text(const std::string &text);
+	void set_game(const Game &g, bool keep_old);
+	void screenshot(const std::wstring &file = {});
+	void save_board_image();
+	void copy_text(const std::wstring &text);
+	std::wstring clipboard_text();
+	int move_number_at(int sq) const;
+
+	// ---- app_list.cpp: the game list, the search, the kept lines, background jobs
+	void run_task(const std::wstring &label, std::function<std::function<void()>(std::stop_token)> work);
+	void task_ended();
+	void cancel_task();
+	void list_command(int id);
+	void list_load(const std::wstring &file, bool add);
+	void list_select(int index, bool from_hit = false, int hit = -1);
+	void list_search();
+	void keep_now(bool quiet = false);
+	void kept_command(int id);
+	void load_kept();
+	void save_kept() const;
+	void list_from_book();
+	void list_book_written(bool add, bool ok);
+	void list_job_script(const std::wstring &label, std::function<void(GameList &)> work);
+
+	// ---- app_script.cpp: the command scripts
+	void run_script_file(const std::wstring &file, int depth);
+	void pump_script();
+	bool script_command(const std::string &line, int depth, std::wstring *error);
+	bool script_waiting() const;
 };
 
 // drawing (draw_board.cpp, draw_panel.cpp)

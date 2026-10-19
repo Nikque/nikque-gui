@@ -111,6 +111,19 @@ void AnalysisCache::clear_search()
 	for (auto &[k, e] : map_) e.info.reset_search();
 }
 
+void AnalysisCache::copy_symmetric(const Position &p, int s)
+{
+	const PosInfo *from = peek(p);
+	const Position q = symmetric(p, s);
+	if (!from || s == 0 || peek(q)) return;
+	PosInfo info = *from;  // copied first: making the new entry may drop the oldest one
+	for (auto &m : info.moves) {
+		m.sq = symmetric_square(m.sq, s);
+		for (auto &x : m.pv) x = symmetric_square(x, s);
+	}
+	get(q) = std::move(info);
+}
+
 Fields::Fields(std::string_view line)
 {
 	size_t i = 0;

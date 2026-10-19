@@ -51,6 +51,9 @@ constexpr LearnOption kLearnOptions[] = {
 	{"book-deviate-save-rounds", "learnopt.rounds", "learnopt.rounds.note"},
 	{"book-seed", "learnopt.seed", "learnopt.seed.note"},
 	{"book-reproducible", "learnopt.repro", "learnopt.repro.note"},
+	{"book-leaf-recalculate-rounds", "learnopt.leaf_rounds", "learnopt.leaf_rounds.note"},
+	{"book-merge-auto-save", "learnopt.merge_save", "learnopt.onoff.note"},
+	{"book-store-auto-save", "learnopt.store_save", "learnopt.onoff.note"},
 };
 
 // a value is a number, "auto", "on" or "off" (empty: the engine's own setting)
@@ -120,6 +123,7 @@ void App::open_range_settings()
 	heading("range.h.search");
 	number("range.level", level_, 1, 60);
 	number("range.threads", threads_, 0, 1024, "range.threads.note");
+	number("range.hash", hash_bits_, 0, 30, "range.hash.note");
 
 	if (!run_form(hwnd_, t("range.window"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return;
 
@@ -149,10 +153,13 @@ void App::open_range_settings()
 	++i;  // heading
 	level_ = std::stoi(f[i++].text);
 	const int threads = std::stoi(f[i++].text);
+	int hash = std::stoi(f[i++].text);
+	if (hash > 0 && hash < 10) hash = 10;
 	save_config();
 	update_menu();
-	if (threads != threads_) {
+	if (threads != threads_ || hash != hash_bits_) {
 		threads_ = threads;
+		hash_bits_ = hash;
 		save_config();
 		restart_engines();  // the threads are given when an engine starts
 		return;

@@ -46,6 +46,10 @@ add_executable(nikque-gui WIN32
 	src/analysis.cpp
 	src/openings.cpp
 	src/app_learn.cpp
+	src/app_tools.cpp
+	src/app_board.cpp
+	src/app_list.cpp
+	src/app_script.cpp
 	src/app_settings.cpp
 	src/form.cpp
 	src/engine.cpp
@@ -81,6 +85,8 @@ add_test(NAME rules COMMAND rules_test
 add_executable(parse_test tests/parse_test.cpp src/analysis.cpp ${NG_CORE})
 target_include_directories(parse_test PRIVATE src)
 add_test(NAME parse COMMAND parse_test)
+add_executable(lang_test tests/lang_test.cpp)
+add_test(NAME lang COMMAND lang_test ${CMAKE_SOURCE_DIR}/lang)
 add_executable(list_test tests/list_test.cpp ${NG_CORE})
 target_include_directories(list_test PRIVATE src)
 add_test(NAME list COMMAND list_test

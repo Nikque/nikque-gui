@@ -18,6 +18,7 @@ struct Hash {
 	size_t operator()(std::string_view s) const noexcept { return std::hash<std::string_view>{}(s); }
 };
 std::unordered_map<std::string, std::wstring, Hash, std::equal_to<>> words;
+std::string loaded = "ja";
 
 // "\n" in a value is a new line
 std::wstring unescape(std::string_view v)
@@ -56,6 +57,7 @@ void read_text(std::string_view text)
 void load(const std::wstring &exe_dir, std::string_view code)
 {
 	words.clear();
+	loaded = std::string(code);
 	// Japanese in the exe first, then the file over it
 	if (HRSRC r = FindResourceW(nullptr, MAKEINTRESOURCEW(IDR_LANG_JA), RT_RCDATA)) {
 		if (HGLOBAL g = LoadResource(nullptr, r)) {
@@ -97,6 +99,31 @@ std::wstring f(std::string_view key, std::initializer_list<std::wstring_view> ar
 		}
 	}
 	return out;
+}
+
+}  // namespace ng::lang
+
+namespace ng::lang {
+
+const std::string &code()
+{
+	return loaded;
+}
+
+const wchar_t *ui_font()
+{
+	if (loaded == "en") return L"Segoe UI";
+	if (loaded == "zh-Hans") return L"Microsoft YaHei UI";
+	if (loaded == "zh-Hant") return L"Microsoft JhengHei UI";
+	return L"Yu Gothic UI";
+}
+
+const wchar_t *locale()
+{
+	if (loaded == "en") return L"en-us";
+	if (loaded == "zh-Hans") return L"zh-cn";
+	if (loaded == "zh-Hant") return L"zh-tw";
+	return L"ja-jp";
 }
 
 }  // namespace ng::lang

@@ -30,6 +30,14 @@ enum class Action : int {
 	PasteMoves,
 	TogglePanel,
 	ToggleLog,
+	Rotate,
+	Screenshot,
+	ListPrev,
+	ListNext,
+	ListDelete,
+	ListReload,
+	Keep,
+	EditBoard,
 	Count
 };
 

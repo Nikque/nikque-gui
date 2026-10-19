@@ -143,8 +143,7 @@ status.fixed=棋譜を固定しました（{0} 手）
 status.missing_none=書き出す進行がありません（book のタブで一覧を出してください）
 status.missing_written=足りない進行を {0} 本書き出しました：{1}
 status.write_failed=ファイルに書けませんでした
-ask.open_book=主のエンジンを起動し直して、この book を読みます（大きな book では時間がかかります）。
-{0}
+ask.open_book=主のエンジンを起動し直して、この book を読みます（大きな book では時間がかかります）。\n{0}
 ask.switch_engine=エンジンを切り替えます。主のエンジンを起動し直し、book を読み直します（大きな book では時間がかかります）。よろしいですか。
 
 action.back=1 手戻る
@@ -272,3 +271,275 @@ best.bad_path=このファイルの名前には、エンジンが開けない文
 best.started=最善の進行の書き出しを主のエンジンに頼みました：{0}
 best.written=最善の進行を {0} 行書き出しました：{1}（進行 {2} 本、完全読みに届かない端 {3} 局面）
 best.export_failed=最善の進行を書き出せませんでした：{0}（ファイルを開けない、または局面が多すぎる）
+
+# ---- B（2026-10-20）
+tab.list=リスト
+tab.kept=控え
+bar.editing=盤面配置中（{0}）黒{1} 白{2}：左クリックで黒→白→空き、右クリックで空き、T で手番、Enter で決める、Esc でやめる
+engine.tool=道具のエンジン
+
+# エンジン：道具（solve・bench・count・perft・estimate・base）
+menu.tool.solve=問題を解く（solve）…
+menu.tool.bench=速さを測る（bench）…
+menu.tool.count=手順・局面を数える（count）…
+menu.tool.perft=手順を数える（perft）…
+menu.tool.estimate=手順の数を見積もる（estimate）…
+menu.tool.stop=道具を止める
+menu.engine.command=命令の欄（主のエンジンに送る）…
+tool.busy=道具のエンジンが動いています。終わるか、止めてから行ってください。
+tool.started=道具のエンジンで始めました：{0}（評価の Lv {1}、今の局面から）
+tool.ended=道具のエンジンが終わりました：{0}（{1} 分 {2} 秒）
+tool.stopped=道具のエンジンを止めました：{0}（{1} 分 {2} 秒）
+tool.bar=道具：{0}　{1}
+tool.bench.n=解く局面の数
+tool.bench.note=エンジンに組み込まれた終盤の局面
+tool.count.kind=数えるもの
+tool.count.games=手順（games）
+tool.count.positions=違う局面（positions）
+tool.count.shapes=石の形（shapes）
+tool.depth=深さ（手数）
+tool.depth.note=大きいと時間が急に増える
+tool.estimate.n=打ち進める回数
+command.label=命令
+command.note=| で区切ると複数。今の局面から行い、終わるまで解析は止まる
+err.engine_path=このファイルの場所は、エンジンに渡せません（空白か、エンジンの読めない文字があり、短い名前もありません）：\n{0}
+
+# 棋譜のファイル（base）
+menu.base=棋譜のファイル（base）
+menu.base.convert=形式を変える（convert）…
+menu.base.unique=同じ対局をまとめる（unique）…
+menu.base.compare=共通の局面を数える（compare）…
+menu.base.check=終盤の悪手を探す（check）…
+menu.base.correct=終盤の悪手を直す（correct、ファイルを書き換える）…
+menu.base.complete=未完の対局を打ち継ぐ（complete、ファイルを書き換える）…
+menu.base.problem=局面を問題のファイルに書き出す（problem）…
+menu.base.tofen=局面を FEN で書き出す（tofen）…
+base.empties=空きの数
+base.empties.note=この空きの局面から（終盤の完全読みは重い）
+base.rewrites=次のファイルを書き換えます（元には戻せません）。先に写しを取ってください。\n{0}
+base.same_file=書き出す先が元のファイルと同じです。別の名前にしてください。
+base.cannot_replace=このファイルを置き換えられませんでした：{0}
+
+# book の整理（主のエンジン）
+menu.book.show=book の中身をログに出す
+menu.book.show_info=book 全体の情報（book info）
+menu.book.show_stats=数の内訳（book stats）
+menu.book.show_position=今の局面の中身（book show）
+menu.book.keep=book の整理・書き出し
+menu.book.save=保存する（book save）
+menu.book.save_as=別の名前で保存する…
+menu.book.new=新しい空の book（book new）…
+menu.book.depth=book の深さを変える（book depth）…
+menu.book.problem=問題の形で出す（book problem）…
+menu.learn.merge=別の book を取り込む（book merge）…
+menu.learn.subtree=今の局面から先だけを残す（book subtree）…
+menu.learn.prune=片方が最善を打つ変化だけを残す（book prune）…
+menu.learn.export=文字のファイルに書き出す（book export）…
+menu.learn.import=文字のファイルから読み戻す（book import）…
+menu.learn.extract=最善の手順を棋譜に書き出す（book extract）…
+menu.learn.correct=完全読みの局面を確かめ直す（book correct）
+menu.learn.leaf=Leaf を計算し直す（book leaf recalculate）
+menu.learn.leaf1=deviate の範囲で広げる Leaf（X Y）
+menu.learn.leaf2=deviate2 の範囲で広げる Leaf（X Y）
+menu.learn.leaf3=deviate の範囲の全部の Leaf（X Y）
+menu.learn.leaf4=deviate2 の範囲の全部の Leaf（X Y）
+booknew.level=book の level
+booknew.depth=book の深さ
+bookdepth.note=深さの設定だけ（局面は消えない）。浅くするには、この後に初めの局面で book subtree
+bookproblem.count=出す数
+warn.book_replaced=この後、エンジンを閉じると（GUI を閉じる・エンジンや book の切り替え・学習を止める）、変わった book が book のファイルに保存されます。元を残すなら、先にファイルの写しを取ってください。
+warn.merge=取り込んだ結果は、自動で .mrg のファイルにも保存されます（設定 book-merge-auto-save）。
+warn.subtree=今の局面とその先だけが残り、ほかの局面（初めの局面からここまでも）は消えます。
+warn.prune=片方の側が最善でない手を打った先の局面は消えます。
+warn.import=今の book は、読んだファイルの中身と入れ替わります。
+warn.new=今の book は捨てられ、空の book になります。
+learnopt.leaf_rounds=Leaf の計算し直しの回数の上限
+learnopt.leaf_rounds.note=変わらなかった回で終わる
+learnopt.merge_save=merge の後に .mrg へ保存
+learnopt.store_save=store の後に .store へ保存
+learnopt.onoff.note=on か off
+
+# 局面の文字列・ビットボード
+menu.io.position=局面の文字列・ビットボード
+menu.io.copy_board=盤の文字列を写す
+menu.io.copy_obf=問題の形（obf）で写す
+menu.io.copy_dec=ビットボード（10 進）を写す
+menu.io.copy_hex=ビットボード（16 進）を写す
+menu.io.copy_ntest=ビットボード（Ntest の形）を写す
+menu.io.import=局面を取り込む…
+status.position_copied=局面を写しました：{0}
+import.text=局面
+import.text.note=盤の文字列・obf・ビットボード（黒 白 手番）
+import.form=形
+import.form.auto=自動（盤の文字列・obf・10 進・16 進）
+import.form.ntest=Ntest の形（空き 手番の側の石）
+import.bad=局面として読めませんでした。
+
+# 盤面配置・手順の推定
+menu.edit=盤面配置
+menu.edit.start=盤面配置を始める・決める
+menu.edit.done=決める
+menu.edit.cancel=やめる
+menu.edit.side=手番を替える
+menu.edit.clear=石を全部消す
+menu.edit.initial=初めの配置にする
+edit.help=盤面配置：左クリックで黒→白→空き、右クリックで空き。T で手番、Enter で決める、Esc でやめる
+edit.done=この局面から始めます：{0}
+edit.cancelled=盤面配置をやめました
+edit.side_black=手番：黒
+edit.side_white=手番：白
+menu.io.estimate=盤から手順を推定する（20 手目まで）
+estimate.too_late=手順を推定できるのは {0} 手目までの局面です。
+estimate.busy=ほかの仕事の途中です
+estimate.book=book をたどって手順を探しています…
+estimate.found_book=book をたどって手順を作りました（{0} 手）
+estimate.no_command=このエンジンには book から手順を探す命令がないので、book を使わずに探します
+estimate.not_in_book=book には手順が見つからなかったので、book を使わずに探します
+estimate.searching=手順を探しています（book なし）
+estimate.found_search=book を使わずに手順を作りました（{0} 手、{1} 局面、{2} ms）
+estimate.gave_up=手順を探しきれませんでした（{0} 局面、{1} ms）
+estimate.none=この局面に着く手順はありません（{0} 局面、{1} ms）
+
+# 画像
+menu.io.screenshot=スクリーンショット
+menu.io.board_image=盤の図を保存する（PNG）…
+status.screenshot=画像を保存しました：{0}
+status.screenshot_failed=画像を保存できませんでした：{0}
+filter.png=PNG 画像
+
+# ファイルの種類
+filter.all=すべてのファイル
+filter.games=棋譜
+filter.books=book
+filter.text=文字のファイル
+filter.obf=問題（obf）
+filter.fen=FEN
+
+# 盤の向き・手順の番号・マスの数
+menu.view.orient=盤の向き
+menu.view.orient.next=次の向き
+orient.0=元の向き
+orient.1=左右を入れ替える
+orient.2=上下を入れ替える
+orient.3=180 度回す
+orient.4=a1-h8 の線で折り返す
+orient.5=右に 90 度回す
+orient.6=左に 90 度回す
+orient.7=a8-h1 の線で折り返す
+status.orient=盤の向き：{0}
+menu.view.numbers=手順の番号を石に出す
+menu.view.cell=マスに出す数（左下）
+menu.view.cell.none=出さない
+menu.view.cell.positions=book の局面数
+menu.view.cell.level=Lv（L）
+menu.view.cell.stage=精度の段階（S）
+menu.view.cell.umi=うみがめ数（黒:白）
+range.hash=ハッシュ表の大きさ（ビット）
+range.hash.note=0 はエンジンの設定のまま、10〜30。変えるとエンジンを起動し直す
+
+# 棋譜リスト・棋譜検索
+menu.view.tab.list=棋譜リストのタブ
+menu.view.tab.kept=控えのタブ
+menu.list=棋譜リスト
+menu.list.open=読む…
+menu.list.add=足す（別のファイルを後ろに）…
+menu.list.save=保存する…
+menu.list.add_game=今の棋譜をリストに足す
+menu.list.book=book の進行をリストへ…
+menu.list.sort=並べ替える（短い順、同じ長さは手順の順）
+menu.list.unique=同じ棋譜をまとめる
+menu.list.truncate=切る（各棋譜を n 手まで）…
+menu.list.shuffle=混ぜる…
+menu.list.normalize=向きをそろえる（初手を f5 に）
+menu.list.scatter=向きを散らす…
+menu.list.prev=前の棋譜
+menu.list.next=次の棋譜
+menu.list.reload=今の棋譜を読み直す
+menu.list.delete=今の棋譜をリストから消す
+menu.list.clear=リストを空にする…
+menu.list.start=何手目から始めるか…
+menu.list.search=棋譜検索（今の局面が出る棋譜）
+menu.list.search_clear=検索の結果を消す
+menu.task.cancel=裏の仕事を止める
+list.reading=棋譜リストを読んでいます：{0}
+list.cannot_open=ファイルを開けませんでした：{0}
+list.read={0} 局を読みました（{1}、リストは {2} 局。途中で打てない手があった棋譜 {3} 局はその手の前まで）
+list.added={0} 局を足しました（{1}、リストは {2} 局。途中で打てない手があった棋譜 {3} 局はその手の前まで）
+list.saved={0} 局を保存しました：{1}
+list.game_added=今の棋譜をリストに足しました（{0} 局目）
+list.sorted={0} 局を並べ替えました
+list.uniqued=同じ棋譜を {0} 局まとめました（残り {1} 局）
+list.truncated=各棋譜を {0} 手までに切りました
+list.shuffled=混ぜました（種 {0}）
+list.normalized=向きをそろえました
+list.scattered=向きを散らしました（種 {0}）
+list.deleted={0} 局目を消しました（残り {1} 局）
+list.ask_clear=棋譜リストの {0} 局を消します（ファイルは消えません）。よろしいですか。
+list.cleared=棋譜リストを空にしました
+list.done=終わりました（{0} 局）
+list.empty=棋譜リストは空です（入出力 → 棋譜リスト → 読む）
+list.at={0} / {1} 局目
+list.head=棋譜リスト {0} 局
+list.hits=検索：{0} 局に出ます（行を押すとその局面へ）
+list.hit_ply={0} 手目
+list.searching=棋譜リストを探しています
+list.found=今の局面は {0} 局に出ます（{1} 局のうち、{2} ms。向きの違うものも含む）
+list.search_cancelled=探すのを止めました（それまでに {0} 局、{1} 局のうち、{2} ms）
+list.truncate.n=手数
+list.seed=乱数の種
+list.seed.note=0 は時計から（毎回違う）。同じ種なら同じ並び
+list.scatter.side=散らす手番
+list.scatter.black=黒の手番の対称な局面
+list.scatter.white=白の手番の対称な局面
+list.scatter.both=両方
+list.start.n=開く手数
+list.start.note=-1 は最後の局面、0 は初めの局面
+list.book.n=最大の本数
+list.book.ask_add=棋譜リストには {0} 局あります。book の進行を後ろに足しますか（「いいえ」で置き換える）。
+list.book.asked=book の進行を主のエンジンに頼みました
+list.book.read=book の進行を {0} 本リストに入れました（エンジンが書いた {1} 本のうち。リストは {2} 局）
+
+# 控え
+menu.kept=控え
+menu.kept.keep=今の手順を控える
+menu.kept.show=選んだ控えを見る
+menu.kept.compare=選んだ控えと比べる（固定の棋譜として）
+menu.kept.delete=選んだ控えを消す
+menu.kept.clear=控えを全部消す…
+kept.head=控え {0} 件（{1} で今の手順を控える。押すと選ぶ、二度押すと見る）
+kept.added=手順を控えました（{0} 件）
+kept.ask_clear=控えの {0} 件を全部消します。よろしいですか。
+kept.choose=控えのタブで控えを選んでください
+kept.compared={0} 番の控えと比べます（悪手に赤枠、違う手の所に印）
+
+# 裏の仕事
+task.busy=ほかの仕事（リストの処理・探索）の途中です。終わるか止めてから行ってください。
+task.cancelled=止めました
+task.running=処理中：{0}…
+task.bar={0}　{1}
+
+# 命令の列
+menu.io.script=命令の列を行う…
+menu.io.script_stop=命令の列を止める
+script.started=命令の列を始めました：{0}（{1} 行）
+script.stopped=命令の列を止めました
+script.error=命令の列を止めました（{0}：{1}）
+script.cannot_open=命令の列のファイルを開けませんでした：{0}
+script.too_deep=命令の列の中の run は {0} 段までです
+script.unknown=知らない命令です
+script.bad_moves=棋譜が読めないか、打てない手があります
+script.bad_board=局面が読めません
+script.bad_number=数が読めないか、範囲の外です
+script.bad_word=引数が違います
+script.on_off=on か off を書いてください
+script.bar=命令の列：残り {0} 行
+
+# キーの動作（追加）
+action.rotate=盤の向きを変える
+action.screenshot=スクリーンショット
+action.list_prev=棋譜リストの前の棋譜
+action.list_next=棋譜リストの次の棋譜
+action.list_delete=棋譜リストの今の棋譜を消す
+action.list_reload=棋譜リストの今の棋譜を読み直す
+action.keep=今の手順を控える
+action.edit_board=盤面配置を始める・決める

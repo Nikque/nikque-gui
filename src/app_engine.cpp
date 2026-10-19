@@ -87,31 +87,45 @@ void App::send(int role, const std::string &text)
 	}
 }
 
-void App::start_engines()
+std::wstring App::engine_exe() const
 {
 	const char *sec = kind_ == EngineKind::Newedax ? "newedax" : "nikque18";
 	const std::wstring dir = engine_dir();
-	std::wstring exe;
 	const std::string e = ini_.get(sec, "exe", "auto");
-	if (e.empty() || iequals(e, "auto")) {
-		const int lv = cpu_level();
-		std::vector<std::wstring> names;
-		if (lv >= 4) names.push_back(L"wEdax-x86-64-v4.exe");
-		if (lv >= 3) names.push_back(L"wEdax-x86-64-v3.exe");
-		names.push_back(L"wEdax-x86-64.exe");
-		for (const auto &n : names)
-			if (file_exists(dir + L"\\" + n)) {
-				exe = dir + L"\\" + n;
-				break;
-			}
-	} else {
-		exe = absolute(dir, e);
-	}
+	if (!e.empty() && !iequals(e, "auto")) return absolute(dir, e);
+	const int lv = cpu_level();
+	std::vector<std::wstring> names;
+	if (lv >= 4) names.push_back(L"wEdax-x86-64-v4.exe");
+	if (lv >= 3) names.push_back(L"wEdax-x86-64-v3.exe");
+	names.push_back(L"wEdax-x86-64.exe");
+	for (const auto &n : names)
+		if (file_exists(dir + L"\\" + n)) return dir + L"\\" + n;
+	return {};
+}
+
+std::wstring App::engine_eval() const
+{
+	const char *sec = kind_ == EngineKind::Newedax ? "newedax" : "nikque18";
 	const std::string ev = ini_.get(sec, "eval");
-	const std::wstring eval = ev.empty() ? dir + L"\\data\\eval.dat" : absolute(dir, ev);
-	const std::wstring book = book_file();
+	return ev.empty() ? engine_dir() + L"\\data\\eval.dat" : absolute(engine_dir(), ev);
+}
+
+std::wstring App::engine_args() const
+{
 	int n = threads_;
 	if (n <= 0) n = static_cast<int>(GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
+	std::wstring a = L"-q -eval-file \"" + engine_eval() + L"\" -n-tasks " + std::to_wstring(n) + L" -level " +
+	                 std::to_wstring(level_);
+	if (hash_bits_ > 0) a += L" -hash-table-size " + std::to_wstring(hash_bits_);
+	return a;
+}
+
+void App::start_engines()
+{
+	const std::wstring dir = engine_dir();
+	const std::wstring exe = engine_exe();
+	const std::wstring eval = engine_eval();
+	const std::wstring book = book_file();
 
 	if (exe.empty() || !file_exists(exe)) {
 		log(lang::f("log.no_exe", {exe.empty() ? dir : exe}));
@@ -135,8 +149,7 @@ void App::start_engines()
 			}
 		}
 	}
-	const std::wstring common = L"-q -eval-file \"" + eval + L"\" -n-tasks " + std::to_wstring(n) + L" -level " +
-	                            std::to_wstring(level_);
+	const std::wstring common = engine_args();
 	for (int role = 0; role < 2; ++role) {
 		EngineSlot &s = eng_[role];
 		if (s.proc.running()) continue;
@@ -147,7 +160,7 @@ void App::start_engines()
 			          : common + L" -book-file \"" + temp_dir_ + L"\\nobook.dat\" -book-usage off";
 		std::wstring err;
 		++s.generation;
-		s.alive = s.proc.start(exe, args, dir, hwnd_, WM_ENGINE, static_cast<WPARAM>(role) | (static_cast<WPARAM>(s.generation) << 1), &err);
+		s.alive = s.proc.start(exe, args, dir, hwnd_, WM_ENGINE, static_cast<WPARAM>(role) | (static_cast<WPARAM>(s.generation) << 2), &err);
 		s.loaded = false;
 		s.board.reset();
 		engine_level_[role] = level_;
@@ -181,7 +194,10 @@ void App::stop_engines()
 	missing_ = MissingList{};
 	learning_ = false;
 	hint_busy_ = hint_accept_ = hint_background_ = false;
+	tool_busy_ = false;
+	findline_id_ = 0;
 	DeleteFileW((temp_dir_ + L"\\nobook.dat").c_str());
+	DeleteFileW((temp_dir_ + L"\\nobook-tool.dat").c_str());
 }
 
 void App::restart_engines()
@@ -364,14 +380,24 @@ void App::pump_search()
 
 void App::on_engine(WPARAM tag, bool ended)
 {
-	const int role = static_cast<int>(tag & 1);
+	const int role = static_cast<int>(tag & 3);
+	if (role > 2) return;
 	EngineSlot &s = eng_[role];
-	if (static_cast<unsigned>(tag >> 1) != s.generation) return;  // from a process closed before
+	if (static_cast<unsigned>(tag >> 2) != s.generation) return;  // from a process closed before
 	std::vector<std::string> lines;
 	s.proc.take_lines(lines);
 	bool changed = false, ask_missing = false;
 	const PosKey here = key_of(game_.now());
 
+	if (role == 2) {
+		for (const std::string &line : lines)
+			if (!line.empty()) tool_line(line);
+		if (ended && s.alive) {
+			s.alive = false;
+			if (tool_busy_) tool_ended(true);
+		}
+		return;
+	}
 	for (const std::string &line : lines) {
 		if (line.empty()) continue;
 		if (line[0] == '@') {
@@ -390,6 +416,12 @@ void App::on_engine(WPARAM tag, bool ended)
 			auto it = requests_.find(id);
 			if (it == requests_.end()) continue;  // stopped before
 			const Request req = it->second;
+			if (req.kind == Request::FindLine) {
+				const bool end = f.kind() == "end" || f.kind() == "cancel";
+				findline_answer(f, end);
+				if (end) requests_.erase(it);
+				continue;
+			}
 			if (req.kind == Request::Missing) {
 				if (f.kind() == "line" && id == missing_id_) {
 					if (auto ml = parse_missing_line(f)) missing_.lines.push_back(std::move(*ml));
@@ -407,6 +439,14 @@ void App::on_engine(WPARAM tag, bool ended)
 					requests_.erase(it);
 				}
 				changed = true;
+				continue;
+			}
+			if (req.kind == Request::ListBook || req.kind == Request::ListBookAdd) {
+				if (f.kind() == "end" || f.kind() == "cancel") {
+					const bool ok = f.kind() == "end" && !f.num("error").value_or(0);
+					requests_.erase(it);
+					list_book_written(req.kind == Request::ListBookAdd, ok);
+				}
 				continue;
 			}
 			if (req.kind == Request::BestExport) {
@@ -526,6 +566,13 @@ void App::on_engine(WPARAM tag, bool ended)
 				learning_line(line);
 				continue;
 			}
+		}
+		// an engine without "book findline": the line is looked for without the book
+		if (role == 0 && findline_id_ && line.starts_with("WARNING") && line.find("findline") != std::string::npos) {
+			const std::string end = "@end id=" + std::to_string(findline_id_) + " count=0 unknown=1";
+			requests_.erase(findline_id_);
+			findline_answer(Fields(end), true);
+			continue;
 		}
 		// other lines of the engines go to the log (not the prompts and the search lines)
 		if (line[0] == '<' || parse_hint_line(line)) continue;

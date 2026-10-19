@@ -30,6 +30,14 @@ constexpr ActionInfo kActions[] = {
 	{"paste", "Ctrl+V"},
 	{"panel", "P"},
 	{"log", "L"},
+	{"rotate", "R"},
+	{"screenshot", "Ctrl+P"},
+	{"list_prev", "Ctrl+Shift+Left"},
+	{"list_next", "Ctrl+Shift+Right"},
+	{"list_delete", "Ctrl+Shift+Up"},
+	{"list_reload", "Ctrl+Shift+Down"},
+	{"keep", "M"},
+	{"edit_board", "E"},
 };
 static_assert(std::size(kActions) == static_cast<size_t>(Action::Count));
 

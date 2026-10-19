@@ -126,6 +126,14 @@ void App::do_action(Action a)
 	}
 	case Action::TogglePanel: on_command(cmd::TogglePanel); break;
 	case Action::ToggleLog: on_command(cmd::ToggleLog); break;
+	case Action::Rotate: on_command(cmd::RotateNext); break;
+	case Action::Screenshot: on_command(cmd::Screenshot); break;
+	case Action::ListPrev: on_command(cmd::ListPrev); break;
+	case Action::ListNext: on_command(cmd::ListNext); break;
+	case Action::ListDelete: on_command(cmd::ListDelete); break;
+	case Action::ListReload: on_command(cmd::ListReload); break;
+	case Action::Keep: on_command(cmd::KeepNow); break;
+	case Action::EditBoard: on_command(cmd::EditBoard); break;
 	default: break;
 	}
 }
@@ -149,12 +157,22 @@ void App::on_key(WPARAM vk)
 		}
 		return;  // digits come with WM_CHAR
 	}
+	if (editing_ && edit_key(vk)) return;
+	// the kept lines: Delete takes the chosen one away
+	if (vk == VK_DELETE && tab_ == Tab::Kept && !panel_hidden_) {
+		on_command(cmd::KeptDelete);
+		return;
+	}
 	KeyChord k;
 	k.vk = static_cast<UINT>(vk);
 	k.ctrl = GetKeyState(VK_CONTROL) < 0;
 	k.shift = GetKeyState(VK_SHIFT) < 0;
 	k.alt = GetKeyState(VK_MENU) < 0;
-	if (auto a = keys_.find(k)) do_action(*a);
+	if (auto a = keys_.find(k)) {
+		// while a position is set up, the game is not moved
+		if (editing_ && *a != Action::Screenshot && *a != Action::TogglePanel && *a != Action::ToggleLog) return;
+		do_action(*a);
+	}
 }
 
 void App::on_char(wchar_t c)
@@ -196,9 +214,13 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 	const float fx = static_cast<float>(x), fy = static_cast<float>(y);
 	if (edit_field_ && !inside(lay_.fx.box, fx, fy) && !inside(lay_.fy.box, fx, fy)) commit_edit();
 	const int sq = lay_.square_at(fx, fy);
+	if (editing_ && sq != kNoMove) {
+		edit_click(sq, right);
+		return;
+	}
 	if (right) {
 		// a right click goes one move back (on the board, also anywhere but the panel)
-		if (sq != kNoMove || !inside(lay_.panel, fx, fy)) do_action(Action::Back);
+		if (!editing_ && (sq != kNoMove || !inside(lay_.panel, fx, fy))) do_action(Action::Back);
 		return;
 	}
 	if (sq != kNoMove) {
@@ -286,6 +308,26 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 			if (inside(r, fx, fy)) {
 				game_.go_to(n);
 				position_changed();
+				return;
+			}
+	}
+	if (tab_ == Tab::List && !editing_) {
+		for (auto &[k, r] : list_rects_)
+			if (inside(r, fx, fy)) {
+				if (hits_shown_) {
+					if (k < static_cast<int>(hits_.size())) list_select(static_cast<int>(hits_[k].game), true, k);
+				} else {
+					list_select(k);
+				}
+				return;
+			}
+	}
+	if (tab_ == Tab::Kept && !editing_) {
+		for (auto &[k, r] : kept_rects_)
+			if (inside(r, fx, fy)) {
+				kept_sel_ = k;
+				if (dbl) on_command(cmd::KeptShow);
+				invalidate();
 				return;
 			}
 	}
@@ -378,6 +420,14 @@ void App::on_wheel(int x, int y, int delta)
 		missing_scroll_ = std::max(0, missing_scroll_ - step * 3);
 		invalidate();
 	}
+	else if (inside(lay_.table, fx, fy) && tab_ == Tab::List) {
+		list_scroll_ = std::max(0, list_scroll_ - step * 3);
+		invalidate();
+	}
+	else if (inside(lay_.table, fx, fy) && tab_ == Tab::Kept) {
+		kept_scroll_ = std::max(0, kept_scroll_ - step * 3);
+		invalidate();
+	}
 	else if (inside(lay_.table, fx, fy)) {
 		table_scroll_ = std::max(0, table_scroll_ - step * 3);
 		invalidate();
@@ -400,47 +450,74 @@ void App::copy_moves()
 
 void App::paste_moves()
 {
-	std::wstring text;
-	if (OpenClipboard(hwnd_)) {
-		if (HANDLE h = GetClipboardData(CF_UNICODETEXT)) {
-			if (const wchar_t *p = static_cast<const wchar_t *>(GlobalLock(h))) text = p;
-			GlobalUnlock(h);
-		}
-		CloseClipboard();
-	}
-	const std::string u = narrow(text);
-	// a board (64 squares and the side): the game starts there
-	if (auto b = parse_board_text(u)) {
-		game_.reset(*b);
-		log(lang::t("status.pasted_board"));
-		position_changed();
-		return;
-	}
+	paste_text(narrow(clipboard_text()));
+}
+
+bool App::paste_text(const std::string &u)
+{
+	// a board (64 squares and the side) or bitboards: the game starts there
+	if (take_position_text(u)) return true;
 	// a blog board (the numbers of the moves by square), else coordinates in any text
 	ParsedMoves pm;
 	if (auto pl = parse_param_lines(u)) pm.moves = *pl;
 	else pm = parse_moves(u);
 	if (pm.moves.empty()) {
 		set_status(lang::t("status.paste_none"));
-		return;
+		return false;
 	}
 	Game g;
 	const int n = replay(g, Position{}, pm.moves);
 	if (n == 0) {
 		set_status(lang::t("status.paste_bad"));
-		return;
+		return false;
 	}
-	game_ = g;
-	game_.go_to(game_.size());
+	g.go_to(g.size());
+	list_index_ = -1;
+	set_game(g, true);
 	log(n == static_cast<int>(pm.moves.size()) ? lang::f("status.pasted", {std::to_wstring(n)})
 	                                           : lang::f("status.pasted_part", {std::to_wstring(n), std::to_wstring(pm.moves.size())}));
-	position_changed();
+	return true;
 }
 
 void App::on_command(int id)
 {
-	if (id >= cmd::LearnDeviate && id <= cmd::LearnFix) {
+	if (id >= cmd::LearnDeviate && id <= cmd::LearnJobLast) {
 		learn_command(id);
+		return;
+	}
+	if (id >= cmd::ToolSolve && id <= cmd::ToolStop) {
+		tool_command(id);
+		return;
+	}
+	if (id >= cmd::BaseConvert && id <= cmd::BaseTofen) {
+		base_command(id);
+		return;
+	}
+	if (id >= cmd::ListOpen && id <= cmd::TaskCancel) {
+		list_command(id);
+		return;
+	}
+	if (id >= cmd::KeepNow && id <= cmd::KeptClear) {
+		kept_command(id);
+		return;
+	}
+	if (id >= cmd::Rotate0 && id < cmd::Rotate0 + 8) {
+		orient_to(id - cmd::Rotate0);
+		return;
+	}
+	if (id >= cmd::CellInfoNone && id <= cmd::CellInfoUmi) {
+		cell_info_ = static_cast<CellInfo>(id - cmd::CellInfoNone);
+		update_menu();
+		invalidate();
+		return;
+	}
+	if (id >= cmd::CopyBoardText && id <= cmd::CopyBitNtest) {
+		copy_position(id);
+		return;
+	}
+	if (id >= cmd::LangJa && id <= cmd::LangZhHant) {
+		const char *codes[] = {"ja", "en", "zh-Hans", "zh-Hant"};
+		set_language(codes[id - cmd::LangJa]);
 		return;
 	}
 	if (id == cmd::LearnStop) {
@@ -491,9 +568,78 @@ void App::on_command(int id)
 	}
 	switch (id) {
 	case cmd::NewGame:
-		game_.reset(Position{});
-		position_changed();
+		list_index_ = -1;
+		set_game(Game{}, true);
 		break;
+	case cmd::BookShowInfo:
+	case cmd::BookShowStats:
+	case cmd::BookShowPosition: {
+		// read-only commands: the engine answers them beside the analyses
+		std::string c = id == cmd::BookShowInfo ? "book info\n" : id == cmd::BookShowStats ? "book stats\n" : "book show\n";
+		if (id == cmd::BookShowPosition && eng_[0].board != key_of(game_.now())) {
+			c = "setboard " + game_.now().to_board_string() + "\n" + c;
+			eng_[0].board = key_of(game_.now());
+		}
+		send(0, c);
+		open_log();
+		break;
+	}
+	case cmd::ImportPosition: import_position(); break;
+	case cmd::EditBoard:
+		if (editing_) end_edit(true);
+		else begin_edit();
+		break;
+	case cmd::EditDone: end_edit(true); break;
+	case cmd::EditCancel: end_edit(false); break;
+	case cmd::EditSide:
+		if (editing_) {
+			edit_pos_.side ^= 1;
+			set_status(lang::t(edit_pos_.side == kBlack ? "edit.side_black" : "edit.side_white"));
+			invalidate();
+		}
+		break;
+	case cmd::EditClear:
+		if (editing_) {
+			edit_pos_.black = edit_pos_.white = 0;
+			invalidate();
+		}
+		break;
+	case cmd::EditInitial:
+		if (editing_) {
+			edit_pos_ = Position{};
+			invalidate();
+		}
+		break;
+	case cmd::EstimateLine: estimate_line(); break;
+	case cmd::Screenshot: screenshot(); break;
+	case cmd::SaveBoardImage: save_board_image(); break;
+	case cmd::RunScript: {
+		std::wstring flt = lang::t("filter.text") + L" (*.txt)";
+		flt += L'\0';
+		flt += L"*.txt";
+		flt += L'\0';
+		flt += lang::t("filter.all");
+		flt += L'\0';
+		flt += L"*.*";
+		flt += L'\0';
+		const std::wstring f = pick_open(flt.c_str(), lang::t("menu.io.script"));
+		if (!f.empty()) run_script_file(f, 0);
+		break;
+	}
+	case cmd::StopScript:
+		if (!script_.empty() || script_wait_ != ScriptWait::None) {
+			script_.clear();
+			script_wait_ = ScriptWait::None;
+			log(lang::t("script.stopped"));
+		}
+		update_menu();
+		break;
+	case cmd::MoveNumbers:
+		move_numbers_ = !move_numbers_;
+		update_menu();
+		invalidate();
+		break;
+	case cmd::RotateNext: orient_to((orient_ + 1) & 7); break;
 	case cmd::Undo: do_action(Action::Back); break;
 	case cmd::Redo: do_action(Action::Forward); break;
 	case cmd::ToStart: do_action(Action::Start); break;
@@ -632,6 +778,8 @@ void App::on_command(int id)
 	case cmd::TabMoves:
 	case cmd::TabBook:
 	case cmd::TabRecord:
+	case cmd::TabList:
+	case cmd::TabKept:
 		tab_ = static_cast<Tab>(id - cmd::TabMoves);
 		update_menu();
 		if (tab_ == Tab::Book) request_levels();
@@ -641,7 +789,6 @@ void App::on_command(int id)
 		save_config();
 		ShellExecuteW(hwnd_, L"open", L"notepad.exe", (L"\"" + ini_path_ + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
 		break;
-	case cmd::LangJa: break;
 	case cmd::HelpKeys: {
 		std::wstring s;
 		for (int i = 0; i < static_cast<int>(Action::Count); ++i) {

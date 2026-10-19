@@ -93,6 +93,8 @@ public:
 	const PosInfo *peek(const Position &p) const;
 	void clear_book();     // the book changed
 	void clear_search();
+	// what is known of a position, for the position turned by a symmetry (the values and the book are the same)
+	void copy_symmetric(const Position &p, int s);
 	size_t size() const noexcept { return map_.size(); }
 
 private:

@@ -66,10 +66,12 @@ struct ListReadStats {
 // A line of a game: "f5d6c3..." from the usual start, or "<64 squares> <X|O>;moves" from another start
 // (the form Edax writes), or any text with coordinates. The moves are played from the start; a move that
 // cannot be played ends the game there (`cut`). Returns false when the line has no game.
-bool parse_list_line(std::string_view line, Position *start, std::vector<std::uint8_t> *moves, bool *cut);
+bool parse_list_line(std::string_view line, Position *start, std::vector<std::uint8_t> *moves, bool *cut,
+                     const Position &usual = Position{});
 std::string list_line(const Position &start, std::span<const std::uint8_t> moves);
-ListReadStats read_list_text(std::string_view text, GameList &list, std::stop_token stop = {});
-ListReadStats read_list(const std::wstring &path, GameList &list, std::stop_token stop = {});
+// `usual`: the start of the lines of moves only
+ListReadStats read_list_text(std::string_view text, GameList &list, std::stop_token stop = {}, const Position &usual = Position{});
+ListReadStats read_list(const std::wstring &path, GameList &list, std::stop_token stop = {}, const Position &usual = Position{});
 bool write_list(const std::wstring &path, const GameList &list);
 
 // shorter games first, then by the moves (as their names: a1 a2 .. b1 ..)
