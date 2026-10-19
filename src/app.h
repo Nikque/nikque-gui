@@ -10,6 +10,7 @@
 #include <functional>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -169,6 +170,7 @@ enum : int {
 	TabRecord,
 	TabList,
 	TabKept,
+	TabTree,
 	MoveNumbers,
 	RotateNext,
 	SaveLog,
@@ -218,7 +220,7 @@ inline constexpr int kLevels[] = {1, 5, 10, 15, 18, 21, 24, 27, 30, 35, 40, 60};
 enum class Effects : int { On = 0, Subdued = 1, Off = 2 };
 // how much of its effects the top stage (7) shows
 enum class TopEffect : int { Strong = 0, Normal = 1, Weak = 2 };
-enum class Tab : int { Moves = 0, Book = 1, Record = 2, List = 3, Kept = 4, Count };
+enum class Tab : int { Moves = 0, Book = 1, Record = 2, List = 3, Kept = 4, Tree = 5, Count };
 // the small number at the lower left of a move's square
 enum class CellInfo : int { None = 0, Positions, Level, Stage, Umi };
 enum class EngineKind : int { Nikque18 = 0, Newedax = 1 };
@@ -422,6 +424,19 @@ public:
 	int kept_sel_ = -1;
 	int kept_scroll_ = 0;
 	std::vector<std::pair<int, D2D1_RECT_F>> kept_rects_;
+
+	// the tree of the book lines from a position (the root): the game up to the root, and the nodes open, each
+	// as its moves from the root (no passes)
+	Game tree_base_;
+	bool tree_set_ = false;
+	std::set<std::vector<int>> tree_open_;
+	int tree_scroll_ = 0;
+	struct TreeRow {
+		std::vector<int> path;  // the moves from the root to the position after this row's move
+		D2D1_RECT_F rect{}, arrow{};
+		bool can_open = false;
+	};
+	std::vector<TreeRow> tree_rows_;  // as drawn
 
 	// one background job at a time (work on the list, the search of a line); its end runs on the window's thread
 	std::jthread task_;
@@ -636,6 +651,14 @@ public:
 	void list_search();
 	void keep_now(bool quiet = false);
 	void kept_command(int id);
+	void tree_sync();
+	Position tree_position(const std::vector<int> &path) const;
+	bool tree_visible(const std::vector<int> &path) const;
+	std::optional<Position> tree_next_wanted();
+	bool tree_waiting() const;
+	void tree_click(const TreeRow &row, bool on_arrow);
+	void tree_go(const std::vector<int> &path);
+	bool tree_command(const std::vector<std::string> &w, const std::string &rest);
 	void load_kept();
 	void save_kept() const;
 	void list_from_book();

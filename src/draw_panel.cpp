@@ -121,11 +121,11 @@ void draw_tabs(App &app, const Theme &th)
 	Gfx &gx = app.gfx_;
 	const Layout &L = app.lay_;
 	IDWriteTextFormat *f = gx.text(L.font, false, DWRITE_TEXT_ALIGNMENT_CENTER);
-	const char *keys[] = {"tab.moves", "tab.book", "tab.record", "tab.list", "tab.kept"};
+	const char *keys[] = {"tab.moves", "tab.book", "tab.record", "tab.list", "tab.kept", "tab.tree"};
 	app.tab_rects_.clear();
 	float x = L.tabs.left;
 	const float h = L.tabs.bottom - L.tabs.top;
-	for (int i = 0; i < 5; ++i) {
+	for (int i = 0; i < static_cast<int>(Tab::Count); ++i) {
 		const std::wstring &s = lang::t(keys[i]);
 		const float w = gx.text_width(s, f) + L.font * 1.6f;
 		const D2D1_RECT_F r{x, L.tabs.top, x + w, L.tabs.bottom};
@@ -522,6 +522,178 @@ void draw_kept_tab(App &app, const Theme &th)
 	dc->PopAxisAlignedClip();
 }
 
+// The tree of the book lines from the root: the book moves of each open position (links, then the leaf, best
+// first), the value from the side that plays the move, the stage, the umigame numbers and the level.
+void draw_tree_tab(App &app, const Theme &th)
+{
+	Gfx &gx = app.gfx_;
+	auto *dc = gx.dc();
+	const Layout &L = app.lay_;
+	const D2D1_RECT_F T = L.table;
+	const float em = L.font;
+	const float rh = std::round(L.row * 0.92f);
+	app.tree_rows_.clear();
+	IDWriteTextFormat *f = gx.text(L.font, false);
+	IDWriteTextFormat *fn = gx.text(L.font, false, DWRITE_TEXT_ALIGNMENT_CENTER, Face::Number);
+	IDWriteTextFormat *fm = gx.text(L.font, false, DWRITE_TEXT_ALIGNMENT_LEADING, Face::Number);
+	IDWriteTextFormat *fs = gx.text(L.font_s, false, DWRITE_TEXT_ALIGNMENT_CENTER);
+	IDWriteTextFormat *hf = gx.text(L.font_s, true, DWRITE_TEXT_ALIGNMENT_CENTER);
+	IDWriteTextFormat *hl = gx.text(L.font_s, true, DWRITE_TEXT_ALIGNMENT_LEADING);
+
+	if (!app.use_book_ || !app.eng_[0].alive) {
+		gx.draw_text(lang::t("tree.no_book"), f, D2D1::RectF(T.left + 4, T.top, T.right, T.top + rh), th.text_dim);
+		return;
+	}
+	struct Col {
+		Column c;
+		const char *key;
+		float w;
+	};
+	std::vector<Col> cols = {{Column::Value, "col.value", 3.6f * em}, {Column::Stage, "col.stage", 3.6f * em},
+	                         {Column::Umi, "col.umi", 5.4f * em}, {Column::Level, "col.level", 2.6f * em}};
+	if (app.umi_ == UmiMode::Off) std::erase_if(cols, [](const Col &c) { return c.c == Column::Umi; });
+	auto total = [&] {
+		float s = 0;
+		for (auto &c : cols) s += c.w;
+		return s;
+	};
+	for (Column drop : {Column::Level, Column::Umi})
+		if (total() > (T.right - T.left) - 9 * em) std::erase_if(cols, [&](const Col &c) { return c.c == drop; });
+	std::vector<std::pair<Column, D2D1_RECT_F>> spans;
+	float x = T.right - total();
+	const float line_right = x;
+	rounded(gx, D2D1::RectF(T.left, T.top, T.right, T.top + rh), 4 * L.scale, th.panel2);
+	gx.draw_text(lang::f("tree.head", {std::to_wstring(app.tree_base_.now().ply() + 1)}), hl,
+	             D2D1::RectF(T.left + 8 * L.scale, T.top, line_right, T.top + rh), th.text_dim);
+	for (auto &c : cols) {
+		const D2D1_RECT_F r{x, T.top, x + c.w, T.top + rh};
+		gx.draw_text(lang::t(c.key), hf, r, th.text_dim);
+		spans.emplace_back(c.c, r);
+		x = r.right;
+	}
+
+	// the lines of the tree, depth first
+	struct Line {
+		std::vector<int> path;
+		int depth = 0;
+		int side = kBlack;           // the side that plays the move
+		const MoveEval *m = nullptr;  // nullptr: the book analysis of the position is awaited / not in the book
+		bool link = false, open = false, none = false;
+	};
+	std::vector<Line> lines;
+	constexpr size_t kMaxLines = 20000;
+	auto value_of = [](const MoveEval &m) { return m.in_book ? m.book_value : m.leaf_value; };
+	auto build = [&](auto &&self, const std::vector<int> &path, const Position &p, int depth) -> void {
+		if (lines.size() >= kMaxLines || p.game_over()) return;
+		const PosInfo *info = app.cache_.peek(p);
+		if (!info || !info->book_done) {
+			lines.push_back({path, depth, p.side, nullptr});
+			return;
+		}
+		std::vector<const MoveEval *> ms;
+		for (const MoveEval &m : info->moves)
+			if (m.sq != kPass && (m.in_book || m.leaf)) ms.push_back(&m);
+		std::stable_sort(ms.begin(), ms.end(), [&](const MoveEval *a, const MoveEval *b) {
+			if (a->in_book != b->in_book) return a->in_book;
+			return value_of(*a) > value_of(*b);
+		});
+		if (ms.empty() && depth == 0) {
+			Line l{path, depth, p.side, nullptr};
+			l.none = true;
+			lines.push_back(l);
+		}
+		for (const MoveEval *m : ms) {
+			if (lines.size() >= kMaxLines) return;
+			Line l{path, depth, p.side, m};
+			l.path.push_back(m->sq);
+			l.link = m->in_book;
+			l.open = l.link && app.tree_open_.count(l.path);
+			lines.push_back(l);
+			if (l.open) {
+				Position q = p.play(m->sq);
+				if (q.must_pass()) q = q.play(kPass);
+				const std::vector<int> child = l.path;
+				self(self, child, q, depth + 1);
+			}
+		}
+	};
+	build(build, {}, app.tree_base_.now(), 0);
+
+	// the position shown, as moves from the root
+	std::vector<int> here;
+	for (int i = static_cast<int>(app.tree_base_.moves().size()); i < app.game_.cursor(); ++i)
+		if (app.game_.moves()[i] != kPass) here.push_back(app.game_.moves()[i]);
+
+	const float top = T.top + rh;
+	const int fit = std::max(1, static_cast<int>((T.bottom - top) / rh));
+	app.tree_scroll_ = std::clamp(app.tree_scroll_, 0, std::max(0, static_cast<int>(lines.size()) - fit));
+	dc->PushAxisAlignedClip(D2D1::RectF(T.left, top, T.right, T.bottom), D2D1_ANTIALIAS_MODE_ALIASED);
+	float y = top;
+	const float indent = std::round(em * 1.1f);
+	for (int i = app.tree_scroll_; i < static_cast<int>(lines.size()) && y < T.bottom; ++i, y += rh) {
+		const Line &l = lines[i];
+		const D2D1_RECT_F row{T.left, y, T.right, y + rh};
+		// deep lines: the indent stops where the move would no longer fit
+		const float lx = std::min(T.left + 4 * L.scale + indent * l.depth, std::max(T.left, line_right - 7 * em));
+		if (!l.m) {
+			gx.draw_text(l.none ? lang::t("tree.not_in_book") : lang::t("tree.wait"), f,
+			             D2D1::RectF(lx + indent, y, line_right, y + rh), th.text_dim);
+			continue;
+		}
+		const MoveEval &m = *l.m;
+		if (l.path == here) rounded(gx, row, 4 * L.scale, D2D1_COLOR_F{th.accent.r, th.accent.g, th.accent.b, 0.25f});
+		else if (inside_rect(row, app.mouse_)) rounded(gx, row, 4 * L.scale, D2D1_COLOR_F{th.text.r, th.text.g, th.text.b, 0.07f});
+		const D2D1_RECT_F arrow{lx, y, lx + indent, y + rh};
+		if (l.link) gx.draw_text(l.open ? L"\x25BE" : L"\x25B8", fn, arrow, th.text_dim);
+		// the disc of the side that plays the move
+		const float r = std::round(em * 0.32f);
+		const D2D1_POINT_2F c{arrow.right + r + 2 * L.scale, (y + y + rh) / 2};
+		dc->FillEllipse(D2D1::Ellipse(c, r, r), gx.brush(l.side == kBlack ? th.black_stone : th.white_stone));
+		dc->DrawEllipse(D2D1::Ellipse(c, r, r), gx.brush(l.side == kBlack ? th.black_rim : th.white_rim), 1.0f);
+		const D2D1_COLOR_F ink = l.link ? th.text : th.text_dim;
+		std::wstring name = widen(square_name(m.sq));
+		if (!l.link) name += L"  " + lang::t("tree.leaf");
+		gx.draw_text(name, fm, D2D1::RectF(c.x + r + 6 * L.scale, y, line_right, y + rh), ink);
+		const int stage = m.book_row ? m.stage : -1;
+		for (auto &[col, hr] : spans) {
+			const D2D1_RECT_F cr{hr.left, y, hr.right, y + rh};
+			switch (col) {
+			case Column::Value: {
+				const int v = value_of(m);
+				gx.draw_text((v > 0 ? L"+" : L"") + std::to_wstring(v), fn, cr, ink);
+				break;
+			}
+			case Column::Stage:
+				if (stage >= 0 && l.link) {
+					const float rr = std::round(L.font_s * 0.42f);
+					stage_dot(gx, th, stage, {cr.left + rr + 6 * L.scale, (cr.top + cr.bottom) / 2}, rr);
+					gx.draw_text(std::to_wstring(stage), fs, D2D1::RectF(cr.left + 2 * rr + 8 * L.scale, cr.top, cr.right, cr.bottom), ink);
+				}
+				break;
+			case Column::Umi:
+				if (m.umi_known) {
+					std::wstring s = m.umi_none ? lang::t("table.umi_none")
+					                            : std::to_wstring(m.umi_black) + L":" + std::to_wstring(m.umi_white);
+					if (!m.umi_exact) s = L"≦" + s;
+					gx.draw_text(s, fn, cr, ink);
+				}
+				break;
+			case Column::Level: {
+				const int lv = m.in_book ? m.book_level : m.leaf_level;
+				if (lv > 0) gx.draw_text(std::to_wstring(lv), fn, cr, ink);
+				break;
+			}
+			default:
+				break;
+			}
+		}
+		app.tree_rows_.push_back({l.path, row, arrow, l.link});
+	}
+	dc->PopAxisAlignedClip();
+	if (lines.size() >= kMaxLines)
+		gx.draw_text(lang::f("tree.too_many", {std::to_wstring(kMaxLines)}), fs, D2D1::RectF(T.left, T.bottom - rh, T.right, T.bottom), th.text_dim);
+}
+
 void draw_graph(App &app, const Theme &th)
 {
 	Gfx &gx = app.gfx_;
@@ -595,6 +767,7 @@ void draw_panel(App &app)
 	case Tab::Book: draw_book_tab(app, th); break;
 	case Tab::List: draw_list_tab(app, th); break;
 	case Tab::Kept: draw_kept_tab(app, th); break;
+	case Tab::Tree: draw_tree_tab(app, th); break;
 	default: draw_record_tab(app, th); break;
 	}
 	const float cy = (L.splitter.top + L.splitter.bottom) / 2;

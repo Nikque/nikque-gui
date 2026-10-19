@@ -335,7 +335,7 @@ void App::load_config()
 	log_open_ = ini_.get_bool("window", "log", false);
 	panel_hidden_ = ini_.get_bool("window", "panel_hidden", false);
 	const std::string t = lower(ini_.get("window", "tab", "moves"));
-	tab_ = t == "book" ? Tab::Book : t == "record" ? Tab::Record : t == "list" ? Tab::List : t == "kept" ? Tab::Kept : Tab::Moves;
+	tab_ = t == "book" ? Tab::Book : t == "record" ? Tab::Record : t == "list" ? Tab::List : t == "kept" ? Tab::Kept : t == "tree" ? Tab::Tree : Tab::Moves;
 	hash_bits_ = ini_.get_int("analysis", "hash", 0, 0, 30);
 	if (hash_bits_ > 0 && hash_bits_ < 10) hash_bits_ = 10;
 	move_numbers_ = ini_.get_bool("view", "numbers", false);
@@ -433,7 +433,7 @@ void App::save_config()
 	ini_.set_int("window", "log", log_open_);
 	ini_.set_int("window", "panel_hidden", panel_hidden_);
 	{
-		const char *names[] = {"moves", "book", "record", "list", "kept"};
+		const char *names[] = {"moves", "book", "record", "list", "kept", "tree"};
 		ini_.set("window", "tab", names[static_cast<int>(tab_)]);
 	}
 	if (ini_.dirty()) ini_.save(ini_path_);
@@ -529,6 +529,7 @@ void App::build_menu()
 	sub(book, base, t("menu.book.base"));
 	sep(book);
 	item(book, cmd::BookInfo, t("menu.book.info"));
+	item(book, cmd::TabTree, t("menu.book.tree"));
 	HMENU show = CreatePopupMenu();
 	item(show, cmd::BookShowInfo, t("menu.book.show_info"));
 	item(show, cmd::BookShowStats, t("menu.book.show_stats"));
@@ -711,6 +712,7 @@ void App::build_menu()
 	item(view, cmd::TabRecord, t("menu.view.tab.record"));
 	item(view, cmd::TabList, t("menu.view.tab.list"));
 	item(view, cmd::TabKept, t("menu.view.tab.kept"));
+	item(view, cmd::TabTree, t("menu.view.tab.tree"));
 	HMENU kp = CreatePopupMenu();
 	item(kp, cmd::KeepNow, t("menu.kept.keep"), keys_.describe(Action::Keep));
 	item(kp, cmd::KeptShow, t("menu.kept.show"));
@@ -814,7 +816,7 @@ void App::update_menu()
 	radio(cmd::EffectsOn, cmd::EffectsOff,
 	      effects_ == Effects::On ? cmd::EffectsOn : effects_ == Effects::Subdued ? cmd::EffectsSubdued : cmd::EffectsOff);
 	radio(cmd::TopStrong, cmd::TopWeak, cmd::TopStrong + static_cast<int>(top_effect_));
-	radio(cmd::TabMoves, cmd::TabKept, cmd::TabMoves + static_cast<int>(tab_));
+	radio(cmd::TabMoves, cmd::TabTree, cmd::TabMoves + static_cast<int>(tab_));
 	radio(cmd::Rotate0, cmd::Rotate0 + 7, cmd::Rotate0 + orient_);
 	radio(cmd::CellInfoNone, cmd::CellInfoUmi, cmd::CellInfoNone + static_cast<int>(cell_info_));
 	const int lang_id = lang_ == "en" ? cmd::LangEn : lang_ == "zh-Hans" ? cmd::LangZhHans : lang_ == "zh-Hant" ? cmd::LangZhHant : cmd::LangJa;

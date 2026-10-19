@@ -59,6 +59,7 @@ void App::position_changed()
 	const Position &p = game_.now();
 	if (selected_sq_ != kNoMove && !p.can_play(selected_sq_)) selected_sq_ = kNoMove;
 	table_scroll_ = 0;
+	tree_sync();
 	request_analysis();
 	// the time of the game goes to the other side after a move (of the person, the computer or a script),
 	// a take back, or the end
@@ -335,6 +336,14 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 				return;
 			}
 	}
+	if (tab_ == Tab::Tree && !editing_) {
+		for (const TreeRow &row : tree_rows_)
+			if (inside(row.rect, fx, fy)) {
+				const TreeRow hit = row;  // the rows are made again when drawn
+				tree_click(hit, inside(row.arrow, fx, fy));
+				return;
+			}
+	}
 	if (tab_ == Tab::Kept && !editing_) {
 		for (auto &[k, r] : kept_rects_)
 			if (inside(r, fx, fy)) {
@@ -439,6 +448,10 @@ void App::on_wheel(int x, int y, int delta)
 	}
 	else if (inside(lay_.table, fx, fy) && tab_ == Tab::Kept) {
 		kept_scroll_ = std::max(0, kept_scroll_ - step * 3);
+		invalidate();
+	}
+	else if (inside(lay_.table, fx, fy) && tab_ == Tab::Tree) {
+		tree_scroll_ = std::max(0, tree_scroll_ - step * 3);
 		invalidate();
 	}
 	else if (inside(lay_.table, fx, fy)) {
@@ -810,9 +823,11 @@ void App::on_command(int id)
 	case cmd::TabRecord:
 	case cmd::TabList:
 	case cmd::TabKept:
+	case cmd::TabTree:
 		tab_ = static_cast<Tab>(id - cmd::TabMoves);
 		update_menu();
 		if (tab_ == Tab::Book) request_levels();
+		if (tab_ == Tab::Tree) pump_graph();
 		invalidate();
 		break;
 	case cmd::OpenConfig:

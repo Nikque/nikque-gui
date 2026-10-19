@@ -225,15 +225,7 @@ void App::pump_graph()
 {
 	if (!eng_[0].alive || learning_ || !use_book_ || !show_eval_ || graph_id_ || book_id_) return;
 	const std::string params = book_params();
-	for (int i = 0; i <= game_.size(); ++i) {
-		const Position &p = game_.at(i);
-		if (p.game_over() || p.must_pass()) continue;
-		PosInfo &info = cache_.get(p);
-		if (info.book_params != params) {
-			if (info.book_begun || info.book_done || info.count_done || info.levels_done) info.reset_book();
-			info.book_params = params;
-		}
-		if (info.book_done) continue;
+	auto ask = [&](const Position &p) {
 		const PosKey key = key_of(p);
 		std::string out;
 		if (eng_[0].board != key) {
@@ -245,6 +237,24 @@ void App::pump_graph()
 		       (umi_ == UmiMode::Off ? " parts=stage\n" : " parts=stage,umi\n");
 		requests_[graph_id_] = {Request::Graph, key, 0};
 		send(0, out);
+	};
+	// the nodes of the tree first while it is shown
+	if (tab_ == Tab::Tree && !panel_hidden_) {
+		if (const auto p = tree_next_wanted()) {
+			ask(*p);
+			return;
+		}
+	}
+	for (int i = 0; i <= game_.size(); ++i) {
+		const Position &p = game_.at(i);
+		if (p.game_over() || p.must_pass()) continue;
+		PosInfo &info = cache_.get(p);
+		if (info.book_params != params) {
+			if (info.book_begun || info.book_done || info.count_done || info.levels_done) info.reset_book();
+			info.book_params = params;
+		}
+		if (info.book_done) continue;
+		ask(p);
 		return;
 	}
 }

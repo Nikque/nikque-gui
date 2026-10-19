@@ -1,0 +1,26 @@
+# Last stage: the tree of the book lines
+log s20 start
+engine newedax
+wait 40
+game free
+book on
+new
+tab tree
+wait 30
+screenshot s20-01-root.png
+tree open f5
+tree open f5d6
+wait 30
+screenshot s20-02-open.png
+tree go f5d6c3
+wait 30
+screenshot s20-03-go.png
+tree close f5
+screenshot s20-04-close.png
+moves d3c3e6f4f5d6
+wait 30
+tree root
+wait 30
+screenshot s20-05-root2.png
+savelog s20-log.txt
+quit

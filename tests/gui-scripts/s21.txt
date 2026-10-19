@@ -1,0 +1,50 @@
+# Last stage: the speed of opening 36 nodes of the tree along 3 lines of book2
+log s21 start
+engine newedax
+wait 40
+game free
+book on
+new
+tab tree
+wait 30
+tree open d3
+tree open d3e3
+tree open d3e3f5
+tree open d3e3f5e6
+tree open d3e3f5e6f7
+tree open d3e3f5e6f7c2
+tree open d3e3f5e6f7c2f2
+tree open d3e3f5e6f7c2f2c5
+tree open d3e3f5e6f7c2f2c5d2
+tree open d3e3f5e6f7c2f2c5d2c4
+tree open d3e3f5e6f7c2f2c5d2c4b1
+tree open d3e3f5e6f7c2f2c5d2c4b1g1
+tree open d3
+tree open d3c3
+tree open d3c3e6
+tree open d3c3e6f4
+tree open d3c3e6f4f5
+tree open d3c3e6f4f5d6
+tree open d3c3e6f4f5d6f3
+tree open d3c3e6f4f5d6f3e7
+tree open d3c3e6f4f5d6f3e7c5
+tree open d3c3e6f4f5d6f3e7c5e3
+tree open d3c3e6f4f5d6f3e7c5e3c4
+tree open d3c3e6f4f5d6f3e7c5e3c4b5
+tree open c4
+tree open c4c5
+tree open c4c5b6
+tree open c4c5b6f3
+tree open c4c5b6f3e6
+tree open c4c5b6f3e6b5
+tree open c4c5b6f3e6b5e3
+tree open c4c5b6f3e6b5e3f5
+tree open c4c5b6f3e6b5e3f5g6
+tree open c4c5b6f3e6b5e3f5g6g5
+tree open c4c5b6f3e6b5e3f5g6g5g3
+tree open c4c5b6f3e6b5e3f5g6g5g3d3
+wait 120
+screenshot s21-01-open36.png
+savelog s21-log.txt
+quit
+

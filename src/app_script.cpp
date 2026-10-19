@@ -118,7 +118,7 @@ bool App::script_waiting() const
 		if (!info) return true;
 		const bool book = !use_book_ || !eng_[0].alive || learning_ || info->book_done;
 		const bool search = !eng_[1].alive || (info->search_done && info->search_level == level_);
-		return !(book && search);
+		return !(book && search) || (tab_ == Tab::Tree && tree_waiting());
 	}
 	default: return false;
 	}
@@ -170,6 +170,10 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 	};
 	auto wait = [&](ScriptWait sw) { script_wait_ = sw; };
 
+	if (c == "tree") {
+		if (!tree_command(w, rest_after(line, 1))) return bad("script.bad_word");
+		return true;
+	}
 	if (c == "log") {
 		log(widen(rest_after(line, 1)));
 		return true;
@@ -263,8 +267,8 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		return true;
 	}
 	if (c == "tab") {
-		const char *names[] = {"moves", "book", "record", "list", "kept"};
-		for (int k = 0; k < 5; ++k)
+		const char *names[] = {"moves", "book", "record", "list", "kept", "tree"};
+		for (int k = 0; k < 6; ++k)
 			if (a1 == names[k]) {
 				on_command(cmd::TabMoves + k);
 				return true;

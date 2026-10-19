@@ -34,7 +34,7 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・newedax）は G
 -------
 - 盤：全部の合法手に評価値。色と効果は book の精度の段階（上の帯の玉に乗せると意味）。
 - 右のパネルのタブ：候補手（並べ替えのできる表）・book（level ごとの数、最善の進行、
-  足りない進行）・棋譜・リスト（棋譜リストと検索の結果）・控え（控えた手順）。
+  足りない進行）・棋譜・リスト（棋譜リストと検索の結果）・控え（控えた手順）・木（book の進行）。
   下には評価値のグラフがいつも出ます。
 - ログ：下の 1 行。押すと広がります。「表示」→「ログを書き出す」でファイルにできます。
 
@@ -85,6 +85,10 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・newedax）は G
   評価値は H で隠せます。
 - 序盤の打ち方：book を使わない・book の最善の手・book から幅をもって選ぶ（最善からの石損の幅と、
   book を使う手数）。book の手は Edax と同じく、局面の link と leaf から選びます。
+- 木の表示（「book」→「木の表示」、または木のタブ）：今の局面から先の book の手（link）を、開け閉めできる木で
+  並べます（leaf は開けない薄い行）。各行に打つ側の石・評価値（打つ側から見た book の値）・精度の段階・うみがめ数・Lv。
+  行を押すとその局面へ進んでその段を開き、▸ / ▾ で開く・閉じる。盤で根より先へ進む間は木がそのままで、
+  今の局面の行に色が付きます。根より前に戻るか別の棋譜にすると、そこが新しい根になります。
 - 比べるモード（「解析」→「比べるモード」）：もう一方の系のエンジンを book なしの探索だけで
   起動し、候補手の表にその評価値の列を足します。
 
@@ -112,7 +116,7 @@ Ntest の形は「空き 手番の側の石 手番」。
   new / goto <n|end> / back [n] / forward [n]
   book on|off / eval on|off / numbers on|off / level <n> / umi best|loss|off
   engine nikque18|newedax / design standard|paw / effects on|subdued|off
-  tab moves|book|record|list|kept / rotate <0-7> / cellinfo none|positions|level|stage|umi
+  tab moves|book|record|list|kept|tree / rotate <0-7> / cellinfo none|positions|level|stage|umi
   lang ja|en|zh-Hans|zh-Hant
   wait [秒]                今の局面の解析が終わるまで待つ（既定 30 秒まで）
   estimate                 盤から手順を推定する
@@ -133,6 +137,7 @@ Ntest の形は「空き 手番の側の石 手番」。
   go                       コンピューターに 1 手打たせる / takeback  待った
   waitgame [秒]            対局が終わるまで待つ（コンピューターどうしは全部の対局）
   compare on|off           比べるモード
+  tree open|close|go <手順>  木の段を開く・閉じる・その局面へ（手順は根から） / tree root  今の局面を根に
   log <文字> / quit
 
 8. config.ini の主な項目
@@ -184,7 +189,7 @@ The GUI is under the MIT License. The engines (Edax nikque, newedax) are GPL and
 - Board: the values of all the legal moves; colors and effects show the accuracy stage of the book
   (the dots in the top bar explain them).
 - Tabs of the right panel: Moves (a sortable table), Book (positions by level, best lines, missing lines),
-  Record, List (the game list and search results), Kept (kept lines). The graph of values is always below.
+  Record, List (the game list and search results), Kept (kept lines), Tree (book lines). The graph of values is always below.
 - Log: the bottom row; click to open it. View → Save the log writes it to a file.
 
 4. Keys (default; all can be changed in [keys] of config.ini)
@@ -232,6 +237,11 @@ The GUI is under the MIT License. The engines (Edax nikque, newedax) are GPL and
   The top bar shows the kind of game and the time left. H hides the values.
 - Opening moves: no book, the best book move, a book move drawn within a width (the loss from the best, and
   up to which move). As Edax, the book moves are the links and the leaf of the position.
+- Tree of the book (Book → Tree of the book, or the Tree tab): the book moves (links) from the position shown, in a
+  tree that opens and closes (the leaf as a faint row that does not open). Each row: the disc of the side that plays,
+  the book value from that side, the accuracy stage, umigame numbers, Lv. Click a row to go to its position and open
+  it; ▸ / ▾ opens or closes. While you go on from the root the tree stays and the row of the position is colored;
+  going back before the root or to another game makes a new root.
 - Compare mode (Analysis → Compare mode): the engine of the other kind runs a search without
   the book, and the Moves table gets a column of its values.
 
@@ -253,7 +263,7 @@ the start is set in [script] startup= of config.ini. Lines starting with # are n
 work waits for its end. Relative names are from the script's folder. The commands are listed in the
 Japanese part above (moves, board, play, new, goto, back, forward, book, eval, numbers, level, umi, engine,
 design, effects, tab, rotate, cellinfo, lang, wait, estimate, keep, screenshot, savelog, list ..., search,
-learn, edax, tool, run, game, comlevel, clock, ponder, opening, go, takeback, waitgame, compare, log, quit).
+learn, edax, tool, run, game, comlevel, clock, ponder, opening, go, takeback, waitgame, compare, tree, log, quit).
 
 8. config.ini
 -------------
@@ -297,6 +307,7 @@ Ctrl+C / Ctrl+V：复制/粘贴棋谱；Ctrl+P：截图；Ctrl+Shift+← →：�
 book 的整理与导出、学习的命令、工具（solve、bench、count、perft、estimate、base）、棋谱列表与检索、
 备份、摆放局面、从棋盘推断手顺（到第 20 手）、棋盘方向、手顺编号、格子上的数字、位棋盘、截图、命令序列。
 对局（人对电脑、电脑对电脑、悔棋、电脑的 Lv、持有时间、序盘从 book 选择）与比较模式（另一引擎的评价值列）。
+树状显示（「book」→「树状显示」）：从当前局面起的 book 进行，可展开・收起。
 命令序列的命令请参见日文部分第 7 节（命令名相同）。
 改变 book 的命令（subtree、prune、import、new 等）之后，关闭引擎时 book 文件可能被覆盖。请先备份。
 
@@ -333,6 +344,7 @@ Ctrl+C / Ctrl+V：複製/貼上棋譜；Ctrl+P：螢幕截圖；Ctrl+Shift+← �
 book 的整理與匯出、學習的命令、工具（solve、bench、count、perft、estimate、base）、棋譜清單與檢索、
 備份、擺放局面、從棋盤推斷手順（到第 20 手）、棋盤方向、手順編號、格子上的數字、位元棋盤、螢幕截圖、命令序列。
 對局（人對電腦、電腦對電腦、悔棋、電腦的 Lv、持有時間、序盤從 book 選擇）與比較模式（另一引擎的評價值欄）。
+樹狀顯示（「book」→「樹狀顯示」）：從目前局面起的 book 進行，可展開・收合。
 命令序列的命令請參見日文部分第 7 節（命令名相同）。
 改變 book 的命令（subtree、prune、import、new 等）之後，關閉引擎時 book 檔案可能被覆寫。請先備份。
 
