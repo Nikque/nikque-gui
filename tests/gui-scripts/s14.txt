@@ -1,0 +1,24 @@
+# C: the computer on both sides with the time (move-time), then thinking on the person's turn
+log s14 start
+engine newedax
+wait 40
+comlevel 6
+opening search
+ponder off
+clock 1
+game engines 1
+waitgame 200
+screenshot s14-01-timed.png
+clock 0
+opening best
+ponder on
+game black
+play f5
+waitgame 5
+play e3
+waitgame 5
+screenshot s14-02-ponder.png
+ponder off
+game free
+savelog s14-log.txt
+quit

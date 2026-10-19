@@ -174,7 +174,7 @@ bool App::start_tool(const std::string &commands, const std::wstring &label)
 	const std::wstring args = engine_args() + L" -book-file \"" + temp_dir_ + L"\\nobook-tool.dat\" -book-usage off";
 	++s.generation;
 	std::wstring err;
-	s.alive = s.proc.start(exe, args, engine_dir(), hwnd_, WM_ENGINE, 2 | (static_cast<WPARAM>(s.generation) << 2), &err);
+	s.alive = s.proc.start(exe, args, engine_dir(), hwnd_, WM_ENGINE, engine_tag(2, s.generation), &err);
 	if (!s.alive) {
 		log(lang::f("log.start_failed", {exe, err}));
 		return false;

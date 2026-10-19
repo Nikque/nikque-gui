@@ -78,6 +78,15 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・newedax）は G
 - 控え：M で今の手順を控えます。新しい対局・棋譜の貼り付け・盤面配置・手順の推定のときも、それまでの
   手順を自動で控えます（数の制限なし、exe の隣の kept.txt）。控えのタブで押すと選び、二度押すと見る。
   「選んだ控えと比べる」は、固定の棋譜と同じ印（悪手に赤枠、違う手の所に印）で比べます。
+- 対局：人どうし（自由打ち）・人が黒・人が白・コンピューターどうし（続けて打つ数）。コンピューターは
+  book を読まない「対局のエンジン」で考えるので、その間も盤の解析は続きます。待ったは人の番まで戻ります。
+  コンピューターの Lv、持ち時間（分。時間があるときは残りの時間で 1 手の時間を決め、切れた側の負け）、
+  相手の番にも考える、終局したときの動作（棋譜を控える・棋譜リストに足す）。上の帯に対局の形と残りの時間。
+  評価値は H で隠せます。
+- 序盤の打ち方：book を使わない・book の最善の手・book から幅をもって選ぶ（最善からの石損の幅と、
+  book を使う手数）。book の手は Edax と同じく、局面の link と leaf から選びます。
+- 比べるモード（「解析」→「比べるモード」）：もう一方の系のエンジンを book なしの探索だけで
+  起動し、候補手の表にその評価値の列を足します。
 
 ビットボードの形：10 進・16 進は「黒 白 手番」（a1 が 0 ビット目、h8 が 63 ビット目。手番は X か O）。
 Ntest の形は「空き 手番の側の石 手番」。
@@ -119,13 +128,19 @@ Ntest の形は「空き 手番の側の石 手番」。
   edax <命令>              主のエンジンに送り、終わるまで待つ
   tool <命令>              道具のエンジンで行う（solve・bench・count・perft・estimate・base）
   run <ファイル>           別の命令の列（4 段まで）
+  game free|black|white|engines [数]  対局を始める（black は人が黒）
+  comlevel <n> / clock <分> / ponder on|off / opening search|best|wide [幅] [手数]
+  go                       コンピューターに 1 手打たせる / takeback  待った
+  waitgame [秒]            対局が終わるまで待つ（コンピューターどうしは全部の対局）
+  compare on|off           比べるモード
   log <文字> / quit
 
 8. config.ini の主な項目
 ------------------------
 [engine] kind=nikque18|newedax、search=1（探索だけのエンジンを使う）
 [nikque18]・[newedax] dir・exe・eval・book
-[analysis] level・threads（0 は全部）・hash（ハッシュ表のビット数、0 はエンジンのまま）・umi・x・y・base・stages
+[analysis] level・threads（0 は全部）・hash（ハッシュ表のビット数、0 はエンジンのまま）・umi・x・y・base・stages・compare
+[play] level・opening（search|best|wide）・width・until・clock・ponder・end_keep・end_list
 [view] design・effects・language・numbers・cell_info・fps・font・opening_file・screenshot_dir
 [window] 大きさと場所、tab、panel_w
 [list] start_ply（棋譜リストの棋譜を開く手数、-1 は最後）
@@ -210,6 +225,15 @@ The GUI is under the MIT License. The engines (Edax nikque, newedax) are GPL and
 - Kept lines: M keeps this line. A new game, a pasted game, a position set up and a line found also keep the
   line before (no limit; kept.txt next to the exe). In the Kept tab, click to choose, twice to show.
   "Compare with the chosen line" marks the game like a fixed game (red frame on bad moves, marks where it differs).
+- Games: two people (free), you as black, you as white, the computer on both sides (a number of games). The
+  computer thinks on a "play engine" without the book, so the analysis of the board goes on. Take back goes to
+  your turn. The computer's Lv, the time (minutes; the time of a move comes from the time left, and the side
+  whose time runs out loses), thinking on your turn, what to do at the end (keep the game, add it to the list).
+  The top bar shows the kind of game and the time left. H hides the values.
+- Opening moves: no book, the best book move, a book move drawn within a width (the loss from the best, and
+  up to which move). As Edax, the book moves are the links and the leaf of the position.
+- Compare mode (Analysis → Compare mode): the engine of the other kind runs a search without
+  the book, and the Moves table gets a column of its values.
 
 Bitboards: decimal and hexadecimal are "black white side" (a1 is bit 0, h8 bit 63; side X or O).
 The Ntest form is "empty-squares discs-of-the-side-to-move side".
@@ -229,7 +253,7 @@ the start is set in [script] startup= of config.ini. Lines starting with # are n
 work waits for its end. Relative names are from the script's folder. The commands are listed in the
 Japanese part above (moves, board, play, new, goto, back, forward, book, eval, numbers, level, umi, engine,
 design, effects, tab, rotate, cellinfo, lang, wait, estimate, keep, screenshot, savelog, list ..., search,
-learn, edax, tool, run, log, quit).
+learn, edax, tool, run, game, comlevel, clock, ponder, opening, go, takeback, waitgame, compare, log, quit).
 
 8. config.ini
 -------------
@@ -272,6 +296,7 @@ Ctrl+C / Ctrl+V：复制/粘贴棋谱；Ctrl+P：截图；Ctrl+Shift+← →：�
 -------
 book 的整理与导出、学习的命令、工具（solve、bench、count、perft、estimate、base）、棋谱列表与检索、
 备份、摆放局面、从棋盘推断手顺（到第 20 手）、棋盘方向、手顺编号、格子上的数字、位棋盘、截图、命令序列。
+对局（人对电脑、电脑对电脑、悔棋、电脑的 Lv、持有时间、序盘从 book 选择）与比较模式（另一引擎的评价值列）。
 命令序列的命令请参见日文部分第 7 节（命令名相同）。
 改变 book 的命令（subtree、prune、import、new 等）之后，关闭引擎时 book 文件可能被覆盖。请先备份。
 
@@ -307,6 +332,7 @@ Ctrl+C / Ctrl+V：複製/貼上棋譜；Ctrl+P：螢幕截圖；Ctrl+Shift+← �
 -------
 book 的整理與匯出、學習的命令、工具（solve、bench、count、perft、estimate、base）、棋譜清單與檢索、
 備份、擺放局面、從棋盤推斷手順（到第 20 手）、棋盤方向、手順編號、格子上的數字、位元棋盤、螢幕截圖、命令序列。
+對局（人對電腦、電腦對電腦、悔棋、電腦的 Lv、持有時間、序盤從 book 選擇）與比較模式（另一引擎的評價值欄）。
 命令序列的命令請參見日文部分第 7 節（命令名相同）。
 改變 book 的命令（subtree、prune、import、new 等）之後，關閉引擎時 book 檔案可能被覆寫。請先備份。
 

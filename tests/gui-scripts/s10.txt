@@ -1,0 +1,29 @@
+# C: games against the computer, taking back, the computer on both sides, the time of a game, the compare mode
+log s10 start
+engine newedax
+wait 40
+comlevel 6
+opening best
+clock 0
+game black
+play f5
+waitgame 3
+screenshot s10-01-answer.png
+takeback
+screenshot s10-02-takeback.png
+game engines 2
+waitgame 300
+screenshot s10-03-engines.png
+clock 1
+game white
+waitgame 4
+screenshot s10-04-clock.png
+game free
+compare on
+moves f5d6c3d3c4
+wait 30
+tab moves
+screenshot s10-05-compare.png
+compare off
+savelog s10-log.txt
+quit

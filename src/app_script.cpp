@@ -106,6 +106,10 @@ bool App::script_waiting() const
 	case ScriptWait::Tool: return tool_busy_;
 	case ScriptWait::FindLine: return findline_id_ != 0 || task_busy_;
 	case ScriptWait::BookLines: return list_book_id_ != 0 || task_busy_;
+	case ScriptWait::Game:
+		if (std::chrono::steady_clock::now() >= script_until_) return false;
+		return play_mode_ != PlayMode::Free && !(game_end_done_ && engine_games_left_ == 0);
+	case ScriptWait::Com: return com_thinking_ || com_book_move_ != kNoMove || com_waiting_book_;
 	case ScriptWait::Analysis: {
 		if (std::chrono::steady_clock::now() >= script_until_) return false;
 		const Position &p = game_.now();
@@ -434,6 +438,67 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 	}
 	if (c == "run") {
 		run_script_file(path(rest_after(line, 1)), depth);
+		return true;
+	}
+	if (c == "game") {
+		const char *names[] = {"free", "black", "white", "engines"};
+		for (int k = 0; k < 4; ++k)
+			if (a1 == names[k]) {
+				set_play_mode(static_cast<PlayMode>(k), w.size() > 2 ? number(w[2]).value_or(1) : 1);
+				return true;
+			}
+		return bad("script.bad_word");
+	}
+	if (c == "comlevel") {
+		auto n = number(a1);
+		if (!n || *n < 1 || *n > 60) return bad("script.bad_number");
+		com_level_ = *n;
+		return true;
+	}
+	if (c == "opening") {
+		if (a1 == "search") opening_ = Opening::Search;
+		else if (a1 == "best") opening_ = Opening::BookBest;
+		else if (a1 == "wide") opening_ = Opening::BookWide;
+		else return bad("script.bad_word");
+		if (w.size() > 2) opening_width_ = std::clamp(number(w[2]).value_or(opening_width_), 0, 64);
+		if (w.size() > 3) opening_until_ = std::clamp(number(w[3]).value_or(opening_until_), 0, 60);
+		update_menu();
+		return true;
+	}
+	if (c == "clock") {
+		auto n = number(a1);
+		if (!n || *n < 0 || *n > 600) return bad("script.bad_number");
+		clock_minutes_ = *n;
+		return true;
+	}
+	if (c == "ponder") {
+		bool v = ponder_;
+		if (!on_off(&v)) return bad("script.on_off");
+		if (v != ponder_) on_command(cmd::PlayPonder);
+		return true;
+	}
+	if (c == "go") {
+		com_once_ = true;
+		com_think();
+		wait(ScriptWait::Com);
+		SetTimer(hwnd_, 3, 250, nullptr);
+		return true;
+	}
+	if (c == "takeback") {
+		if (take_back()) position_changed();
+		return true;
+	}
+	if (c == "waitgame") {
+		const int s = w.size() > 1 ? number(a1).value_or(600) : 600;
+		script_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(std::clamp(s, 1, 36000));
+		wait(ScriptWait::Game);
+		SetTimer(hwnd_, 3, 250, nullptr);
+		return true;
+	}
+	if (c == "compare") {
+		bool v = compare_;
+		if (!on_off(&v)) return bad("script.on_off");
+		if (v != compare_) set_compare(v);
 		return true;
 	}
 	if (c == "savelog") {

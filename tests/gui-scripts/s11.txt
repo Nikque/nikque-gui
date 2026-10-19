@@ -1,0 +1,15 @@
+# C: three games of the computer against itself with the book moves spread, each game into the list and the kept games
+log s11 start
+engine newedax
+wait 40
+comlevel 4
+clock 0
+opening wide 4 20
+game engines 3
+waitgame 600
+tab list
+screenshot s11-01-list.png
+tab kept
+screenshot s11-02-kept.png
+savelog s11-log.txt
+quit

@@ -49,9 +49,15 @@ void PosInfo::reset_search()
 		m.selectivity = 100;
 		m.bound = 0;
 		m.pv.clear();
+		m.cmp_searched = false;
+		m.cmp_score = m.cmp_depth = 0;
+		m.cmp_selectivity = 100;
+		m.cmp_bound = 0;
 	}
 	search_level = 0;
 	search_done = false;
+	cmp_level = 0;
+	cmp_done = false;
 }
 
 static PosInfo new_info(const Position &p)

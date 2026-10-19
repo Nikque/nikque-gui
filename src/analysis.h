@@ -24,6 +24,10 @@ struct MoveEval {
 	int selectivity = 100;
 	char bound = 0;          // '<' or '>' when the score is a bound
 	std::vector<int> pv;     // the expected moves, this move first
+	// the other engine (compare mode), from the side to move
+	bool cmp_searched = false;
+	int cmp_score = 0, cmp_depth = 0, cmp_selectivity = 100;
+	char cmp_bound = 0;
 
 	// book (book moveinfo)
 	bool book_row = false;   // the row of the move came
@@ -56,6 +60,9 @@ struct PosInfo {
 	// search
 	int search_level = 0;
 	bool search_done = false;
+	// the other engine (compare mode)
+	int cmp_level = 0;
+	bool cmp_done = false;
 	// level counts (book levels)
 	bool levels_done = false;
 	std::vector<std::pair<int, long long>> levels;

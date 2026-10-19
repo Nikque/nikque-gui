@@ -1,0 +1,15 @@
+# C: the clock after a move of the person (script), the computer thinking on its own time
+log s18 start
+engine newedax
+wait 40
+ponder off
+opening search
+comlevel 20
+clock 1
+game black
+play f5
+waitgame 8
+screenshot s18-01-clock.png
+game free
+savelog s18-log.txt
+quit

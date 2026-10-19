@@ -31,6 +31,9 @@ public:
 	// to the place after `n` moves (a place where the side must pass moves on past the pass)
 	void go_to(int n);
 
+	// the moves after the place shown are taken away
+	void truncate() { moves_.resize(cur_); pos_.resize(cur_ + 1); }
+
 	// the moves up to the end, without passes, as "f5d6c3..."
 	std::string to_text(bool upto_cursor = false) const;
 

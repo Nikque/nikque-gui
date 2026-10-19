@@ -28,6 +28,8 @@
 namespace ng {
 
 inline constexpr UINT WM_ENGINE = WM_APP + 1;
+// the wParam of WM_ENGINE: the role of the engine (3 bits) and the number of its start
+inline WPARAM engine_tag(int role, unsigned generation) { return static_cast<WPARAM>(role) | (static_cast<WPARAM>(generation) << 3); }
 inline constexpr UINT WM_TASK = WM_APP + 2;  // a background job has ended
 inline constexpr UINT WM_SCRIPT = WM_APP + 3;  // the command script goes on (after the work that it waited for)
 
@@ -39,6 +41,21 @@ enum : int {
 	Redo,
 	ToStart,
 	ToEnd,
+	PlayFree = 1010,
+	PlayHumanBlack,
+	PlayHumanWhite,
+	PlayEngines,
+	PlayEngineMove,
+	PlayTakeBack,
+	PlayStop,
+	PlayLevel,
+	OpeningSearch,
+	OpeningBest,
+	OpeningWide,
+	OpeningSettings,
+	PlayClock,
+	PlayPonder,
+	PlayEndSettings,
 	ShowEval = 1100,
 	Recompute,
 	Backward,
@@ -46,6 +63,7 @@ enum : int {
 	UmiLoss,
 	UmiOff,
 	CountOn,
+	CompareOn = 1120,
 	Level0 = 1150,  // + index into kLevels
 	UseBook = 1200,
 	ReloadBook,
@@ -205,7 +223,11 @@ enum class Tab : int { Moves = 0, Book = 1, Record = 2, List = 3, Kept = 4, Coun
 enum class CellInfo : int { None = 0, Positions, Level, Stage, Umi };
 enum class EngineKind : int { Nikque18 = 0, Newedax = 1 };
 enum class UmiMode : int { Best = 0, Loss = 1, Off = 2, Range = 3 };
-enum class Column : int { Move, Value, Stage, Missing, Positions, Level, Umi, Count };
+enum class Column : int { Move, Value, Stage, Missing, Positions, Level, Umi, Compare, Count };
+// who plays in a game: people only (free), a person and the computer, the computer on both sides
+enum class PlayMode : int { Free = 0, HumanBlack, HumanWhite, Engines };
+// the opening moves of the computer: searched, the best book move, a book move drawn within a width
+enum class Opening : int { Search = 0, BookBest, BookWide };
 
 struct Layout {
 	float scale = 1;
@@ -321,8 +343,9 @@ public:
 	bool search_engine_ = true;
 	bool backward_ = true;     // backward analysis of the game (and searching its positions in the background)
 
-	// engines: [0] main (reads the book), [1] search only (no book), [2] tools (started for one job, no book)
-	EngineSlot eng_[3];
+	// engines: [0] main (reads the book), [1] search only (no book), [2] tools (started for one job, no book),
+	// [3] play (the moves of the computer in a game, no book), [4] compare (the other engine, search only)
+	EngineSlot eng_[5];
 	bool tool_busy_ = false;
 	int tool_end_id_ = 0;
 	std::wstring tool_label_;
@@ -363,7 +386,7 @@ public:
 	bool hint_background_ = false;  // the hint in progress is for another position of the game
 	int hint_end_id_ = 0;            // the marker sent after the hint
 	std::vector<LineEval> line_;    // computed with each full drawing
-	int engine_level_[3] = {0, 0, 0};
+	int engine_level_[5] = {0, 0, 0, 0, 0};
 
 	// the board
 	int orient_ = 0;               // the symmetry the game is shown in (from the game as it came)
@@ -413,9 +436,37 @@ public:
 		std::string text;
 	};
 	std::deque<ScriptLine> script_;
-	enum class ScriptWait { None, Task, Learn, Tool, Analysis, FindLine, BookLines } script_wait_ = ScriptWait::None;
+	enum class ScriptWait { None, Task, Learn, Tool, Analysis, FindLine, BookLines, Game, Com } script_wait_ = ScriptWait::None;
 	std::chrono::steady_clock::time_point script_until_{};
-	std::wstring script_dir_;     // relative names in a script are from its folder
+	std::wstring script_dir_;
+
+	// a game against the computer (the play engine searches its moves; book moves come from the book analyses)
+	PlayMode play_mode_ = PlayMode::Free;
+	int com_level_ = 21;
+	Opening opening_ = Opening::BookBest;
+	int opening_width_ = 2;          // BookWide: the loss of a book move drawn at most
+	int opening_until_ = 60;         // book moves up to this move (number of discs - 4)
+	int clock_minutes_ = 0;          // time of a side in a game (0: none)
+	long long clock_left_ms_[2] = {0, 0};
+	std::chrono::steady_clock::time_point clock_t0_{};
+	int clock_side_ = -1;            // the side whose time runs (-1: none)
+	bool ponder_ = false;            // the play engine searches the person's position meanwhile
+	bool end_keep_ = true, end_list_ = false;
+	int engine_games_left_ = 0;      // the computer on both sides: more games after this one
+	bool com_once_ = false;          // one move of the computer asked (free play)
+	bool com_thinking_ = false;      // the play engine searches a move
+	bool com_pondering_ = false;
+	PosKey com_pos_{};
+	int com_book_move_ = kNoMove;    // a book move to play when the timer comes
+	bool game_end_done_ = false;     // the end of this game handled
+	bool com_waiting_book_ = false;   // the book analysis of the position is waited for
+	PosKey com_no_book_{};           // the position whose book analysis did not come in time: searched
+	bool com_no_book_set_ = false;
+	// the compare mode: the other engine (search only) beside the table
+	bool compare_ = false;
+	int cmp_marker_id_ = 0, cmp_end_id_ = 0, cmp_level_ = 0;
+	bool cmp_busy_ = false, cmp_accept_ = false;
+	PosKey cmp_pos_{};     // relative names in a script are from its folder
 	std::string lang_ = "ja";
 
 	// interaction
@@ -456,6 +507,7 @@ public:
 	void layout();
 	void paint();
 	void paint_animation();
+	void paint_bar();  // the bar at the top alone (the clock of a game each second)
 	void invalidate() { InvalidateRect(hwnd_, nullptr, FALSE); }
 	void update_animation_timer();
 	void prepare_glows();
@@ -517,11 +569,15 @@ public:
 	void send_hint(const Position &p, bool background);
 	void compute_line();
 	std::string book_params() const;
-	std::wstring engine_dir() const;
+	std::wstring engine_dir() const { return engine_dir(kind_); }
 	std::wstring engine_name() const;
-	std::wstring engine_exe() const;   // empty when there is none
-	std::wstring engine_eval() const;
-	std::wstring engine_args() const;  // eval file, threads, level, hash
+	std::wstring engine_exe() const { return engine_exe(kind_); }  // empty when there is none
+	std::wstring engine_eval() const { return engine_eval(kind_); }
+	std::wstring engine_args() const { return engine_args(kind_); }  // eval file, threads, level, hash
+	std::wstring engine_dir(EngineKind k) const;
+	std::wstring engine_exe(EngineKind k) const;
+	std::wstring engine_eval(EngineKind k) const;
+	std::wstring engine_args(EngineKind k) const;
 	void send(int role, const std::string &text);
 
 	// ---- app_tools.cpp: the tool engine, the book commands of the menus, the base commands, file dialogs
@@ -584,6 +640,25 @@ public:
 	bool ask_book_lines(int loss, int depth, int n, bool add);
 	void list_job_script(const std::wstring &label, std::function<void(GameList &)> work);
 
+	// ---- app_play.cpp: games against the computer, the compare mode
+	void set_play_mode(PlayMode m, int games = 0);
+	bool com_turn() const;
+	void com_think();
+	void com_timer();
+	void com_stop();
+	void com_played(int sq);
+	void play_line(const std::string &line);
+	bool start_play_engine();
+	void clock_switch();
+	void clock_tick();
+	void game_end_check();
+	void play_command(int id);
+	bool take_back();
+	EngineKind other_kind() const { return kind_ == EngineKind::Newedax ? EngineKind::Nikque18 : EngineKind::Newedax; }
+	void set_compare(bool on);
+	void compare_request();
+	void compare_line(const std::string &line);
+
 	// ---- app_script.cpp: the command scripts
 	void run_script_file(const std::wstring &file, int depth);
 	void pump_script();
@@ -598,5 +673,8 @@ void draw_cell(App &app, int sq, double t);
 void draw_bar(App &app);
 void draw_panel(App &app);
 void draw_log(App &app);
+// app_play.cpp
+bool play_timer(App &app, UINT_PTR id);
+std::wstring play_bar_text(const App &app);
 
 }  // namespace ng

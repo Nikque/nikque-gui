@@ -54,9 +54,9 @@ int cpu_level()
 
 }  // namespace
 
-std::wstring App::engine_dir() const
+std::wstring App::engine_dir(EngineKind k) const
 {
-	const char *sec = kind_ == EngineKind::Newedax ? "newedax" : "nikque18";
+	const char *sec = k == EngineKind::Newedax ? "newedax" : "nikque18";
 	const std::string d = ini_.get(sec, "dir");
 	if (d.empty()) return exe_dir_ + L"\\engines\\" + widen(sec);
 	return absolute(exe_dir_, d);
@@ -87,10 +87,10 @@ void App::send(int role, const std::string &text)
 	}
 }
 
-std::wstring App::engine_exe() const
+std::wstring App::engine_exe(EngineKind k) const
 {
-	const char *sec = kind_ == EngineKind::Newedax ? "newedax" : "nikque18";
-	const std::wstring dir = engine_dir();
+	const char *sec = k == EngineKind::Newedax ? "newedax" : "nikque18";
+	const std::wstring dir = engine_dir(k);
 	const std::string e = ini_.get(sec, "exe", "auto");
 	if (!e.empty() && !iequals(e, "auto")) return absolute(dir, e);
 	const int lv = cpu_level();
@@ -103,18 +103,18 @@ std::wstring App::engine_exe() const
 	return {};
 }
 
-std::wstring App::engine_eval() const
+std::wstring App::engine_eval(EngineKind k) const
 {
-	const char *sec = kind_ == EngineKind::Newedax ? "newedax" : "nikque18";
+	const char *sec = k == EngineKind::Newedax ? "newedax" : "nikque18";
 	const std::string ev = ini_.get(sec, "eval");
-	return ev.empty() ? engine_dir() + L"\\data\\eval.dat" : absolute(engine_dir(), ev);
+	return ev.empty() ? engine_dir(k) + L"\\data\\eval.dat" : absolute(engine_dir(k), ev);
 }
 
-std::wstring App::engine_args() const
+std::wstring App::engine_args(EngineKind k) const
 {
 	int n = threads_;
 	if (n <= 0) n = static_cast<int>(GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
-	std::wstring a = L"-q -eval-file \"" + engine_eval() + L"\" -n-tasks " + std::to_wstring(n) + L" -level " +
+	std::wstring a = L"-q -eval-file \"" + engine_eval(k) + L"\" -n-tasks " + std::to_wstring(n) + L" -level " +
 	                 std::to_wstring(level_);
 	if (hash_bits_ > 0) a += L" -hash-table-size " + std::to_wstring(hash_bits_);
 	return a;
@@ -160,7 +160,7 @@ void App::start_engines()
 			          : common + L" -book-file \"" + temp_dir_ + L"\\nobook.dat\" -book-usage off";
 		std::wstring err;
 		++s.generation;
-		s.alive = s.proc.start(exe, args, dir, hwnd_, WM_ENGINE, static_cast<WPARAM>(role) | (static_cast<WPARAM>(s.generation) << 2), &err);
+		s.alive = s.proc.start(exe, args, dir, hwnd_, WM_ENGINE, engine_tag(role, s.generation), &err);
 		s.loaded = false;
 		s.board.reset();
 		engine_level_[role] = level_;
@@ -196,6 +196,9 @@ void App::stop_engines()
 	hint_busy_ = hint_accept_ = hint_background_ = false;
 	tool_busy_ = false;
 	findline_id_ = 0;
+	com_thinking_ = com_pondering_ = com_waiting_book_ = false;
+	com_book_move_ = kNoMove;
+	cmp_busy_ = cmp_accept_ = false;
 	list_book_id_ = 0;
 	DeleteFileW((temp_dir_ + L"\\nobook.dat").c_str());
 	DeleteFileW((temp_dir_ + L"\\nobook-tool.dat").c_str());
@@ -207,6 +210,7 @@ void App::restart_engines()
 	cache_.clear_book();
 	cache_.clear_search();
 	start_engines();
+	if (compare_) set_compare(true);  // the other engine of the kind chosen now
 	position_changed();
 }
 
@@ -330,6 +334,7 @@ void App::request_analysis()
 			hint_background_ = false;  // the background search reached the position shown
 		}
 	}
+	compare_request();
 }
 
 void App::send_hint(const Position &p, bool background)
@@ -381,10 +386,10 @@ void App::pump_search()
 
 void App::on_engine(WPARAM tag, bool ended)
 {
-	const int role = static_cast<int>(tag & 3);
-	if (role > 2) return;
+	const int role = static_cast<int>(tag & 7);
+	if (role > 4) return;
 	EngineSlot &s = eng_[role];
-	if (static_cast<unsigned>(tag >> 2) != s.generation) return;  // from a process closed before
+	if (static_cast<unsigned>(tag >> 3) != s.generation) return;  // from a process closed before
 	std::vector<std::string> lines;
 	s.proc.take_lines(lines);
 	bool changed = false, ask_missing = false;
@@ -396,6 +401,20 @@ void App::on_engine(WPARAM tag, bool ended)
 		if (ended && s.alive) {
 			s.alive = false;
 			if (tool_busy_) tool_ended(true);
+		}
+		return;
+	}
+	if (role == 3 || role == 4) {  // the play engine, the compare engine
+		for (const std::string &line : lines) {
+			if (line.empty()) continue;
+			if (role == 3) play_line(line);
+			else compare_line(line);
+		}
+		if (ended && s.alive) {
+			s.alive = false;
+			log(lang::f("log.engine_ended", {lang::t(role == 3 ? "engine.play" : "engine.compare")}));
+			if (role == 3) com_thinking_ = com_pondering_ = false;
+			else cmp_busy_ = cmp_accept_ = false;
 		}
 		return;
 	}
@@ -598,6 +617,15 @@ void App::on_engine(WPARAM tag, bool ended)
 	}
 	if (role == 0) pump_graph();
 	else if (!hint_busy_) pump_search();
+	// the computer waits for the book analysis of the position (its opening moves)
+	if (role == 0 && com_waiting_book_) {
+		const PosInfo *info = cache_.peek(game_.now());
+		if (info && info->book_done) {
+			com_waiting_book_ = false;
+			KillTimer(hwnd_, 4);
+			com_think();
+		}
+	}
 	if (changed) {
 		update_animation_timer();
 		invalidate();

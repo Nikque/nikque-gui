@@ -142,6 +142,7 @@ int App::run(HINSTANCE inst, int show)
 	if (!openings_.empty()) log(lang::f("log.openings", {std::to_wstring(openings_.positions() / 8)}));
 	load_kept();
 	start_engines();
+	if (compare_) set_compare(true);
 	position_changed();
 	SetTimer(hwnd_, kTimerWatch, 5000, nullptr);
 	// the commands to run at the start (config.ini [script] startup)
@@ -198,6 +199,7 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		if (wp == kTimerAnim) paint_animation();
 		else if (wp == kTimerWatch) watch_engines();
 		else if (wp == kTimerScript) pump_script();
+		else play_timer(*this, wp);
 		return 0;
 	case WM_TASK:
 		task_ended();
@@ -341,6 +343,18 @@ void App::load_config()
 	cell_info_ = ci == "positions" ? CellInfo::Positions : ci == "level" ? CellInfo::Level : ci == "stage" ? CellInfo::Stage
 	           : ci == "umi" ? CellInfo::Umi : CellInfo::None;
 	list_start_ply_ = ini_.get_int("list", "start_ply", -1, -1, 60);
+	com_level_ = ini_.get_int("play", "level", 21, 1, 60);
+	{
+		const std::string o = lower(ini_.get("play", "opening", "best"));
+		opening_ = o == "search" ? Opening::Search : o == "wide" ? Opening::BookWide : Opening::BookBest;
+	}
+	opening_width_ = ini_.get_int("play", "width", 2, 0, 64);
+	opening_until_ = ini_.get_int("play", "until", 60, 0, 60);
+	clock_minutes_ = ini_.get_int("play", "clock", 0, 0, 600);
+	ponder_ = ini_.get_bool("play", "ponder", false);
+	end_keep_ = ini_.get_bool("play", "end_keep", true);
+	end_list_ = ini_.get_bool("play", "end_list", false);
+	compare_ = ini_.get_bool("analysis", "compare", false);
 	lang_ = ini_.get("view", "language", "ja");
 	if (lang_ != "en" && lang_ != "zh-Hans" && lang_ != "zh-Hant") lang_ = "ja";
 	// listed even when empty, so that config.ini shows them
@@ -375,6 +389,15 @@ void App::save_config()
 		ini_.set("view", "cell_info", names[static_cast<int>(cell_info_)]);
 	}
 	ini_.set_int("analysis", "hash", hash_bits_);
+	ini_.set_int("analysis", "compare", compare_);
+	ini_.set_int("play", "level", com_level_);
+	ini_.set("play", "opening", opening_ == Opening::Search ? "search" : opening_ == Opening::BookWide ? "wide" : "best");
+	ini_.set_int("play", "width", opening_width_);
+	ini_.set_int("play", "until", opening_until_);
+	ini_.set_int("play", "clock", clock_minutes_);
+	ini_.set_int("play", "ponder", ponder_);
+	ini_.set_int("play", "end_keep", end_keep_);
+	ini_.set_int("play", "end_list", end_list_);
 	ini_.set_int("list", "start_ply", list_start_ply_);
 	ini_.set_int("view", "fps", anim_fps_);
 	ini_.set_int("view", "opening", show_opening_);
@@ -434,6 +457,27 @@ void App::build_menu()
 
 	HMENU game = CreatePopupMenu();
 	item(game, cmd::NewGame, t("menu.game.new"));
+	HMENU pm = CreatePopupMenu();
+	item(pm, cmd::PlayFree, t("menu.play.free"));
+	item(pm, cmd::PlayHumanBlack, t("menu.play.human_black"));
+	item(pm, cmd::PlayHumanWhite, t("menu.play.human_white"));
+	item(pm, cmd::PlayEngines, t("menu.play.engines"));
+	sub(game, pm, t("menu.play"));
+	item(game, cmd::PlayEngineMove, t("menu.play.engine_move"));
+	item(game, cmd::PlayTakeBack, t("menu.play.take_back"));
+	item(game, cmd::PlayStop, t("menu.play.stop"));
+	sep(game);
+	item(game, cmd::PlayLevel, t("menu.play.level"));
+	HMENU op = CreatePopupMenu();
+	item(op, cmd::OpeningSearch, t("menu.opening.search"));
+	item(op, cmd::OpeningBest, t("menu.opening.best"));
+	item(op, cmd::OpeningWide, t("menu.opening.wide"));
+	sep(op);
+	item(op, cmd::OpeningSettings, t("menu.opening.settings"));
+	sub(game, op, t("menu.opening"));
+	item(game, cmd::PlayClock, t("menu.play.clock"));
+	item(game, cmd::PlayPonder, t("menu.play.ponder"));
+	item(game, cmd::PlayEndSettings, t("menu.play.end"));
 	sep(game);
 	item(game, cmd::Undo, t("menu.game.undo"), keys_.describe(Action::Back) + L" / " + t("key.right_click"));
 	item(game, cmd::Redo, t("menu.game.redo"), keys_.describe(Action::Forward));
@@ -457,6 +501,7 @@ void App::build_menu()
 	item(umi, cmd::UmiOff, t("menu.analysis.umi.off"));
 	sub(an, umi, t("menu.analysis.umi"));
 	item(an, cmd::CountOn, t("menu.analysis.count"));
+	item(an, cmd::CompareOn, t("menu.analysis.compare"));
 	sep(an);
 	item(an, cmd::RangeSettings, t("menu.settings.range"));
 	sub(bar, an, t("menu.analysis"));
@@ -751,6 +796,12 @@ void App::update_menu()
 	check(cmd::TogglePanel, panel_hidden_);
 	check(cmd::ToggleLog, log_open_);
 	check(cmd::MoveNumbers, move_numbers_);
+	radio(cmd::PlayFree, cmd::PlayEngines, cmd::PlayFree + static_cast<int>(play_mode_));
+	radio(cmd::OpeningSearch, cmd::OpeningWide, cmd::OpeningSearch + static_cast<int>(opening_));
+	check(cmd::PlayPonder, ponder_);
+	check(cmd::CompareOn, compare_);
+	enable(cmd::PlayTakeBack, play_mode_ == PlayMode::HumanBlack || play_mode_ == PlayMode::HumanWhite);
+	enable(cmd::PlayStop, play_mode_ != PlayMode::Free);
 	int lv = -1;
 	for (size_t i = 0; i < std::size(kLevels); ++i)
 		if (kLevels[i] == level_) lv = static_cast<int>(i);
@@ -927,6 +978,21 @@ void App::paint_animation()
 		gfx_.dc()->PopAxisAlignedClip();
 		dirty.push_back(r);
 	}
+	gfx_.end_frame(&dirty);
+}
+
+void App::paint_bar()
+{
+	// the meaning of a stage is drawn below the bar: then the whole window
+	if (IsIconic(hwnd_) || hover_stage_ >= 0) {
+		invalidate();
+		return;
+	}
+	if (!gfx_.begin_frame()) return;
+	std::vector<D2D1_RECT_F> dirty{lay_.bar};
+	gfx_.dc()->PushAxisAlignedClip(lay_.bar, D2D1_ANTIALIAS_MODE_ALIASED);
+	draw_bar(*this);
+	gfx_.dc()->PopAxisAlignedClip();
 	gfx_.end_frame(&dirty);
 }
 

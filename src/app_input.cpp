@@ -35,6 +35,7 @@ std::vector<const MoveEval *> App::sorted_moves(const PosInfo &info) const
 		case Column::Positions: *known = m.positions >= 0 || m.lines >= 0; return m.positions >= 0 ? m.positions : m.lines;
 		case Column::Level: x = m.in_book ? m.book_level : shown_level(m, use_book_); *known = x > 0; return x;
 		case Column::Umi: *known = m.umi_known && !m.umi_none; return -(static_cast<long long>(m.umi_black) + m.umi_white);
+		case Column::Compare: *known = m.cmp_searched; return m.cmp_score;
 		default: return 0;
 		}
 	};
@@ -59,6 +60,11 @@ void App::position_changed()
 	if (selected_sq_ != kNoMove && !p.can_play(selected_sq_)) selected_sq_ = kNoMove;
 	table_scroll_ = 0;
 	request_analysis();
+	// the time of the game goes to the other side after a move (of the person, the computer or a script),
+	// a take back, or the end
+	if (clock_side_ >= 0 && (p.side != clock_side_ || p.game_over())) clock_switch();
+	game_end_check();
+	com_think();
 	update_animation_timer();
 	invalidate();
 }
@@ -67,6 +73,12 @@ void App::do_action(Action a)
 {
 	switch (a) {
 	case Action::Back:
+		// against the computer: back to the person's turn (two moves); the computer on both sides stops
+		if (take_back()) {
+			position_changed();
+			break;
+		}
+		if (play_mode_ == PlayMode::Engines) set_play_mode(PlayMode::Free);
 		if (game_.back()) position_changed();
 		break;
 	case Action::Forward:
@@ -104,6 +116,7 @@ void App::do_action(Action a)
 		break;
 	}
 	case Action::PlayCand:
+		if (com_turn()) break;  // the computer's move
 		if (selected_sq_ != kNoMove && game_.play(selected_sq_)) {
 			selected_sq_ = kNoMove;
 			position_changed();
@@ -224,7 +237,7 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 		return;
 	}
 	if (sq != kNoMove) {
-		if (game_.play(sq)) {
+		if (!com_turn() && game_.play(sq)) {  // not on the computer's move
 			selected_sq_ = kNoMove;
 			position_changed();
 		}
@@ -483,6 +496,14 @@ void App::on_command(int id)
 {
 	if (id >= cmd::LearnDeviate && id <= cmd::LearnJobLast) {
 		learn_command(id);
+		return;
+	}
+	if (id >= cmd::PlayFree && id <= cmd::PlayEndSettings) {
+		play_command(id);
+		return;
+	}
+	if (id == cmd::CompareOn) {
+		set_compare(!compare_);
 		return;
 	}
 	if (id >= cmd::ToolSolve && id <= cmd::ToolStop) {

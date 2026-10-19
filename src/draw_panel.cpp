@@ -191,6 +191,7 @@ void draw_moves_table(App &app, const Theme &th)
 	                         {Column::Missing, "col.missing", 4.4f * em}, {Column::Positions, "col.positions", 6.6f * em},
 	                         {Column::Level, "col.level", 2.6f * em}};
 	if (app.umi_ == UmiMode::Off) std::erase_if(cols, [](const Col &c) { return c.c == Column::Umi; });
+	if (app.compare_) cols.insert(cols.begin() + 2, Col{Column::Compare, "col.compare", 4.4f * em});
 	const float W = T.right - T.left;
 	auto total = [&] {
 		float s = 0;
@@ -210,7 +211,8 @@ void draw_moves_table(App &app, const Theme &th)
 	IDWriteTextFormat *hf = gx.text(L.font_s, true, DWRITE_TEXT_ALIGNMENT_CENTER);
 	for (auto &c : cols) {
 		const D2D1_RECT_F r{x, T.top, x + c.w + extra, T.top + rh};
-		std::wstring s = lang::t(c.key);
+		std::wstring s = c.c == Column::Compare ? lang::t(app.other_kind() == EngineKind::Newedax ? "engine.newedax" : "engine.nikque")
+		                                        : lang::t(c.key);
 		if (app.sort_col_ == c.c) s += app.sort_desc_ ? L" ▼" : L" ▲";
 		gx.draw_text(s, hf, r, th.text_dim);
 		app.col_rects_.emplace_back(c.c, r);
@@ -262,6 +264,15 @@ void draw_moves_table(App &app, const Theme &th)
 					if (!(app.use_book_ && m.in_book) && m.searched && m.bound) s.insert(s.begin(), static_cast<wchar_t>(m.bound));
 					gx.draw_text(s, f, r, th.text);
 				} else {
+					gx.draw_text(L"…", f, r, th.text_dim);
+				}
+				break;
+			case Column::Compare:
+				if (m.cmp_searched) {
+					std::wstring s = (m.cmp_score > 0 ? L"+" : L"") + std::to_wstring(m.cmp_score);
+					if (m.cmp_bound) s.insert(s.begin(), static_cast<wchar_t>(m.cmp_bound));
+					gx.draw_text(s, f, r, th.text);
+				} else if (app.cmp_busy_) {
 					gx.draw_text(L"…", f, r, th.text_dim);
 				}
 				break;
@@ -625,6 +636,7 @@ void draw_bar(App &app)
 		opening_part = parts.size();
 		parts.push_back(app.show_opening_ ? *name : lang::t("bar.opening_hidden"));
 	}
+	if (const std::wstring game = play_bar_text(app); !game.empty()) parts.push_back(game);
 	parts.push_back(eng);
 	app.opening_rect_ = {};
 	float x = L.bar.left + 10 * L.scale;
