@@ -46,6 +46,9 @@ struct Position {
 u64 symmetric(u64 b, int s) noexcept;
 Position symmetric(const Position &p, int s) noexcept;
 int symmetric_square(int sq, int s) noexcept;
+// the symmetry c with c(x) = b(a(x)) (a first, then b), and the symmetry that undoes a
+int symmetry_compose(int a, int b) noexcept;
+int symmetry_inverse(int a) noexcept;
 
 // "a1".."h8", "pa"
 std::string square_name(int sq);

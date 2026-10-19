@@ -183,4 +183,20 @@ int symmetric_square(int sq, int s) noexcept
 	return std::countr_zero(symmetric(1ULL << sq, s));
 }
 
+// b1 has 8 different images, so one square tells the symmetry
+int symmetry_compose(int a, int b) noexcept
+{
+	const int want = symmetric_square(symmetric_square(1, a), b);
+	for (int c = 0; c < 8; ++c)
+		if (symmetric_square(1, c) == want) return c;
+	return 0;
+}
+
+int symmetry_inverse(int a) noexcept
+{
+	for (int c = 0; c < 8; ++c)
+		if (symmetry_compose(a, c) == 0) return c;
+	return 0;
+}
+
 }  // namespace ng

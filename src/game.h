@@ -62,4 +62,18 @@ std::optional<std::vector<int>> parse_param_lines(std::string_view text);
 // Returns the number of coordinates played.
 int replay(Game &game, const Position &start, const std::vector<int> &moves);
 
+// The game turned by a symmetry of the board (start, moves and the place shown).
+Game transformed(const Game &g, int s);
+
+// Bitboards of a position. Decimal and Hex: "<black> <white> <X|O>"; Ntest: "<empty squares> <discs of the side
+// to move> <X|O>" (decimal). a1 is bit 0, h8 bit 63.
+enum class BitForm { Decimal, Hex, Ntest };
+std::string bitboard_text(const Position &p, BitForm form);
+// Two numbers (decimal, or hexadecimal with "0x" or of 16 hex digits) and the side to move after them
+// (X/O, B/W, black/white or the Japanese and Chinese words; black when missing). With `ntest` the numbers are
+// the empty squares and the discs of the side to move. Overlapping or too few discs: nothing.
+std::optional<Position> parse_bitboards(std::string_view text, bool ntest);
+// a line of a problem file (OBF): the board, the side and ";"
+std::string obf_text(const Position &p);
+
 }  // namespace ng

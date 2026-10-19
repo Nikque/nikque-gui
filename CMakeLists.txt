@@ -21,6 +21,8 @@ option(NG_MEASURE "build the measuring version (not for release)" OFF)
 set(NG_CORE
 	src/rules.cpp
 	src/game.cpp
+	src/gamelist.cpp
+	src/linefind.cpp
 )
 
 # the icons are drawn by a program at build time (no image files in the sources)
@@ -79,3 +81,9 @@ add_test(NAME rules COMMAND rules_test
 add_executable(parse_test tests/parse_test.cpp src/analysis.cpp ${NG_CORE})
 target_include_directories(parse_test PRIVATE src)
 add_test(NAME parse COMMAND parse_test)
+add_executable(list_test tests/list_test.cpp ${NG_CORE})
+target_include_directories(list_test PRIVATE src)
+add_test(NAME list COMMAND list_test
+	${CMAKE_SOURCE_DIR}/_test/books/book1.games
+	${CMAKE_SOURCE_DIR}/_test/books/book2.games
+	${CMAKE_SOURCE_DIR}/_test/books/book3.games)

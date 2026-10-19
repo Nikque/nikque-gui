@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cstdio>
 
 namespace ng {
 
@@ -235,6 +236,139 @@ std::optional<std::vector<int>> parse_param_lines(std::string_view text)
 	}
 	if (moves.empty()) return std::nullopt;
 	return moves;
+}
+
+}  // namespace ng
+
+namespace ng {
+
+Game transformed(const Game &g, int s)
+{
+	Game out;
+	out.reset(symmetric(g.start(), s));
+	for (const int m : g.moves())
+		if (m != kPass) out.play(symmetric_square(m, s));  // the passes come again at the same places
+	out.go_to(g.cursor());
+	return out;
+}
+
+std::string bitboard_text(const Position &p, BitForm form)
+{
+	char b[96];
+	const char side = p.side == kBlack ? 'X' : 'O';
+	switch (form) {
+	case BitForm::Hex:
+		snprintf(b, sizeof b, "0x%016llX 0x%016llX %c", static_cast<unsigned long long>(p.black),
+		         static_cast<unsigned long long>(p.white), side);
+		break;
+	case BitForm::Ntest:
+		snprintf(b, sizeof b, "%llu %llu %c", static_cast<unsigned long long>(~(p.black | p.white)),
+		         static_cast<unsigned long long>(p.me()), side);
+		break;
+	default:
+		snprintf(b, sizeof b, "%llu %llu %c", static_cast<unsigned long long>(p.black),
+		         static_cast<unsigned long long>(p.white), side);
+		break;
+	}
+	return b;
+}
+
+namespace {
+
+std::optional<u64> number_token(std::string_view t)
+{
+	int base = 10;
+	if (t.size() > 2 && t[0] == '0' && (t[1] == 'x' || t[1] == 'X')) {
+		t.remove_prefix(2);
+		base = 16;
+	} else if (t.size() == 16 && t.find_first_not_of("0123456789abcdefABCDEF") == std::string_view::npos &&
+	           (t[0] == '0' || t.find_first_not_of("0123456789") != std::string_view::npos)) {
+		base = 16;  // 16 hex digits (a decimal number does not begin with 0)
+	}
+	if (t.empty() || t.size() > 20) return std::nullopt;
+	u64 v = 0;
+	for (const char c : t) {
+		int d;
+		if (c >= '0' && c <= '9') d = c - '0';
+		else if (base == 16 && c >= 'a' && c <= 'f') d = c - 'a' + 10;
+		else if (base == 16 && c >= 'A' && c <= 'F') d = c - 'A' + 10;
+		else return std::nullopt;
+		if (v > (~0ULL - d) / base) return std::nullopt;  // too large
+		v = v * base + d;
+	}
+	return v;
+}
+
+// 1 black, 2 white, 0 not a side
+int side_token(std::string_view t)
+{
+	std::string s(t);
+	for (auto &c : s)
+		if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+	if (s == "x" || s == "*" || s == "b" || s == "black" || s == "\xE9\xBB\x92" || s == "\xE9\xBB\x91") return 1;
+	if (s == "o" || s == "w" || s == "white" || s == "\xE7\x99\xBD") return 2;
+	return 0;
+}
+
+}  // namespace
+
+std::optional<Position> parse_bitboards(std::string_view text, bool ntest)
+{
+	std::vector<u64> nums;
+	int side = 0;
+	size_t i = 0;
+	while (i < text.size()) {
+		const unsigned char c = static_cast<unsigned char>(text[i]);
+		if (c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == ',' || c == ';' || c == ':' || c == '=' ||
+		    c == '(' || c == ')' || c == '[' || c == ']') {
+			++i;
+			continue;
+		}
+		size_t e = i;
+		while (e < text.size()) {
+			const char d = text[e];
+			if (d == ' ' || d == '\t' || d == '\r' || d == '\n' || d == ',' || d == ';' || d == ':' || d == '=' ||
+			    d == '(' || d == ')' || d == '[' || d == ']')
+				break;
+			++e;
+		}
+		const std::string_view t = text.substr(i, e - i);
+		i = e;
+		if (nums.size() < 2) {
+			if (auto v = number_token(t)) {
+				nums.push_back(*v);
+				continue;
+			}
+			if (side_token(t)) continue;  // a label before the numbers ("black: ...")
+			return std::nullopt;
+		}
+		if (const int s = side_token(t)) {
+			side = s;
+			break;
+		}
+		return std::nullopt;
+	}
+	if (nums.size() != 2) return std::nullopt;
+	Position p;
+	p.side = side == 2 ? kWhite : kBlack;
+	if (ntest) {
+		const u64 empty = nums[0], mover = nums[1];
+		if (mover & empty) return std::nullopt;
+		const u64 other = ~(empty | mover);
+		p.black = p.side == kBlack ? mover : other;
+		p.white = p.side == kBlack ? other : mover;
+	} else {
+		if (nums[0] & nums[1]) return std::nullopt;
+		p.black = nums[0];
+		p.white = nums[1];
+	}
+	if (std::popcount(p.black | p.white) < 4) return std::nullopt;
+	return p;
+}
+
+std::string obf_text(const Position &p)
+{
+	return p.to_board_string() + ";";
 }
 
 }  // namespace ng
