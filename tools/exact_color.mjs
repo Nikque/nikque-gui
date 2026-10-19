@@ -1,35 +1,50 @@
-// Picks the color of the values of a search to the end: far from the 8 stage colors (OKLab x100),
-// readable on the black outline (contrast >= 4.5), not brown (hue 30..115 with L < 0.65).
-const lin = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
-const rgb = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-function oklab(h) {
-  const [r, g, b] = rgb(h).map(lin);
-  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-  return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-          0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
-}
-const lum = h => { const [r, g, b] = rgb(h).map(lin); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
-const dE = (a, b) => { const p = oklab(a), q = oklab(b); return 100 * Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
-const stages = { '0 white': '#ffffff', '1 cyan-300': '#53eafd', '2 lime-400': '#9de504', '3 rose quartz': '#fda5d5',
-  '4 amethyst': '#aa4eff', '5 ruby': '#fe2657', '6 gold': '#ffd230', '7 black': '#18181b' };
-const boards = { standard: '#0684c7', paw: '#fdf3d9' };
-const cand = { 'emerald-300': '#5ee9b5', 'emerald-400': '#00d492', 'teal-300': '#46ecd5', 'teal-400': '#00d5be',
-  'green-300': '#7bf1a8', 'green-400': '#05df72', 'violet-300': '#c4b4ff', 'violet-400': '#a684ff',
-  'indigo-300': '#a3b3ff', 'indigo-400': '#7c86ff', 'fuchsia-300': '#f4a8ff', 'fuchsia-400': '#ed6aff',
-  'purple-300': '#dab2ff', 'purple-400': '#c27aff', 'orange-300': '#ffb86a', 'orange-400': '#ff8904',
-  'red-300': '#ffa2a2', 'red-400': '#ff6467', 'lime-300': '#bbf451', 'sky-300': '#77d4ff', 'blue-300': '#8ec5ff' };
-const rows = [];
-for (const [n, h] of Object.entries(cand)) {
-  const [L, a, b] = oklab(h);
-  const hue = (Math.atan2(b, a) * 180 / Math.PI + 360) % 360;
-  const brown = hue >= 30 && hue <= 115 && L < 0.65;
+// Usage: download theme.css of Tailwind CSS v4 (packages/tailwindcss/theme.css) next to this script, then
+// "node exact_color.mjs".
+// Candidates for the color of exact values, from the Tailwind v4 palette (theme.css, OKLCH), checked against
+// the reasons of the colors turned down before: low contrast with the board, pale or dull, green (emerald was
+// turned down), orange, brown, the hue of the board (blue / pink), too near a stage color (dE < 15).
+import fs from 'fs';
+const css = fs.readFileSync('theme.css', 'utf8');
+const re = /--color-([a-z]+)-(\d+):\s*oklch\(([\d.]+)%\s+([\d.]+)\s+([\d.]+)\)/g;
+const toLin = (L, C, H) => {
+  const a = C * Math.cos(H * Math.PI / 180), b = C * Math.sin(H * Math.PI / 180);
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3, m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3,
+        s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+  return [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+          -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s].map(v => Math.min(1, Math.max(0, v)));
+};
+const enc = v => Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055));
+const hex = lin => '#' + lin.map(enc).map(x => x.toString(16).padStart(2, '0')).join('');
+const dec = c => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
+const linOf = h => [1, 3, 5].map(i => dec(parseInt(h.slice(i, i + 2), 16)));
+const lab = h => { const [r, g, b] = linOf(h);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b), m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b),
+        s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s]; };
+const Y = h => { const [r, g, b] = linOf(h); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const cr = (a, b) => { const x = Y(a), y = Y(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+const dE = (a, b) => { const p = lab(a), q = lab(b); return 100 * Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
+const stages = { white: '#ffffff', 'cyan-300': '#53eafd', 'lime-400': '#9de504', 'rose quartz': '#fda5d5',
+  amethyst: '#aa4eff', ruby: '#fe2657', gold: '#ffd230', black: '#18181b' };
+const out = [];
+for (const m of css.matchAll(re)) {
+  const [, name, step, L, C, H] = m;
+  if (!['200', '300', '400', '500'].includes(step)) continue;
+  const h = hex(toLin(L / 100, +C, +H));
+  const why = [];
+  if (+C < 0.17) why.push('pale');
+  if (['green', 'emerald', 'teal'].includes(name)) why.push('green');
+  if (name === 'orange') why.push('orange');
+  if ((+H >= 30 && +H <= 115) && L / 100 < 0.65) why.push('brown');
+  if (['sky', 'blue', 'indigo'].includes(name)) why.push('board hue (blue)');
+  if (['pink'].includes(name)) why.push('board hue (pink)');
   let near = 1e9, who = '';
   for (const [s, c] of Object.entries(stages)) { const d = dE(h, c); if (d < near) { near = d; who = s; } }
-  const db = Math.min(dE(h, boards.standard), dE(h, boards.paw));
-  rows.push({ n, h, near: near.toFixed(1), who, outline: contrast(h, '#09090b').toFixed(2), board: db.toFixed(1), hue: hue.toFixed(0), brown });
+  if (near < 15) why.push(`near ${who} ${near.toFixed(1)}`);
+  const bs = cr(h, '#0684c7'), bp = cr(h, '#fdf3d9');
+  if (bs < 2.3) why.push(`std board ${bs.toFixed(2)}`);
+  if (cr(h, '#09090b') < 4.5) why.push('outline');
+  out.push({ n: `${name}-${step}`, h, near: near.toFixed(1), who, bs: bs.toFixed(2), bp: bp.toFixed(2), why });
 }
-rows.sort((x, y) => y.near - x.near);
-for (const r of rows) console.log(`${r.n.padEnd(12)} ${r.h}  nearest stage ${r.near.padStart(5)} (${r.who})  outline ${r.outline}  boards ${r.board}  hue ${r.hue}${r.brown ? ' BROWN' : ''}`);
+out.sort((a, b) => a.why.length - b.why.length || b.near - a.near);
+for (const r of out) console.log(`${r.n.padEnd(11)} ${r.h} nearest ${r.near.padStart(5)} (${r.who.padEnd(11)}) std ${r.bs} paw ${r.bp}  ${r.why.length ? 'NG: ' + r.why.join(', ') : 'OK'}`);

@@ -40,7 +40,6 @@ struct Theme {
 	float tab_round;      // corner radius of tabs / row height
 	bool hearts;          // the stars of the effects are hearts
 	std::array<StageStyle, 8> stage;
-	D2D1_COLOR_F exact;   // the values of a search to the end (not in the book): emerald-400
 };
 
 const Theme &theme(Design d);

@@ -56,7 +56,6 @@ const Theme kStandard = [] {
 	t.tab_round = 0.18f;
 	t.hearts = false;
 	t.stage = kStages;
-	t.exact = rgb(0x00d492);
 	return t;
 }();
 
@@ -93,7 +92,6 @@ const Theme kPaw = [] {
 	t.tab_round = 0.5f;
 	t.hearts = true;
 	t.stage = kStages;
-	t.exact = rgb(0x00d492);
 	return t;
 }();
 
