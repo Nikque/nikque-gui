@@ -143,7 +143,7 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 		g->SetEndPoint({0, s.bounds.bottom});
 		gx.fill_shape(s, g);
 	} else {
-		gx.fill_shape(s, gx.brush(st.mid));
+		gx.fill_shape(s, gx.brush(k == 0 && v.exact ? th.exact : st.mid));
 	}
 
 	if (fx) {
