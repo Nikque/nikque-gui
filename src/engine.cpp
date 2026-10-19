@@ -115,6 +115,8 @@ void EngineProcess::read_loop()
 			// the engine's prompt ">" may come before a line
 			size_t a = 0;
 			while (a < partial_.size() && (partial_[a] == '>' || partial_[a] == ' ')) ++a;
+			// ... and after one ("Sorting book...done>")
+			while (partial_.size() > a && partial_.back() == '>') partial_.pop_back();
 			if (a < partial_.size()) batch.emplace_back(partial_.substr(a));
 			partial_.clear();
 		}
