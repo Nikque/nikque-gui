@@ -104,6 +104,11 @@ int move_stage(const App &app, int i)
 	return m->stage;
 }
 
+bool inside_rect(const D2D1_RECT_F &r, POINT p)
+{
+	return p.x >= r.left && p.x < r.right && p.y >= r.top && p.y < r.bottom;
+}
+
 void rounded(Gfx &gx, const D2D1_RECT_F &r, float rad, const D2D1_COLOR_F &fill)
 {
 	gx.dc()->FillRoundedRectangle(D2D1::RoundedRect(r, rad, rad), gx.brush(fill));
@@ -305,13 +310,15 @@ void draw_moves_table(App &app, const Theme &th)
 void draw_book_tab(App &app, const Theme &th)
 {
 	Gfx &gx = app.gfx_;
+	auto *dc = gx.dc();
 	const Layout &L = app.lay_;
 	const D2D1_RECT_F T = L.table;
 	IDWriteTextFormat *f = gx.text(L.font, false);
-	IDWriteTextFormat *fn = gx.text(L.font, false, DWRITE_TEXT_ALIGNMENT_TRAILING, Face::Number);
+	IDWriteTextFormat *fm = gx.text(L.font, false, DWRITE_TEXT_ALIGNMENT_LEADING, Face::Number);
 	const PosInfo *info = app.cache_.peek(app.game_.now());
 	float y = T.top;
 	const float rh = L.row;
+	app.missing_rects_.clear();
 	auto line = [&](const std::wstring &s, const D2D1_COLOR_F &c) {
 		gx.draw_text(s, f, D2D1::RectF(T.left + 4, y, T.right, y + rh), c);
 		y += rh;
@@ -326,22 +333,46 @@ void draw_book_tab(App &app, const Theme &th)
 		return;
 	}
 	line(lang::t(info->in_book ? "book.in" : "book.out"), th.text);
-	line(lang::t("book.levels"), th.text_dim);
+	// the level counts in one line
 	if (!info->levels_done) {
-		line(lang::t("book.counting"), th.text_dim);
+		line(lang::t("book.levels") + L"：" + lang::t("book.counting"), th.text_dim);
+	} else {
+		std::wstring s = lang::t("book.levels") + L"：";
+		for (const auto &[lv, n] : info->levels) s += L" Lv" + std::to_wstring(lv) + L" " + group(n);
+		s += L"（" + lang::t("book.total") + L" " + group(info->levels_positions) + L"）";
+		line(s, th.text);
+	}
+	y += rh * 0.3f;
+
+	// the leaves missing for the next stage of a move
+	const MissingList &ms = app.missing_;
+	if (!ms.asked || ms.sq == kNoMove) {
+		line(lang::t("book.missing.choose"), th.text_dim);
 		return;
 	}
-	const float mid = T.left + (T.right - T.left) * 0.45f;
-	for (const auto &[lv, n] : info->levels) {
-		if (y + rh > T.bottom) break;
-		gx.draw_text(L"Lv " + std::to_wstring(lv), f, D2D1::RectF(T.left + 16 * L.scale, y, mid, y + rh), th.text);
-		gx.draw_text(group(n), fn, D2D1::RectF(mid, y, T.right - 16 * L.scale, y + rh), th.text);
-		y += rh;
+	std::wstring head = lang::f("book.missing.head", {widen(square_name(ms.sq))});
+	if (ms.done) head += L"  " + lang::f("book.missing.count", {std::to_wstring(ms.count)});
+	else head += L"  " + lang::t("book.counting");
+	line(head, th.text);
+	if (ms.done && ms.lines.empty()) {
+		line(lang::t("book.missing.none"), th.text_dim);
+		return;
 	}
-	if (y + rh <= T.bottom) {
-		gx.draw_text(lang::t("book.total"), f, D2D1::RectF(T.left + 16 * L.scale, y, mid, y + rh), th.text_dim);
-		gx.draw_text(group(info->levels_positions), fn, D2D1::RectF(mid, y, T.right - 16 * L.scale, y + rh), th.text);
+	const int fit = std::max(1, static_cast<int>((T.bottom - y) / rh));
+	app.missing_scroll_ = std::clamp(app.missing_scroll_, 0, std::max(0, static_cast<int>(ms.lines.size()) - fit));
+	dc->PushAxisAlignedClip(D2D1::RectF(T.left, y, T.right, T.bottom), D2D1_ANTIALIAS_MODE_ALIASED);
+	for (int i = app.missing_scroll_; i < static_cast<int>(ms.lines.size()) && y < T.bottom; ++i, y += rh) {
+		const MissingLine &ml = ms.lines[i];
+		const D2D1_RECT_F r{T.left, y, T.right, y + rh};
+		if (inside_rect(r, app.mouse_)) rounded(gx, r, 4 * L.scale, D2D1_COLOR_F{th.text.r, th.text.g, th.text.b, 0.07f});
+		std::wstring s = std::to_wstring(i + 1) + L". ";
+		for (int mv : ml.moves) s += widen(square_name(mv)) + L" ";
+		s += L"→ " + widen(square_name(ml.leaf)) + L"  ";
+		s += lang::f("book.missing.detail", {std::to_wstring(ml.value), std::to_wstring(ml.empties)});
+		gx.draw_text(s, fm, D2D1::RectF(r.left + 8 * L.scale, r.top, r.right, r.bottom), th.text);
+		app.missing_rects_.emplace_back(i, r);
 	}
+	dc->PopAxisAlignedClip();
 }
 
 void draw_record_tab(App &app, const Theme &th)

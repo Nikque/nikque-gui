@@ -30,6 +30,11 @@ int main()
 		CHECK(!parse_hint_line("New book 10 20......done"));
 		CHECK(!parse_hint_line("Edax version 4.5.5 Oct 19 2026 20:05:32 for Windows"));
 		CHECK(!parse_hint_line("@begin id=1 ply=0 turn=black moves=4 book=1"));
+		// the answers of "echo M<n>" (both engines), in order with the lines of hint
+		CHECK(echo_marker("WARNING: echo: \"M101\" is not on or off; ignored") == 101);
+		CHECK(echo_marker("WARNING: echo: \"on\" ignored") == -1);
+		CHECK(echo_marker("    8   -03        0:00.000           903            d3 E3 f3") == -1);
+		CHECK(!parse_hint_line("WARNING: echo: \"M101\" is not on or off; ignored"));
 	}
 	{
 		Position p;

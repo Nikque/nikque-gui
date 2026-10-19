@@ -163,6 +163,40 @@ static void test_symmetry()
 		for (int b = a + 1; b < 8; ++b) CHECK(!(symmetric(g.now(), a) == symmetric(g.now(), b)));
 }
 
+static void test_text_forms()
+{
+	Game g;
+	for (const char *mv : {"f5", "d6", "c3", "d3", "c4", "f4", "f6", "f3", "e6", "e7"}) g.play(parse_square(mv));
+	CHECK(g.size() == 10);
+	// a board and its side, written then read
+	const auto b = parse_board_text("board:" + g.now().to_board_string() + ";");
+	CHECK(b && *b == g.now());
+	const auto b2 = parse_board_text("garbage " + g.now().to_board_string());
+	CHECK(b2 && *b2 == g.now());
+	CHECK(!parse_board_text("f5d6c3d3c4"));
+	CHECK(!parse_board_text(std::string(70, '-')));
+
+	// the blog board: numbers by square, in two ways of writing them
+	int num[64] = {};
+	for (int i = 0; i < g.size(); ++i) num[g.moves()[i]] = i + 1;
+	std::string sep, joined;
+	for (int row = 0; row < 8; ++row) {
+		std::string a, c;
+		for (int col = 0; col < 8; ++col) {
+			const int n = num[row * 8 + col];
+			a += (col ? "," : "") + std::to_string(n);
+			c += (n < 10 ? "0" : "") + std::to_string(n);
+		}
+		sep += "<PARAM name=\"Line" + std::to_string(row + 1) + "\" value=\"" + a + "\">\n";
+		joined += "<PARAM name=\"Line" + std::to_string(row + 1) + "\" value=\"" + c + "\">\n";
+	}
+	for (const std::string &t : {sep, joined}) {
+		const auto mv = parse_param_lines(t);
+		CHECK(mv && *mv == g.moves());
+	}
+	CHECK(!parse_param_lines("<PARAM name=\"Line1\" value=\"1,2\">"));
+}
+
 // the test books' games: passes in the middle and at the end
 static void test_games_file(const char *path)
 {
@@ -197,6 +231,7 @@ int main(int argc, char **argv)
 	test_random_games();
 	test_game_record();
 	test_symmetry();
+	test_text_forms();
 	for (int i = 1; i < argc; ++i) test_games_file(argv[i]);
 	if (failures) {
 		std::printf("%d failures\n", failures);

@@ -47,6 +47,9 @@ enum : int {
 	BaseDeviate2,
 	BaseDeviate3,
 	BookInfo,
+	OpenBook,
+	ExportMissing,
+	RecentBook0 = 1250,  // + index of the recent books (up to 8)
 	LearnSoon = 1300,
 	EngineNikque = 1400,
 	EngineNewedax,
@@ -54,6 +57,7 @@ enum : int {
 	EngineVersion,
 	CopyMoves = 1500,
 	PasteMoves,
+	FixRecord,
 	DesignStandard = 1600,
 	DesignPaw,
 	EffectsOn,
@@ -116,6 +120,8 @@ struct CellView {
 	bool exact = false;     // a search to the end
 	bool pending = false;   // the value is being computed
 	bool best = false, good = false, selected = false;
+	bool fixed_bad = false;   // the move of the fixed record here loses against the best move
+	bool fixed_mark = false;  // the fixed record goes another way here than the game
 	bool improved = false;  // the value came back from the next position (backward analysis): a star by the level
 	int pv_num = 0;          // 1.. : this square is in the expected line of the move under the mouse
 	int pv_side = 0;         // the side who plays it there (0 black, 1 white)
@@ -142,9 +148,25 @@ struct EngineSlot {
 	std::wstring error;
 };
 
+// the leaves missing for the next stage of a move (book missing)
+struct MissingLine {
+	std::vector<int> moves;  // from the position, the move first
+	int leaf = kNoMove;
+	int value = 0;
+	int empties = 0;
+};
+struct MissingList {
+	PosKey pos{};
+	int sq = kNoMove;
+	std::string params;
+	bool asked = false, done = false;
+	int count = 0, stage = -1;
+	std::vector<MissingLine> lines;
+};
+
 // a request to the main engine, by id
 struct Request {
-	enum Kind { Book, Count, Levels, Marker, Graph } kind;
+	enum Kind { Book, Count, Levels, Marker, Graph, Missing } kind;
 	PosKey pos;
 	int engine;
 };
@@ -195,6 +217,14 @@ public:
 	std::unordered_map<int, Request> requests_;
 	int book_id_ = 0, count_id_ = 0, levels_id_ = 0;   // running on the main engine
 	int graph_id_ = 0;         // the book analysis of another position of the game (for the graph), one at a time
+	int missing_id_ = 0;
+	MissingList missing_;
+	int missing_scroll_ = 0;
+	std::vector<std::pair<int, D2D1_RECT_F>> missing_rects_;  // book tab: index of the line
+	// the fixed record (compared with the game)
+	std::vector<int> fixed_;
+	Position fixed_start_{};
+	bool fixed_on_ = false;
 	// search engine: the hint in progress
 	int marker_id_ = 0;
 	bool hint_busy_ = false, hint_accept_ = false;
@@ -278,6 +308,10 @@ public:
 	void request_levels();
 	void pump_graph();
 	void pump_search();
+	void request_missing(std::string &out, const Position &p);
+	int missing_target() const;
+	void switch_book(const std::wstring &path);
+	void export_missing();
 	void send_hint(const Position &p, bool background);
 	void compute_line();
 	bool move_exact(const MoveEval &m, const Position &p) const;

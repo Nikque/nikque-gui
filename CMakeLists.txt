@@ -57,7 +57,7 @@ add_executable(nikque-gui WIN32
 add_dependencies(nikque-gui ng_icon)
 target_include_directories(nikque-gui PRIVATE src ${CMAKE_BINARY_DIR}/gen)
 set_source_files_properties(res/app.rc PROPERTIES OBJECT_DEPENDS "${NG_ICON};${CMAKE_SOURCE_DIR}/lang/ja.txt;${CMAKE_SOURCE_DIR}/res/app.manifest")
-target_link_libraries(nikque-gui PRIVATE d2d1 d3d11 dxgi dxguid dwrite windowscodecs dwmapi shcore comctl32 ole32 shell32 uuid)
+target_link_libraries(nikque-gui PRIVATE d2d1 d3d11 dxgi dxguid dwrite windowscodecs dwmapi shcore comctl32 ole32 shell32 uuid comdlg32)
 target_link_options(nikque-gui PRIVATE /MANIFEST:NO)
 target_compile_definitions(nikque-gui PRIVATE NG_VERSION="${PROJECT_VERSION}")
 if(NG_MEASURE)

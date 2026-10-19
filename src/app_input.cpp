@@ -1,6 +1,7 @@
 // Keys, mouse and menu commands.
 #include <windows.h>
 
+#include <commdlg.h>
 #include <shellapi.h>
 
 #include <algorithm>
@@ -98,6 +99,7 @@ void App::do_action(Action a)
 		if (i < 0) i = a == Action::CandDown ? 0 : static_cast<int>(rows.size()) - 1;
 		else i = std::clamp(i + (a == Action::CandDown ? 1 : -1), 0, static_cast<int>(rows.size()) - 1);
 		selected_sq_ = rows[i]->sq;
+		if (tab_ == Tab::Book) request_analysis();  // the missing lines of the move chosen
 		invalidate();
 		break;
 	}
@@ -268,6 +270,17 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 				return;
 			}
 	}
+	if (tab_ == Tab::Book) {
+		for (auto &[k, r] : missing_rects_)
+			if (inside(r, fx, fy) && k < static_cast<int>(missing_.lines.size())) {
+				// to the position where the leaf is to be added
+				for (const int mv : missing_.lines[k].moves)
+					if (mv != kPass) game_.play(mv);
+				selected_sq_ = kNoMove;
+				position_changed();
+				return;
+			}
+	}
 	if (tab_ == Tab::Record) {
 		for (auto &[n, r] : record_rects_)
 			if (inside(r, fx, fy)) {
@@ -361,6 +374,10 @@ void App::on_wheel(int x, int y, int delta)
 	const int step = delta > 0 ? 1 : -1;
 	if (inside(lay_.fx.box, fx, fy) || inside(lay_.fx.track, fx, fy)) set_loss(loss_x_ + step, loss_y_);
 	else if (inside(lay_.fy.box, fx, fy) || inside(lay_.fy.track, fx, fy)) set_loss(loss_x_, loss_y_ + step);
+	else if (inside(lay_.table, fx, fy) && tab_ == Tab::Book) {
+		missing_scroll_ = std::max(0, missing_scroll_ - step * 3);
+		invalidate();
+	}
 	else if (inside(lay_.table, fx, fy)) {
 		table_scroll_ = std::max(0, table_scroll_ - step * 3);
 		invalidate();
@@ -391,7 +408,18 @@ void App::paste_moves()
 		}
 		CloseClipboard();
 	}
-	const ParsedMoves pm = parse_moves(narrow(text));
+	const std::string u = narrow(text);
+	// a board (64 squares and the side): the game starts there
+	if (auto b = parse_board_text(u)) {
+		game_.reset(*b);
+		log(lang::t("status.pasted_board"));
+		position_changed();
+		return;
+	}
+	// a blog board (the numbers of the moves by square), else coordinates in any text
+	ParsedMoves pm;
+	if (auto pl = parse_param_lines(u)) pm.moves = *pl;
+	else pm = parse_moves(u);
 	if (pm.moves.empty()) {
 		set_status(lang::t("status.paste_none"));
 		return;
@@ -411,6 +439,11 @@ void App::paste_moves()
 
 void App::on_command(int id)
 {
+	if (id >= cmd::RecentBook0 && id < cmd::RecentBook0 + 8) {
+		const std::string r = ini_.get("books", "recent" + std::to_string(id - cmd::RecentBook0 + 1));
+		if (!r.empty()) switch_book(widen(r));
+		return;
+	}
 	if (id >= cmd::Level0 && id < cmd::Level0 + static_cast<int>(std::size(kLevels))) {
 		level_ = kLevels[id - cmd::Level0];
 		update_menu();
@@ -477,6 +510,28 @@ void App::on_command(int id)
 		invalidate();
 		break;
 	case cmd::BookInfo: on_command(cmd::TabBook); break;
+	case cmd::OpenBook: {
+		wchar_t file[MAX_PATH * 4] = L"";
+		OPENFILENAMEW of{sizeof of};
+		of.hwndOwner = hwnd_;
+		of.lpstrFilter = L"book (*.dat;*.dev*;*.store)\0*.dat;*.dev*;*.store\0*.*\0*.*\0";
+		of.lpstrFile = file;
+		of.nMaxFile = static_cast<DWORD>(std::size(file));
+		of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+		if (GetOpenFileNameW(&of)) switch_book(file);
+		break;
+	}
+	case cmd::ExportMissing: export_missing(); break;
+	case cmd::FixRecord:
+		fixed_on_ = !fixed_on_;
+		if (fixed_on_) {
+			fixed_ = game_.moves();
+			fixed_start_ = game_.start();
+			set_status(lang::f("status.fixed", {std::to_wstring(game_.size())}));
+		}
+		update_menu();
+		invalidate();
+		break;
 	case cmd::EngineNikque:
 	case cmd::EngineNewedax: {
 		const EngineKind k = id == cmd::EngineNewedax ? EngineKind::Newedax : EngineKind::Nikque18;

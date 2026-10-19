@@ -365,6 +365,29 @@ void draw_cell(App &app, int sq, double t)
 	if (v.has_value) draw_value(app, th, rc, v, t);
 	else if (v.pending) draw_pending(app, th, rc, t);
 
+	// the fixed record: a red frame on its losing move, a mark where it goes another way than the game
+	if (v.fixed_bad) {
+		const float in = c * 0.035f;
+		dc->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(rc.left + in, rc.top + in, rc.right - in, rc.bottom - in),
+		                                           c * 0.12f, c * 0.12f),
+		                         gx.brush(rgb(0xfb2c36)), std::max(2.0f, c * 0.05f));  // red-500
+	}
+	if (v.fixed_mark) {
+		const float s = c * 0.16f, x = rc.left + c * 0.1f, y = rc.top + c * 0.1f;
+		ComPtr<ID2D1PathGeometry> g;
+		gx.factory()->CreatePathGeometry(&g);
+		ComPtr<ID2D1GeometrySink> sink;
+		g->Open(&sink);
+		sink->BeginFigure({x + s / 2, y}, D2D1_FIGURE_BEGIN_FILLED);
+		sink->AddLine({x + s, y + s / 2});
+		sink->AddLine({x + s / 2, y + s});
+		sink->AddLine({x, y + s / 2});
+		sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+		sink->Close();
+		dc->FillGeometry(g.Get(), gx.brush(v.fixed_bad ? rgb(0xfb2c36) : th.accent));
+		dc->DrawGeometry(g.Get(), gx.brush(rgb(0x09090b)), 1.0f);
+	}
+
 	if (v.pv_num > 0) {
 		// the expected line: a see-through stone of the side who plays there, and the order
 		const float r = c * 0.36f;

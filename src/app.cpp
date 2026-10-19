@@ -94,7 +94,7 @@ int App::run(HINSTANCE inst, int show)
 		MessageBoxW(hwnd_, lang::t("err.d2d").c_str(), lang::t("app.title").c_str(), MB_ICONERROR);
 		return 1;
 	}
-	DragAcceptFiles(hwnd_, FALSE);
+	DragAcceptFiles(hwnd_, TRUE);
 	build_menu();
 	set_window_icon();
 	gfx_.resize();
@@ -202,6 +202,14 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 			return TRUE;
 		}
 		break;
+	case WM_DROPFILES: {
+		HDROP drop = reinterpret_cast<HDROP>(wp);
+		wchar_t file[MAX_PATH * 4];
+		const bool got = DragQueryFileW(drop, 0, file, static_cast<UINT>(std::size(file))) > 0;
+		DragFinish(drop);
+		if (got) switch_book(file);
+		return 0;
+	}
 	case WM_COMMAND:
 		on_command(LOWORD(wp));
 		return 0;
@@ -360,12 +368,26 @@ void App::build_menu()
 	HMENU book = CreatePopupMenu();
 	item(book, cmd::UseBook, t("menu.book.use"), keys_.describe(Action::ToggleBook));
 	item(book, cmd::ReloadBook, t("menu.book.reload"));
+	item(book, cmd::OpenBook, t("menu.book.open"));
+	{
+		HMENU rec = CreatePopupMenu();
+		int shown = 0;
+		for (int i = 1; i <= 8; ++i) {
+			const std::string r = ini_.get("books", "recent" + std::to_string(i));
+			if (r.empty()) continue;
+			item(rec, cmd::RecentBook0 + i - 1, widen(r));
+			++shown;
+		}
+		if (!shown) AppendMenuW(rec, MF_STRING | MF_GRAYED, cmd::RecentBook0, t("menu.book.recent.none").c_str());
+		sub(book, rec, t("menu.book.recent"));
+	}
 	HMENU base = CreatePopupMenu();
 	item(base, cmd::BaseDeviate, L"book deviate");
 	item(base, cmd::BaseDeviate2, L"book deviate2");
 	item(base, cmd::BaseDeviate3, L"book deviate3");
 	sub(book, base, t("menu.book.base"));
 	item(book, cmd::BookInfo, t("menu.book.info"));
+	item(book, cmd::ExportMissing, t("menu.book.export_missing"));
 	sub(bar, book, t("menu.book"));
 
 	HMENU learn = CreatePopupMenu();
@@ -383,6 +405,7 @@ void App::build_menu()
 	HMENU io = CreatePopupMenu();
 	item(io, cmd::CopyMoves, t("menu.io.copy"), keys_.describe(Action::CopyMoves));
 	item(io, cmd::PasteMoves, t("menu.io.paste"), keys_.describe(Action::PasteMoves));
+	item(io, cmd::FixRecord, t("menu.io.fix"));
 	sub(bar, io, t("menu.io"));
 
 	HMENU view = CreatePopupMenu();
@@ -435,6 +458,7 @@ void App::update_menu()
 	auto radio = [&](int first, int last, int on) { CheckMenuRadioItem(m, first, last, on, MF_BYCOMMAND); };
 	check(cmd::ShowEval, show_eval_);
 	check(cmd::Backward, backward_);
+	check(cmd::FixRecord, fixed_on_);
 	check(cmd::UseBook, use_book_);
 	check(cmd::CountOn, count_);
 	check(cmd::TogglePanel, panel_hidden_);
@@ -675,14 +699,20 @@ CellView App::cell_view(int sq) const
 		}
 	}
 	v.pending = !v.has_value && (eng_[1].alive || (use_book_ && eng_[0].alive && !info->book_done));
+	int best = -999;
+	for (const auto &o : info->moves) {
+		int x;
+		if (value_of(o, &x)) best = std::max(best, x);
+	}
 	if (v.has_value) {
-		int best = -999;
-		for (const auto &o : info->moves) {
-			int x;
-			if (value_of(o, &x)) best = std::max(best, x);
-		}
 		v.best = v.value == best;
 		v.good = !v.best && v.value >= best - 2;
+	}
+	// the fixed record, when the game has followed it up to here
+	if (fixed_on_ && fixed_start_ == game_.start() && cur < static_cast<int>(fixed_.size()) && fixed_[cur] == sq &&
+	    cur <= game_.size() && std::equal(fixed_.begin(), fixed_.begin() + cur, game_.moves().begin())) {
+		v.fixed_mark = cur >= game_.size() || game_.moves()[cur] != sq;
+		v.fixed_bad = v.has_value && v.value < best;
 	}
 	return v;
 }

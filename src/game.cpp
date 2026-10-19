@@ -1,5 +1,8 @@
 #include "game.h"
 
+#include <algorithm>
+#include <bit>
+
 namespace ng {
 
 void Game::reset(const Position &start)
@@ -145,6 +148,93 @@ int replay(Game &game, const Position &start, const std::vector<int> &moves)
 		++n;
 	}
 	return n;
+}
+
+}  // namespace ng
+
+namespace ng {
+
+std::optional<Position> parse_board_text(std::string_view text)
+{
+	size_t start = text.find("board:");
+	start = start == std::string_view::npos ? 0 : start + 6;
+	// the first run of 64 board characters (spaces between them are allowed)
+	for (size_t i = start; i < text.size(); ++i) {
+		u64 black = 0, white = 0;
+		int n = 0;
+		size_t k = i;
+		for (; k < text.size() && n < 64; ++k) {
+			const char c = text[k];
+			if (c == ' ' && n > 0) continue;
+			if (c == 'X' || c == 'x' || c == '*') black |= 1ULL << n;
+			else if (c == 'O' || c == 'o') white |= 1ULL << n;
+			else if (c != '-' && c != '.') break;
+			++n;
+		}
+		if (n < 64) continue;
+		Position p;
+		p.black = black;
+		p.white = white;
+		p.side = kBlack;
+		for (; k < text.size(); ++k) {
+			const char c = text[k];
+			if (c == ' ' || c == '\t') continue;
+			if (c == 'O' || c == 'o' || c == 'W' || c == 'w') p.side = kWhite;
+			break;
+		}
+		if (std::popcount(black) + std::popcount(white) < 4) return std::nullopt;
+		return p;
+	}
+	return std::nullopt;
+}
+
+std::optional<std::vector<int>> parse_param_lines(std::string_view text)
+{
+	int cells[64];
+	for (int row = 0; row < 8; ++row) {
+		const std::string key = "Line" + std::to_string(row + 1);
+		size_t at = text.find(key);
+		if (at == std::string_view::npos) return std::nullopt;
+		at = text.find("value", at);
+		if (at == std::string_view::npos) return std::nullopt;
+		const size_t q1 = text.find('"', at);
+		const size_t q2 = q1 == std::string_view::npos ? q1 : text.find('"', q1 + 1);
+		if (q2 == std::string_view::npos) return std::nullopt;
+		const std::string_view v = text.substr(q1 + 1, q2 - q1 - 1);
+		// numbers separated by anything, or 8 cells of 2 digits written together
+		std::vector<int> nums;
+		std::string digits;
+		bool separated = false;
+		for (char c : v) {
+			if (c >= '0' && c <= '9') digits += c;
+			else {
+				separated = true;
+				if (!digits.empty()) nums.push_back(std::stoi(digits));
+				if (c != ' ' && c != ',' && c != '\t' && digits.empty()) nums.push_back(0);  // a mark for a first disc
+				digits.clear();
+			}
+		}
+		if (!digits.empty()) {
+			if (!separated && digits.size() == 16) {
+				for (int i = 0; i < 8; ++i) nums.push_back(std::stoi(digits.substr(i * 2, 2)));
+			} else {
+				nums.push_back(std::stoi(digits));
+			}
+		}
+		if (nums.size() != 8) return std::nullopt;
+		for (int col = 0; col < 8; ++col) cells[row * 8 + col] = nums[col];
+	}
+	std::vector<std::pair<int, int>> order;
+	for (int sq = 0; sq < 64; ++sq)
+		if (cells[sq] > 0) order.emplace_back(cells[sq], sq);
+	std::sort(order.begin(), order.end());
+	std::vector<int> moves;
+	for (size_t i = 0; i < order.size(); ++i) {
+		if (order[i].first != static_cast<int>(i) + 1) return std::nullopt;  // 1, 2, 3, ... without gaps
+		moves.push_back(order[i].second);
+	}
+	if (moves.empty()) return std::nullopt;
+	return moves;
 }
 
 }  // namespace ng

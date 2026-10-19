@@ -1,6 +1,7 @@
 // The game on the board: the moves played from a start position and the place shown.
 #pragma once
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -49,6 +50,13 @@ struct ParsedMoves {
 
 // Finds coordinates (a1..h8, also full-width letters and digits) in any text, ignoring the rest.
 ParsedMoves parse_moves(std::string_view utf8);
+
+// A board written as 64 squares a1..h8 ("X" or "*" black, "O" white, "-" or "." empty), with or without
+// "board:" before, then the side to move ("X" black, "O" white; black when missing).
+std::optional<Position> parse_board_text(std::string_view text);
+// The 8 lines of a blog board (`<PARAM name="Line1" value="...">` .. Line8) with the number of the move on
+// each square (0 or nothing for the 4 first discs): the moves in their order.
+std::optional<std::vector<int>> parse_param_lines(std::string_view text);
 
 // Plays the coordinates from `start`, adding the passes; stops at the first move that is not legal.
 // Returns the number of coordinates played.

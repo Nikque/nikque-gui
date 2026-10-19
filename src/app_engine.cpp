@@ -1,5 +1,8 @@
 // The engines: the main one reads the book (book analyses), the search one reads no book (hint).
 // A request is sent once per position; answers are kept in the cache, so a position seen again is shown at once.
+#include <windows.h>
+
+#include <commdlg.h>
 #include <intrin.h>
 
 #include <cstdio>
@@ -167,7 +170,8 @@ void App::stop_engines()
 	}
 	requests_.clear();
 	book_id_ = count_id_ = levels_id_ = 0;
-	graph_id_ = 0;
+	graph_id_ = missing_id_ = 0;
+	missing_ = MissingList{};
 	hint_busy_ = hint_accept_ = hint_background_ = false;
 	DeleteFileW((temp_dir_ + L"\\nobook.dat").c_str());
 }
@@ -270,6 +274,7 @@ void App::request_analysis()
 				out += "book levels id=" + std::to_string(levels_id_) + "\n";
 				requests_[levels_id_] = {Request::Levels, key, 0};
 			}
+			request_missing(out, p);
 		}
 		send(0, out);
 		pump_graph();
@@ -310,13 +315,15 @@ void App::send_hint(const Position &p, bool background)
 		out += "setboard " + p.to_board_string() + "\n";
 		eng_[1].board = key;
 	}
-	// the answer of this marker comes after every line of the search stopped above
+	// Markers around the hint. "echo M<n>" is answered by the engine's main loop (a warning line naming
+	// "M<n>"), in order with the lines of the hint: the first comes after every line of the search stopped
+	// above, the second when the hint has ended. (An answer of the book analyses comes from another thread
+	// and may come before or after the lines of the hint.)
 	marker_id_ = next_id_++;
-	out += "book moveinfo id=" + std::to_string(marker_id_) + " parts=\n";
+	out += "echo M" + std::to_string(marker_id_) + "\n";
 	out += "hint 60\n";
-	// and the answer of this one comes when the hint has ended
 	hint_end_id_ = next_id_++;
-	out += "book moveinfo id=" + std::to_string(hint_end_id_) + " parts=\n";
+	out += "echo M" + std::to_string(hint_end_id_) + "\n";
 	hint_busy_ = true;
 	hint_accept_ = false;
 	hint_background_ = background;
@@ -355,22 +362,7 @@ void App::on_engine(WPARAM tag, bool ended)
 		if (line[0] == '@') {
 			const Fields f(line);
 			const int id = static_cast<int>(f.num("id").value_or(-1));
-			if (role == 1) {
-				if (f.kind() == "begin" && id == marker_id_) {
-					hint_accept_ = true;
-					s.loaded = true;
-					measure::engine_answer(1);
-				}
-				if (f.kind() == "begin" && id == hint_end_id_ && hint_busy_) {
-					// the hint has ended: a move without a line (an engine that gave fewer) is not asked again
-					PosInfo &info = cache_.get(Position{hint_pos_.black, hint_pos_.white, hint_pos_.side});
-					info.search_done = true;
-					info.search_level = hint_level_;
-					hint_busy_ = hint_accept_ = false;
-					changed = true;
-				}
-				continue;
-			}
+			if (role == 1) continue;  // the search engine is asked no book analysis
 			if (!s.loaded) {
 				s.loaded = true;
 				changed = true;
@@ -383,6 +375,31 @@ void App::on_engine(WPARAM tag, bool ended)
 			auto it = requests_.find(id);
 			if (it == requests_.end()) continue;  // stopped before
 			const Request req = it->second;
+			if (req.kind == Request::Missing) {
+				if (f.kind() == "line" && id == missing_id_) {
+					MissingLine ml;
+					const std::string_view mv = f.get("moves").value_or("");
+					for (size_t k = 0; k + 1 < mv.size(); k += 2) ml.moves.push_back(parse_square(mv.substr(k, 2)));
+					ml.leaf = parse_square(f.get("leaf").value_or(""));
+					ml.value = static_cast<int>(f.num("value").value_or(0));
+					ml.empties = static_cast<int>(f.num("empties").value_or(0));
+					missing_.lines.push_back(std::move(ml));
+				} else if (f.kind() == "end" || f.kind() == "cancel") {
+					if (id == missing_id_) {
+						missing_id_ = 0;
+						if (f.kind() == "end") {
+							missing_.done = true;
+							missing_.count = static_cast<int>(f.num("count").value_or(0));
+							missing_.stage = static_cast<int>(f.num("stage").value_or(-1));
+						} else {
+							missing_.asked = false;  // asked again
+						}
+					}
+					requests_.erase(it);
+				}
+				changed = true;
+				continue;
+			}
 			PosInfo &info = cache_.get(Position{req.pos.black, req.pos.white, req.pos.side});
 			if (f.kind() == "begin") {
 				info.book_begun = true;
@@ -416,6 +433,21 @@ void App::on_engine(WPARAM tag, bool ended)
 			continue;
 		}
 		if (role == 1) {
+			if (const int mark = echo_marker(line); mark >= 0) {
+				if (mark == marker_id_) {
+					hint_accept_ = true;
+					s.loaded = true;
+					measure::engine_answer(1);
+				} else if (mark == hint_end_id_ && hint_busy_) {
+					// the hint has ended: a move without a line (an engine that gave fewer) is not asked again
+					PosInfo &info = cache_.get(Position{hint_pos_.black, hint_pos_.white, hint_pos_.side});
+					info.search_done = true;
+					info.search_level = hint_level_;
+					hint_busy_ = hint_accept_ = false;
+					changed = true;
+				}
+				continue;
+			}
 			if (!hint_accept_) continue;  // lines of a search stopped before
 			if (auto h = parse_hint_line(line); h && !h->book) {
 				PosInfo &info = cache_.get(Position{hint_pos_.black, hint_pos_.white, hint_pos_.side});
@@ -455,6 +487,127 @@ void App::on_engine(WPARAM tag, bool ended)
 		update_animation_timer();
 		invalidate();
 	}
+}
+
+}  // namespace ng
+
+namespace ng {
+
+// Another book for the main engine (the menu, the recent books, a file dropped on the window).
+void App::switch_book(const std::wstring &path)
+{
+	if (MessageBoxW(hwnd_, lang::f("ask.open_book", {path}).c_str(), lang::t("app.title").c_str(),
+	                MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
+		return;
+	const char *sec = kind_ == EngineKind::Newedax ? "newedax" : "nikque18";
+	const std::string p = narrow(path);
+	ini_.set(sec, "book", p);
+	// the recent books, newest first, up to 8
+	std::vector<std::string> recent{p};
+	for (int i = 1; i <= 8; ++i) {
+		const std::string r = ini_.get("books", "recent" + std::to_string(i));
+		if (!r.empty() && !iequals(r, p)) recent.push_back(r);
+	}
+	for (int i = 1; i <= 8; ++i)
+		ini_.set("books", "recent" + std::to_string(i), i <= static_cast<int>(recent.size()) ? recent[i - 1] : "");
+	save_config();
+	build_menu();
+
+	// only the main engine starts again; the search engine keeps going
+	eng_[0].proc.close();
+	eng_[0].alive = false;
+	eng_[0].board.reset();
+	for (auto it = requests_.begin(); it != requests_.end();) it = it->second.engine == 0 ? requests_.erase(it) : std::next(it);
+	book_id_ = count_id_ = levels_id_ = graph_id_ = missing_id_ = 0;
+	missing_ = MissingList{};
+	cache_.clear_book();
+	start_engines();
+	position_changed();
+}
+
+// The missing lines as games (the moves from the start), one a line, for a file.
+void App::export_missing()
+{
+	if (missing_.lines.empty()) {
+		set_status(lang::t("status.missing_none"));
+		return;
+	}
+	wchar_t file[MAX_PATH] = L"missing.txt";
+	OPENFILENAMEW of{sizeof of};
+	of.hwndOwner = hwnd_;
+	of.lpstrFilter = L"*.txt\0*.txt\0*.*\0*.*\0";
+	of.lpstrFile = file;
+	of.nMaxFile = MAX_PATH;
+	of.lpstrDefExt = L"txt";
+	of.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+	if (!GetSaveFileNameW(&of)) return;
+	const std::string head = game_.to_text(true);
+	std::string out;
+	for (const auto &ml : missing_.lines) {
+		out += head;
+		for (int mv : ml.moves)
+			if (mv != kPass) out += square_name(mv);
+		if (ml.leaf != kNoMove && ml.leaf != kPass) out += square_name(ml.leaf);
+		out += "\r\n";
+	}
+	FILE *f = nullptr;
+	if (_wfopen_s(&f, file, L"wb") != 0 || !f) {
+		set_status(lang::t("status.write_failed"));
+		return;
+	}
+	const bool ok = fwrite(out.data(), 1, out.size(), f) == out.size();
+	fclose(f);
+	log(ok ? lang::f("status.missing_written", {std::to_wstring(missing_.lines.size()), file}) : lang::t("status.write_failed"));
+}
+
+}  // namespace ng
+
+namespace ng {
+
+// the move whose missing leaves are listed: the move chosen, else the best move
+int App::missing_target() const
+{
+	const Position &p = game_.now();
+	if (selected_sq_ != kNoMove && p.can_play(selected_sq_)) return selected_sq_;
+	const PosInfo *info = cache_.peek(p);
+	if (!info) return kNoMove;
+	int best = -999, sq = kNoMove;
+	for (const auto &m : info->moves) {
+		int v;
+		if (m.sq != kPass && shown_value(m, use_book_, &v) && v > best) {
+			best = v;
+			sq = m.sq;
+		}
+	}
+	return sq;
+}
+
+void App::request_missing(std::string &out, const Position &p)
+{
+	if (tab_ != Tab::Book) return;
+	const int sq = missing_target();
+	if (sq == kNoMove) return;
+	const PosKey key = key_of(p);
+	const std::string params = "base=" + base_ + " stages=" + stages_ + " x=" + std::to_string(loss_x_) +
+	                           " y=" + std::to_string(loss_y_);
+	if (missing_.asked && missing_.pos == key && missing_.sq == sq && missing_.params == params) return;
+	if (missing_id_) {
+		out += "stop id=" + std::to_string(missing_id_) + "\n";
+		requests_.erase(missing_id_);
+	}
+	missing_ = MissingList{};
+	missing_.pos = key;
+	missing_.sq = sq;
+	missing_.params = params;
+	missing_.asked = true;
+	missing_scroll_ = 0;
+	if (eng_[0].board != key) {
+		out += "setboard " + p.to_board_string() + "\n";
+		eng_[0].board = key;
+	}
+	missing_id_ = next_id_++;
+	out += "book missing id=" + std::to_string(missing_id_) + " sq=" + square_name(sq) + " " + params + " n=500\n";
+	requests_[missing_id_] = {Request::Missing, key, 0};
 }
 
 }  // namespace ng

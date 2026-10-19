@@ -126,6 +126,9 @@ struct HintLine {
 };
 std::optional<HintLine> parse_hint_line(std::string_view line);
 
+// the number n of a marker "echo Mn": the engine answers with a warning line that names "Mn"; -1 otherwise
+int echo_marker(std::string_view line);
+
 // applies an "@move" line of book moveinfo to the position's moves
 void apply_move_line(PosInfo &info, const Fields &f);
 

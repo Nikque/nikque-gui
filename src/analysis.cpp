@@ -270,3 +270,21 @@ int shown_level(const MoveEval &m, bool use_book)
 }
 
 }  // namespace ng
+
+namespace ng {
+
+int echo_marker(std::string_view line)
+{
+	const size_t e = line.find("echo");
+	if (e == std::string_view::npos) return -1;
+	const size_t m = line.find("\"M", e);
+	if (m == std::string_view::npos) return -1;
+	int n = 0;
+	size_t i = m + 2;
+	if (i >= line.size() || line[i] < '0' || line[i] > '9') return -1;
+	for (; i < line.size() && line[i] >= '0' && line[i] <= '9'; ++i) n = n * 10 + (line[i] - '0');
+	if (i >= line.size() || line[i] != '"') return -1;
+	return n;
+}
+
+}  // namespace ng
