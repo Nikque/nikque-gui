@@ -241,3 +241,13 @@ learnopt.repro=毎回同じ book にする
 learnopt.repro.note=on か off
 learnopt.bad=学習の設定に読めない値があったので、その項目は前のままにしました（数・auto・on・off）
 learnopt.sent=学習の設定を主のエンジンに送りました
+
+# 学習の列
+menu.queue.add=足りない進行をすべて学習の列に入れる
+menu.queue.start=学習の列を始める…
+menu.queue.clear=学習の列を消す
+queue.added=学習の列に {0} 件入れました（全部で {1} 件。各件：その局面まで打つ → book store → {2}）
+queue.ask=学習の列の {0} 件を順に行います（book：{1}）。止めるときは「学習を止める」（残りは列に残ります）。よろしいですか。
+queue.left=列の残り {0} 件
+queue.done=学習の列が終わりました
+queue.cleared=学習の列を消しました

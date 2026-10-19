@@ -447,6 +447,24 @@ void App::on_command(int id)
 		stop_learning();
 		return;
 	}
+	if (id == cmd::QueueMissing) {
+		queue_missing();
+		update_menu();
+		return;
+	}
+	if (id == cmd::QueueStart) {
+		if (learn_queue_.empty() || learning_) return;
+		if (MessageBoxW(hwnd_, lang::f("queue.ask", {std::to_wstring(learn_queue_.size()), book_file()}).c_str(), lang::t("app.title").c_str(), MB_OKCANCEL | MB_ICONQUESTION) != IDOK) return;
+		queue_running_ = true;
+		next_in_queue();
+		return;
+	}
+	if (id == cmd::QueueClear) {
+		learn_queue_.clear();
+		log(lang::t("queue.cleared"));
+		update_menu();
+		return;
+	}
 	if (id == cmd::LearnSettings) {
 		open_learn_settings();
 		return;

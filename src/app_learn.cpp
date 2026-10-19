@@ -122,6 +122,12 @@ void App::start_learning(const std::string &command)
 {
 	std::string moves;
 	for (int i = 0; i < game_.cursor(); ++i) moves += square_name(game_.moves()[i]);
+	start_learning_at(command, game_.start(), moves);
+}
+
+// the commands (one or more lines) from the position after `moves` from `start`
+void App::start_learning_at(const std::string &command, const Position &start, const std::string &moves)
+{
 	std::string out;
 	// the analyses of the main engine stop here (the engine also stops them before a command changing the book)
 	for (int *id : {&book_id_, &count_id_, &levels_id_, &graph_id_, &missing_id_})
@@ -130,7 +136,7 @@ void App::start_learning(const std::string &command)
 			requests_.erase(*id);
 			*id = 0;
 		}
-	out += "setboard " + game_.start().to_board_string() + "\n";
+	out += "setboard " + start.to_board_string() + "\n";
 	if (!moves.empty()) out += "play " + moves + "\n";
 	eng_[0].board.reset();
 	out += command + "\n";
@@ -138,10 +144,15 @@ void App::start_learning(const std::string &command)
 	out += "echo M" + std::to_string(learn_end_id_) + "\n";  // answered when the command has ended
 	learning_ = true;
 	learn_cmd_ = command;
+	for (auto &ch : learn_cmd_)
+		if (ch == '\n') ch = '/';  // several commands on one line
 	learn_progress_.clear();
 	learn_t0_ = std::chrono::steady_clock::now();
-	ini_.set("learn", "last_command", command);
-	ini_.set("learn", "last_start", game_.start().to_board_string());
+	std::string one_line = command;  // a line of config.ini: the lines joined by '|'
+	for (auto &ch : one_line)
+		if (ch == '\n') ch = '|';
+	ini_.set("learn", "last_command", one_line);
+	ini_.set("learn", "last_start", start.to_board_string());
 	ini_.set("learn", "last_moves", moves);
 	log(lang::f("learn.started", {widen(command)}));
 	send(0, out);
@@ -173,6 +184,10 @@ void App::learning_ended()
 	missing_ = MissingList{};
 	eng_[0].board.reset();
 	update_menu();
+	if (queue_running_) {
+		next_in_queue();  // the next job of the queue (or its end)
+		if (learning_) return;
+	}
 	request_analysis();
 	invalidate();
 }
@@ -190,6 +205,7 @@ void App::stop_learning()
 	eng_[0].proc.close(0);
 	eng_[0].alive = false;
 	learning_ = false;
+	queue_running_ = false;  // the jobs left stay in the queue
 	learn_end_id_ = 0;
 	learn_progress_.clear();
 	for (auto it = requests_.begin(); it != requests_.end();) it = it->second.engine == 0 ? requests_.erase(it) : std::next(it);
@@ -213,7 +229,9 @@ void App::continue_learning()
 		MessageBoxW(hwnd_, lang::t("learn.nothing_newer").c_str(), lang::t("app.title").c_str(), MB_ICONINFORMATION);
 		return;
 	}
-	const std::string last = ini_.get("learn", "last_command");
+	std::string last = ini_.get("learn", "last_command");
+	for (auto &ch : last)
+		if (ch == '|') ch = '\n';
 	if (MessageBoxW(hwnd_, lang::f("learn.ask_continue", {saved.path, local_time(saved.time), widen(last)}).c_str(),
 	                lang::t("app.title").c_str(), MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
 		return;
@@ -236,6 +254,47 @@ void App::continue_learning()
 		game_.go_to(game_.size());
 	}
 	start_learning(last);
+}
+
+}  // namespace ng
+
+namespace ng {
+
+// Every missing line of the book tab becomes a job: play up to its position, book store, then the command of
+// the stage base with X and Y.
+void App::queue_missing()
+{
+	if (missing_.lines.empty()) {
+		set_status(lang::t("status.missing_none"));
+		return;
+	}
+	std::string head;
+	for (int i = 0; i < game_.cursor(); ++i) head += square_name(game_.moves()[i]);
+	const std::string command = "book store\nbook " + base_ + " " + std::to_string(loss_x_) + " " + std::to_string(loss_y_);
+	for (const auto &ml : missing_.lines) {
+		LearnJob j;
+		j.start = game_.start();
+		j.moves = head;
+		for (int mv : ml.moves) j.moves += square_name(mv);
+		j.command = command;
+		learn_queue_.push_back(std::move(j));
+	}
+	log(lang::f("queue.added", {std::to_wstring(missing_.lines.size()), std::to_wstring(learn_queue_.size()),
+	                            widen(command.substr(command.find('\n') + 1))}));
+	invalidate();
+}
+
+void App::next_in_queue()
+{
+	if (!queue_running_ || learning_) return;
+	if (learn_queue_.empty()) {
+		queue_running_ = false;
+		log(lang::t("queue.done"));
+		return;
+	}
+	LearnJob j = std::move(learn_queue_.front());
+	learn_queue_.pop_front();
+	start_learning_at(j.command, j.start, j.moves);
 }
 
 }  // namespace ng

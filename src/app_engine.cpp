@@ -489,6 +489,7 @@ void App::on_engine(WPARAM tag, bool ended)
 		if (role == 0) {
 			book_id_ = count_id_ = levels_id_ = 0;
 			learning_ = false;
+			queue_running_ = false;
 		}
 		else hint_busy_ = hint_accept_ = false;
 		changed = true;

@@ -575,7 +575,8 @@ void draw_log(App &app)
 		const auto s = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - app.learn_t0_).count();
 		wchar_t el[32];
 		swprintf(el, 32, L"%lld:%02lld", static_cast<long long>(s / 60), static_cast<long long>(s % 60));
-		const std::wstring txt = lang::f("learn.bar", {widen(app.learn_cmd_), app.learn_progress_, el});
+		std::wstring txt = lang::f("learn.bar", {widen(app.learn_cmd_), app.learn_progress_, el});
+		if (app.queue_running_) txt += L"　" + lang::f("queue.left", {std::to_wstring(app.learn_queue_.size())});
 		const float tw = std::min(gx.text_width(txt, f) + 4, (L.log.right - L.log.left) * 0.6f);
 		const D2D1_RECT_F r{right - tw, L.log.bottom - rh - 2 * L.scale, right, L.log.bottom - 2 * L.scale};
 		gx.draw_text(txt, f, r, th.accent);

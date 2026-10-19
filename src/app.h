@@ -67,6 +67,9 @@ enum : int {
 	LearnStop,
 	LearnContinue,
 	LearnSettings,
+	QueueMissing,
+	QueueStart,
+	QueueClear,
 	EngineNikque = 1400,
 	EngineNewedax,
 	RestartEngines,
@@ -231,6 +234,14 @@ public:
 	std::string learn_cmd_;
 	std::wstring learn_progress_;
 	std::chrono::steady_clock::time_point learn_t0_{};
+	// the learning queue: jobs done one after another
+	struct LearnJob {
+		Position start;
+		std::string moves;    // from the start, passes as "pa"
+		std::string command;  // lines
+	};
+	std::deque<LearnJob> learn_queue_;
+	bool queue_running_ = false;
 	// search engine: the hint in progress
 	int marker_id_ = 0;
 	bool hint_busy_ = false, hint_accept_ = false;
@@ -326,6 +337,9 @@ public:
 	std::wstring book_file() const;
 	void learn_command(int id);
 	void start_learning(const std::string &command);
+	void start_learning_at(const std::string &command, const Position &start, const std::string &moves);
+	void queue_missing();
+	void next_in_queue();
 	void stop_learning();
 	void continue_learning();
 	void learning_line(const std::string &line);

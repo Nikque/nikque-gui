@@ -418,6 +418,10 @@ void App::build_menu()
 	item(learn, cmd::LearnContinue, t("menu.learn.continue"));
 	AppendMenuW(learn, MF_SEPARATOR, 0, nullptr);
 	item(learn, cmd::LearnSettings, t("menu.learn.settings"));
+	AppendMenuW(learn, MF_SEPARATOR, 0, nullptr);
+	item(learn, cmd::QueueMissing, t("menu.queue.add"));
+	item(learn, cmd::QueueStart, t("menu.queue.start"));
+	item(learn, cmd::QueueClear, t("menu.queue.clear"));
 	sub(bar, learn, t("menu.learn"));
 
 	HMENU eng = CreatePopupMenu();
@@ -489,6 +493,8 @@ void App::update_menu()
 	EnableMenuItem(m, cmd::LearnStop, MF_BYCOMMAND | (learning_ ? MF_ENABLED : MF_GRAYED));
 	for (int id = cmd::LearnDeviate; id <= cmd::LearnFix; ++id) EnableMenuItem(m, id, MF_BYCOMMAND | (learning_ ? MF_GRAYED : MF_ENABLED));
 	EnableMenuItem(m, cmd::LearnContinue, MF_BYCOMMAND | (learning_ ? MF_GRAYED : MF_ENABLED));
+	EnableMenuItem(m, cmd::QueueStart, MF_BYCOMMAND | (learning_ || learn_queue_.empty() ? MF_GRAYED : MF_ENABLED));
+	EnableMenuItem(m, cmd::QueueClear, MF_BYCOMMAND | (learn_queue_.empty() ? MF_GRAYED : MF_ENABLED));
 	check(cmd::UseBook, use_book_);
 	check(cmd::CountOn, count_);
 	check(cmd::TogglePanel, panel_hidden_);
