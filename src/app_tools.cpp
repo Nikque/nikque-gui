@@ -137,6 +137,17 @@ std::optional<std::string> App::engine_path_or_say(const std::wstring &path, boo
 	return p;
 }
 
+// the lines of the log as a text file (UTF-8)
+bool App::save_log(const std::wstring &path) const
+{
+	std::string out;
+	for (const auto &l : log_) out += narrow(l) + "\r\n";
+	FILE *f = nullptr;
+	if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f) return false;
+	const bool ok = fwrite(out.data(), 1, out.size(), f) == out.size();
+	return fclose(f) == 0 && ok;
+}
+
 void App::open_log()
 {
 	if (log_open_) return;

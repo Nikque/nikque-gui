@@ -666,6 +666,7 @@ void App::build_menu()
 	sep(view);
 	item(view, cmd::TogglePanel, t("menu.view.panel"), keys_.describe(Action::TogglePanel));
 	item(view, cmd::ToggleLog, t("menu.view.log"), keys_.describe(Action::ToggleLog));
+	item(view, cmd::SaveLog, t("menu.view.save_log"));
 	sub(bar, view, t("menu.view"));
 
 	HMENU set = CreatePopupMenu();

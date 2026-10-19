@@ -640,6 +640,15 @@ void App::on_command(int id)
 		invalidate();
 		break;
 	case cmd::RotateNext: orient_to((orient_ + 1) & 7); break;
+	case cmd::SaveLog: {
+		std::wstring flt = lang::t("filter.text") + L" (*.txt)";
+		flt += L'\0';
+		flt += L"*.txt";
+		flt += L'\0';
+		const std::wstring f = pick_save(flt.c_str(), L"txt", L"log.txt");
+		if (!f.empty()) set_status(save_log(f) ? lang::f("status.log_saved", {f}) : lang::t("status.write_failed"));
+		break;
+	}
 	case cmd::Undo: do_action(Action::Back); break;
 	case cmd::Redo: do_action(Action::Forward); break;
 	case cmd::ToStart: do_action(Action::Start); break;

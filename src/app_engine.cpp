@@ -196,6 +196,7 @@ void App::stop_engines()
 	hint_busy_ = hint_accept_ = hint_background_ = false;
 	tool_busy_ = false;
 	findline_id_ = 0;
+	list_book_id_ = 0;
 	DeleteFileW((temp_dir_ + L"\\nobook.dat").c_str());
 	DeleteFileW((temp_dir_ + L"\\nobook-tool.dat").c_str());
 }
@@ -585,6 +586,7 @@ void App::on_engine(WPARAM tag, bool ended)
 			book_id_ = count_id_ = levels_id_ = best_id_ = 0;
 			learning_ = false;
 			queue_running_ = false;
+			findline_id_ = list_book_id_ = 0;
 		}
 		else hint_busy_ = hint_accept_ = false;
 		changed = true;
@@ -631,7 +633,7 @@ void App::switch_book(const std::wstring &path)
 	eng_[0].alive = false;
 	eng_[0].board.reset();
 	for (auto it = requests_.begin(); it != requests_.end();) it = it->second.engine == 0 ? requests_.erase(it) : std::next(it);
-	book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = 0;
+	book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = findline_id_ = list_book_id_ = 0;
 	missing_ = MissingList{};
 	cache_.clear_book();
 	start_engines();
@@ -750,7 +752,7 @@ void App::watch_engines()
 			s.board.reset();
 			if (role == 0) {
 				for (auto it = requests_.begin(); it != requests_.end();) it = it->second.engine == 0 ? requests_.erase(it) : std::next(it);
-				book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = 0;
+				book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = findline_id_ = list_book_id_ = 0;
 				missing_ = MissingList{};
 			} else {
 				hint_busy_ = hint_accept_ = hint_background_ = false;

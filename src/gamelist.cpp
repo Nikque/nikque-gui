@@ -58,6 +58,13 @@ void play_known(Position &p, int sq) noexcept
 	p.side ^= 1;
 }
 
+size_t moves_in(const GameList &l)
+{
+	size_t n = 0;
+	for (size_t i = 0; i < l.size(); ++i) n += l.moves(i).size();
+	return n;
+}
+
 bool same_game(const GameList &l, size_t a, size_t b)
 {
 	if (!(l.start(a) == l.start(b))) return false;
@@ -102,6 +109,12 @@ void GameList::clear()
 	starts_.clear();
 	start_ids_.clear();
 	unused_ = 0;
+}
+
+void GameList::reserve(size_t games, size_t moves)
+{
+	games_.reserve(games_.size() + games);
+	pool_.reserve(pool_.size() + moves);
 }
 
 void GameList::reorder(const std::vector<std::uint32_t> &order)
@@ -177,11 +190,26 @@ bool parse_list_line(std::string_view line, Position *start, std::vector<std::ui
 	if (coords.empty() && !board) return false;
 	Position p = *start;
 	for (const int sq : coords) {
-		if (!((moves_after_pass(p) >> sq) & 1)) {
+		// a move that turns discs is legal; one that does not is legal only after a forced pass (the side to move
+		// has no move at all), so the list of moves is made only then
+		u64 f = flips(p.me(), p.opp(), sq);
+		if (!f && legal_moves(p.me(), p.opp()) == 0) {
+			p.side ^= 1;
+			f = flips(p.me(), p.opp(), sq);
+		}
+		if (!f) {
 			*cut = true;
 			break;
 		}
-		p = p.play(sq);
+		const u64 turned = f | (1ULL << sq);
+		if (p.side == kBlack) {
+			p.black |= turned;
+			p.white &= ~turned;
+		} else {
+			p.white |= turned;
+			p.black &= ~turned;
+		}
+		p.side ^= 1;
 		moves->push_back(static_cast<std::uint8_t>(sq));
 	}
 	return true;
@@ -253,6 +281,12 @@ ListReadStats read_list(const std::wstring &path, GameList &list, std::stop_toke
 	FILE *f = nullptr;
 	if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return st;
 	st.opened = true;
+	// room for the games at once: two letters a move; a full game is about 120 letters
+	if (_fseeki64(f, 0, SEEK_END) == 0) {
+		const long long size = _ftelli64(f);
+		if (size > 0) list.reserve(static_cast<size_t>(size / 100), static_cast<size_t>(size / 2));
+		_fseeki64(f, 0, SEEK_SET);
+	}
 	std::string text;
 	char buf[1 << 16];
 	size_t n;
@@ -335,6 +369,7 @@ size_t unique_list(GameList &list)
 void truncate_list(GameList &list, int n)
 {
 	GameList out;
+	out.reserve(list.size(), list.size() * static_cast<size_t>(std::max(0, n)));
 	for (size_t i = 0; i < list.size(); ++i) {
 		const auto m = list.moves(i);
 		out.add(list.start(i), m.first(std::min<size_t>(m.size(), static_cast<size_t>(std::max(0, n)))));
@@ -356,8 +391,34 @@ void shuffle_list(GameList &list, std::uint64_t seed)
 
 unsigned symmetries_of(const Position &p) noexcept
 {
-	// the occupied squares first (the 7 images from 3 transforms and byte swaps), then the black discs
+	// a symmetry maps the halves of the board onto each other: the left and right halves (mirror, 180 degrees,
+	// 90 degrees), the top and bottom halves (mirror, 180, 90), or the two sides of a diagonal hold as many discs.
+	// When none do (nearly every position after the first moves), the position has no symmetry.
+	constexpr u64 kLeft = 0x0f0f0f0f0f0f0f0fULL, kTop = 0x00000000ffffffffULL;
 	const u64 occ = p.black | p.white;
+	{
+		// the two sides of the a1-h8 diagonal (x > y, x < y) and of the a8-h1 diagonal (x + y < 7, x + y > 7)
+		struct Halves {
+			u64 above = 0, below = 0, anti_lo = 0, anti_hi = 0;
+		};
+		static constexpr Halves tri = [] {
+			Halves m;
+			for (int sq = 0; sq < 64; ++sq) {
+				const int x = sq & 7, y = sq >> 3;
+				if (x > y) m.above |= 1ULL << sq;
+				if (x < y) m.below |= 1ULL << sq;
+				if (x + y < 7) m.anti_lo |= 1ULL << sq;
+				if (x + y > 7) m.anti_hi |= 1ULL << sq;
+			}
+			return m;
+		}();
+		const bool lr_eq = std::popcount(occ & kLeft) == std::popcount(occ & ~kLeft);
+		const bool tb_eq = std::popcount(occ & kTop) == std::popcount(occ & ~kTop);
+		const bool d_eq = std::popcount(occ & tri.above) == std::popcount(occ & tri.below);
+		const bool a_eq = std::popcount(occ & tri.anti_lo) == std::popcount(occ & tri.anti_hi);
+		if (!lr_eq && !tb_eq && !d_eq && !a_eq) return 1;
+	}
+	// the occupied squares (the 7 images from 3 transforms and byte swaps), then the black discs
 	const u64 lr = symmetric(occ, 1), t = symmetric(occ, 4), tlr = symmetric(t, 1);
 	const u64 img[8] = {occ, lr, std::byteswap(occ), std::byteswap(lr), t, tlr, std::byteswap(t), std::byteswap(tlr)};
 	unsigned bits = 1;
@@ -379,17 +440,34 @@ std::vector<std::uint8_t> reoriented(const Position &start, std::span<const std:
 	out.reserve(moves.size());
 	Position p = start;
 	for (const auto m : moves) {
-		const u64 legal = moves_after_pass(p);
+		// a move that turns nothing for the side to move comes after a forced pass (a symmetry keeping the
+		// position keeps that too); no list of legal moves is needed for a game read in
+		int t = map[m];
+		u64 f = flips(p.me(), p.opp(), t);
+		if (!f) {
+			p.side ^= 1;
+			f = flips(p.me(), p.opp(), t);
+		}
 		const unsigned sym = symmetries_of(p);
 		if (sym != 1) {
-			const int s = pick(sym, p, map[m]);
-			if (s)
+			const int s = pick(sym, p, t);
+			if (s) {
 				for (auto &x : map) x = static_cast<std::uint8_t>(symmetric_square(x, s));
+				t = map[m];
+				f = flips(p.me(), p.opp(), t);
+			}
 		}
-		const int t = map[m];
-		if (!((legal >> t) & 1)) break;  // not a game of legal moves (cannot happen for a list read in)
+		if (!f) break;  // not a game of legal moves (cannot happen for a list read in)
 		out.push_back(static_cast<std::uint8_t>(t));
-		p = p.play(t);
+		const u64 turned = f | (1ULL << t);
+		if (p.side == kBlack) {
+			p.black |= turned;
+			p.white &= ~turned;
+		} else {
+			p.white |= turned;
+			p.black &= ~turned;
+		}
+		p.side ^= 1;
 	}
 	return out;
 }
@@ -428,6 +506,7 @@ std::vector<std::uint8_t> scattered_moves(const Position &start, std::span<const
 void normalize_list(GameList &list, std::stop_token stop)
 {
 	GameList out;
+	out.reserve(list.size(), moves_in(list));
 	for (size_t i = 0; i < list.size(); ++i) {
 		if ((i & 4095) == 0 && stop.stop_requested()) return;  // the list stays as it was
 		out.add(list.start(i), normalized_moves(list.start(i), list.moves(i)));
@@ -439,6 +518,7 @@ void scatter_list(GameList &list, std::uint64_t seed, int sides, std::stop_token
 {
 	std::mt19937_64 rng(seed);
 	GameList out;
+	out.reserve(list.size(), moves_in(list));
 	for (size_t i = 0; i < list.size(); ++i) {
 		if ((i & 4095) == 0 && stop.stop_requested()) return;
 		out.add(list.start(i), scattered_moves(list.start(i), list.moves(i), rng, sides));

@@ -543,3 +543,6 @@ action.list_delete=刪除棋譜清單的目前棋譜
 action.list_reload=重新讀取棋譜清單的目前棋譜
 action.keep=備份目前手順
 action.edit_board=開始或確定擺放局面
+menu.view.save_log=匯出記錄…
+status.log_saved=已匯出記錄：{0}
+task.took={0}（{1} 秒）

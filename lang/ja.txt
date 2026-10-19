@@ -543,3 +543,6 @@ action.list_delete=棋譜リストの今の棋譜を消す
 action.list_reload=棋譜リストの今の棋譜を読み直す
 action.keep=今の手順を控える
 action.edit_board=盤面配置を始める・決める
+menu.view.save_log=ログを書き出す…
+status.log_saved=ログを書き出しました：{0}
+task.took={0}（{1} 秒）

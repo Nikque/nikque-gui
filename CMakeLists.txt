@@ -72,9 +72,10 @@ target_compile_definitions(nikque-gui PRIVATE NG_VERSION="${PROJECT_VERSION}")
 if(NG_MEASURE)
 	target_compile_definitions(nikque-gui PRIVATE NG_MEASURE=1)
 endif()
-# the language files next to the exe
+# the language files and the readme next to the exe
 add_custom_command(TARGET nikque-gui POST_BUILD
-	COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/lang $<TARGET_FILE_DIR:nikque-gui>/lang)
+	COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/lang $<TARGET_FILE_DIR:nikque-gui>/lang
+	COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/readme.txt $<TARGET_FILE_DIR:nikque-gui>/readme.txt)
 
 enable_testing()
 add_executable(rules_test tests/rules_test.cpp ${NG_CORE})

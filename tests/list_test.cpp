@@ -348,6 +348,14 @@ static void timings()
 
 int main(int argc, char **argv)
 {
+	// list_test --write <file> <games>: a file of random games, for measuring the GUI with a large list
+	if (argc == 4 && std::string(argv[1]) == "--write") {
+		std::mt19937_64 rng(9);
+		GameList l;
+		const int n = std::atoi(argv[3]);
+		for (int i = 0; i < n; ++i) l.add(Position{}, random_game(rng, 60));
+		return write_list(std::filesystem::path(argv[2]).wstring(), l) ? 0 : 1;
+	}
 	test_symmetries();
 	test_bitboards();
 	test_list_basics();

@@ -165,10 +165,15 @@ void App::start_learning_at(const std::string &command, const Position &start, c
 
 void App::learning_line(const std::string &line)
 {
-	// the progress ("Book deviate2...11/26 done: ...") is shown, the rest goes to the log
+	// the progress ("Book deviate2...11/26 done: ...", "Book deviate 34 todo", one or more lines a round) is shown
+	// under the board; only the lines with a result ("...finished: ...", "Fixing book...0 done", "...1 positions
+	// added", errors) go to the log as well
 	if (line.starts_with("Book ") || line.find("...") != std::string::npos) {
 		learn_progress_ = widen(line);
-		if (line.find(" done:") == std::string::npos) log(widen(line));
+		const bool result = line.find("finished") != std::string::npos || line.ends_with("done") ||
+		                    line.find("done (") != std::string::npos || line.find("added") != std::string::npos ||
+		                    line.find("rror") != std::string::npos;
+		if (result) log(widen(line));
 		else invalidate();
 		return;
 	}
@@ -213,7 +218,7 @@ void App::stop_learning()
 	learn_end_id_ = 0;
 	learn_progress_.clear();
 	for (auto it = requests_.begin(); it != requests_.end();) it = it->second.engine == 0 ? requests_.erase(it) : std::next(it);
-	book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = 0;
+	book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = findline_id_ = list_book_id_ = 0;
 	missing_ = MissingList{};
 	cache_.clear_book();
 	log(lang::t("learn.stopped"));

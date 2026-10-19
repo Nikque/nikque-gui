@@ -29,6 +29,8 @@ public:
 	void add(const Position &start, std::span<const std::uint8_t> moves);
 	void erase(size_t i);
 	void clear();
+	// room for more games and moves (a file read at once does not grow the buffers again and again)
+	void reserve(size_t games, size_t moves);
 	// keeps the games of `order` (indices into this list), in that order
 	void reorder(const std::vector<std::uint32_t> &order);
 	size_t bytes() const noexcept;

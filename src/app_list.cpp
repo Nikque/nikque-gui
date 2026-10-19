@@ -118,8 +118,10 @@ void App::list_load(const std::wstring &file, bool add)
 	if (task_busy_) return;
 	auto nl = std::make_shared<GameList>();
 	run_task(lang::f("list.reading", {file_name(file)}), [this, nl, file, add](std::stop_token st) -> std::function<void()> {
+		const auto t0 = std::chrono::steady_clock::now();
 		const ListReadStats r = read_list(file, *nl, st);
-		return [this, nl, file, add, r] {
+		const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+		return [this, nl, file, add, r, s] {
 			if (!r.opened) {
 				log(lang::f("list.cannot_open", {file}));
 				return;
@@ -139,8 +141,11 @@ void App::list_load(const std::wstring &file, bool add)
 			hits_shown_ = false;
 			list_scroll_ = 0;
 			tab_ = Tab::List;
-			log(lang::f(add ? "list.added" : "list.read", {std::to_wstring(r.games), file_name(file), std::to_wstring(list_.size()),
-			                                                std::to_wstring(r.cut)}));
+			wchar_t sec[32];
+			swprintf(sec, 32, L"%.2f", s);
+			log(lang::f("task.took", {lang::f(add ? "list.added" : "list.read", {std::to_wstring(r.games), file_name(file),
+			                                                                    std::to_wstring(list_.size()), std::to_wstring(r.cut)}),
+			                          sec}));
 			if (!add && !list_.empty()) list_select(0);
 		};
 	});
@@ -149,17 +154,25 @@ void App::list_load(const std::wstring &file, bool add)
 // the list moves to a job and comes back after it (the window shows it as busy meanwhile)
 static void list_job(App &app, const std::wstring &label, std::function<std::wstring(GameList &, std::stop_token)> work)
 {
+	if (app.task_busy_) {  // the list stays where it is
+		app.set_status(lang::t("task.busy"));
+		return;
+	}
 	auto l = std::make_shared<GameList>(std::move(app.list_));
 	app.list_.clear();
 	app.list_index_ = -1;
 	app.hits_.clear();
 	app.hits_shown_ = false;
 	app.run_task(label, [&app, l, work](std::stop_token st) -> std::function<void()> {
+		const auto t0 = std::chrono::steady_clock::now();
 		const std::wstring msg = work(*l, st);
-		return [&app, l, msg] {
+		const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+		return [&app, l, msg, s] {
 			app.list_ = std::move(*l);
 			app.list_scroll_ = 0;
-			app.log(msg);
+			wchar_t sec[32];
+			swprintf(sec, 32, L"%.2f", s);
+			app.log(lang::f("task.took", {msg, sec}));
 		};
 	});
 }
@@ -415,27 +428,36 @@ void App::list_from_book()
 		if (a == IDCANCEL) return;
 		add = a == IDYES;
 	}
+	ask_book_lines(std::stoi(f[0].text), std::stoi(f[1].text), std::stoi(f[2].text), add);
+}
+
+bool App::ask_book_lines(int loss, int depth, int n, bool add)
+{
+	if (!eng_[0].alive || learning_) return false;
 	const std::wstring file = temp_dir_ + L"\\book-lines.txt";
 	DeleteFileW(file.c_str());
 	const auto path = engine_path_or_say(file, false);
-	if (!path) return;
+	if (!path) return false;
 	std::string moves;
 	for (int i = 0; i < game_.cursor(); ++i) moves += square_name(game_.moves()[i]);
 	std::string out = "setboard " + game_.start().to_board_string() + "\n";
 	if (!moves.empty()) out += "play " + moves + "\n";
 	eng_[0].board = key_of(game_.now());
 	const int id = next_id_++;
-	out += "book bestlines id=" + std::to_string(id) + " loss=" + narrow(f[0].text) + " depth=" + narrow(f[1].text) +
-	       " solved=stop which=all file=\"" + *path + "\"\n";
+	out += "book bestlines id=" + std::to_string(id) + " loss=" + std::to_string(std::clamp(loss, 0, 129)) +
+	       " depth=" + std::to_string(std::clamp(depth, 1, 60)) + " solved=stop which=all file=\"" + *path + "\"\n";
 	requests_[id] = {add ? Request::ListBookAdd : Request::ListBook, key_of(game_.now()), 0};
-	list_book_limit_ = std::stoi(f[2].text);
+	list_book_limit_ = std::max(1, n);
 	list_book_start_ = game_.start();
+	list_book_id_ = id;
 	send(0, out);
-	set_status(t("list.book.asked"));
+	set_status(lang::t("list.book.asked"));
+	return true;
 }
 
 void App::list_book_written(bool add, bool ok)
 {
+	list_book_id_ = 0;
 	const std::wstring file = temp_dir_ + L"\\book-lines.txt";
 	if (!ok) {
 		log(lang::f("best.export_failed", {file}));

@@ -543,3 +543,6 @@ action.list_delete=Remove this game from the list
 action.list_reload=Read this game of the list again
 action.keep=Keep this line
 action.edit_board=Start or finish setting up a position
+menu.view.save_log=Save the log…
+status.log_saved=Log saved: {0}
+task.took={0} ({1} s)

@@ -105,6 +105,7 @@ bool App::script_waiting() const
 	case ScriptWait::Learn: return learning_ || queue_running_;
 	case ScriptWait::Tool: return tool_busy_;
 	case ScriptWait::FindLine: return findline_id_ != 0 || task_busy_;
+	case ScriptWait::BookLines: return list_book_id_ != 0 || task_busy_;
 	case ScriptWait::Analysis: {
 		if (std::chrono::steady_clock::now() >= script_until_) return false;
 		const Position &p = game_.now();
@@ -362,6 +363,13 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 			wait(ScriptWait::Task);
 			return true;
 		}
+		if (a1 == "book") {
+			auto arg = [&](size_t k, int def) { return w.size() > k ? number(w[k]).value_or(def) : def; };
+			const bool add = w.size() > 5 && lower(w[5]) == "add";
+			if (!ask_book_lines(arg(2, 0), arg(3, 60), arg(4, 10000), add)) return bad("learn.no_engine");
+			wait(ScriptWait::BookLines);
+			return true;
+		}
 		if (a1 == "start" && n) {
 			list_start_ply_ = std::clamp(*n, -1, 60);
 			return true;
@@ -405,6 +413,16 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 	}
 	if (c == "run") {
 		run_script_file(path(rest_after(line, 1)), depth);
+		return true;
+	}
+	if (c == "savelog") {
+		if (!save_log(path(rest_after(line, 1)))) return bad("status.write_failed");
+		return true;
+	}
+	if (c == "lang") {
+		const std::string code = w.size() > 1 ? w[1] : std::string();
+		if (code != "ja" && code != "en" && code != "zh-Hans" && code != "zh-Hant") return bad("script.bad_word");
+		set_language(code);
 		return true;
 	}
 	if (c == "quit") {

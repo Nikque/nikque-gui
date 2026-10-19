@@ -152,6 +152,7 @@ enum : int {
 	TabKept,
 	MoveNumbers,
 	RotateNext,
+	SaveLog,
 	Rotate0 = 1640,  // + symmetry 0..7
 	CellInfoNone = 1650,
 	CellInfoPositions,
@@ -381,6 +382,7 @@ public:
 	bool hits_shown_ = false;
 	int list_book_limit_ = 10000;     // the lines of the book read into the list, at most
 	Position list_book_start_{};
+	int list_book_id_ = 0;            // the book lines asked of the main engine
 	std::vector<std::pair<int, D2D1_RECT_F>> list_rects_;
 	// the kept lines (no limit), saved next to the exe
 	struct Kept {
@@ -408,7 +410,7 @@ public:
 		std::string text;
 	};
 	std::deque<ScriptLine> script_;
-	enum class ScriptWait { None, Task, Learn, Tool, Analysis, FindLine } script_wait_ = ScriptWait::None;
+	enum class ScriptWait { None, Task, Learn, Tool, Analysis, FindLine, BookLines } script_wait_ = ScriptWait::None;
 	std::chrono::steady_clock::time_point script_until_{};
 	std::wstring script_dir_;     // relative names in a script are from its folder
 	std::string lang_ = "ja";
@@ -531,6 +533,7 @@ public:
 	std::wstring pick_save(const wchar_t *filter, const wchar_t *ext, const std::wstring &name, const std::wstring &title = {});
 	std::optional<std::string> engine_path_or_say(const std::wstring &path, bool exists);
 	void open_log();
+	bool save_log(const std::wstring &path) const;
 
 	// ---- app_board.cpp: orientation, board setup, the line of a position, bitboards, images
 	void orient_to(int s);
@@ -565,6 +568,7 @@ public:
 	void save_kept() const;
 	void list_from_book();
 	void list_book_written(bool add, bool ok);
+	bool ask_book_lines(int loss, int depth, int n, bool add);
 	void list_job_script(const std::wstring &label, std::function<void(GameList &)> work);
 
 	// ---- app_script.cpp: the command scripts
