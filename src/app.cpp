@@ -750,78 +750,9 @@ void App::set_status(const std::wstring &s)
 
 namespace ng {
 
-bool App::move_exact(const MoveEval &m, const Position &p) const
-{
-	return m.searched && m.selectivity >= 100 && m.depth >= p.empties() - 1;
-}
-
-// The values along the game, from the end backward: the value of the move played from a position is the best
-// value of the next position when every move there has a value (not for book values and searches to the end).
 void App::compute_line()
 {
-	const int n = game_.size();
-	line_.assign(n + 1, LineEval{});
-	for (int i = n; i >= 0; --i) {
-		const Position &p = game_.at(i);
-		LineEval &e = line_[i];
-		const LineEval *next = i < n ? &line_[i + 1] : nullptr;
-		const bool turn = i < n && game_.at(i + 1).side != p.side;  // the side changes to the next position
-		auto from_next = [&](int v) { return turn ? -v : v; };
-		if (p.game_over()) {
-			const int b = std::popcount(p.black), w = std::popcount(p.white), em = 64 - b - w;
-			const int diff = b > w ? b - w + em : b < w ? b - w - em : 0;
-			e.known = e.complete = e.exact = true;
-			e.best = p.side == kBlack ? diff : -diff;
-			continue;
-		}
-		if (p.must_pass()) {
-			if (next && next->known) {
-				e.known = true;
-				e.complete = next->complete;
-				e.best = e.played = from_next(next->best);
-				e.exact = e.played_exact = next->exact;
-				e.played_known = true;
-				e.played_improved = next->played_improved;
-			}
-			continue;
-		}
-		const PosInfo *info = cache_.peek(p);
-		if (!info) continue;
-		int best = -999;
-		bool all = !info->moves.empty(), best_exact = false;
-		for (const MoveEval &m : info->moves) {
-			int v;
-			bool known = shown_value(m, use_book_, &v);
-			bool ex = known && !(use_book_ && m.in_book) && move_exact(m, p);
-			bool improved = false;
-			const bool played = i < n && m.sq == game_.moves()[i];
-			if (played && backward_ && next && next->complete && !(use_book_ && m.in_book) && !ex) {
-				v = from_next(next->best);
-				ex = next->exact;
-				known = improved = true;
-			}
-			if (played) {
-				e.played_known = known;
-				e.played = v;
-				e.played_exact = ex;
-				e.played_improved = improved;
-			}
-			if (!known) {
-				all = false;
-				continue;
-			}
-			if (v > best) {
-				best = v;
-				best_exact = ex;
-			}
-		}
-		if (best != -999) {
-			e.known = true;
-			e.best = best;
-			e.exact = best_exact;
-		}
-		e.complete = all;
-	}
+	line_ = backward_line(game_, cache_, use_book_, backward_);
 }
 
 }  // namespace ng

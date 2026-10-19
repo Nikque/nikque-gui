@@ -377,13 +377,7 @@ void App::on_engine(WPARAM tag, bool ended)
 			const Request req = it->second;
 			if (req.kind == Request::Missing) {
 				if (f.kind() == "line" && id == missing_id_) {
-					MissingLine ml;
-					const std::string_view mv = f.get("moves").value_or("");
-					for (size_t k = 0; k + 1 < mv.size(); k += 2) ml.moves.push_back(parse_square(mv.substr(k, 2)));
-					ml.leaf = parse_square(f.get("leaf").value_or(""));
-					ml.value = static_cast<int>(f.num("value").value_or(0));
-					ml.empties = static_cast<int>(f.num("empties").value_or(0));
-					missing_.lines.push_back(std::move(ml));
+					if (auto ml = parse_missing_line(f)) missing_.lines.push_back(std::move(*ml));
 				} else if (f.kind() == "end" || f.kind() == "cancel") {
 					if (id == missing_id_) {
 						missing_id_ = 0;

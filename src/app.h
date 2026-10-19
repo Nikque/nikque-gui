@@ -127,18 +127,6 @@ struct CellView {
 	int pv_side = 0;         // the side who plays it there (0 black, 1 white)
 };
 
-// the game line after the backward analysis: position i (after i moves)
-struct LineEval {
-	bool known = false;      // a best value is known
-	bool complete = false;   // every move has a value (so the best value can go back)
-	int best = 0;            // from the side to move
-	bool exact = false;
-	bool played_known = false;  // the move played from here (the next move of the game)
-	int played = 0;
-	bool played_exact = false;
-	bool played_improved = false;
-};
-
 struct EngineSlot {
 	EngineProcess proc;
 	bool alive = false;
@@ -148,13 +136,6 @@ struct EngineSlot {
 	std::wstring error;
 };
 
-// the leaves missing for the next stage of a move (book missing)
-struct MissingLine {
-	std::vector<int> moves;  // from the position, the move first
-	int leaf = kNoMove;
-	int value = 0;
-	int empties = 0;
-};
 struct MissingList {
 	PosKey pos{};
 	int sq = kNoMove;
@@ -314,7 +295,6 @@ public:
 	void export_missing();
 	void send_hint(const Position &p, bool background);
 	void compute_line();
-	bool move_exact(const MoveEval &m, const Position &p) const;
 	std::string book_params() const;
 	std::wstring engine_dir() const;
 	std::wstring engine_name() const;

@@ -132,6 +132,36 @@ int echo_marker(std::string_view line);
 // applies an "@move" line of book moveinfo to the position's moves
 void apply_move_line(PosInfo &info, const Fields &f);
 
+// a search to the end (the move is searched as deep as the empty squares after it)
+bool move_exact(const MoveEval &m, const Position &p);
+
+// the game line after the backward analysis: position i (after i moves)
+struct LineEval {
+	bool known = false;      // a best value is known
+	bool complete = false;   // every move has a value (so the best value can go back)
+	int best = 0;            // from the side to move
+	bool exact = false;
+	bool played_known = false;  // the move played from here (the next move of the game)
+	int played = 0;
+	bool played_exact = false;
+	bool played_improved = false;
+};
+
+class Game;
+// The values along the game, from the end backward: the value of the move played from a position becomes the
+// best value of the next position when every move there has a value (`backward`; never for book values and
+// searches to the end).
+std::vector<LineEval> backward_line(const Game &g, const AnalysisCache &cache, bool use_book, bool backward);
+
+// a line of book missing: the moves from the position (the move first), the leaf to add, its value
+struct MissingLine {
+	std::vector<int> moves;
+	int leaf = kNoMove;
+	int value = 0;
+	int empties = 0;
+};
+std::optional<MissingLine> parse_missing_line(const Fields &f);
+
 // the value shown for a move: the book's when it is in the book (and the book is used), else the search's,
 // else the leaf's. Returns false when nothing is known yet.
 bool shown_value(const MoveEval &m, bool use_book, int *value);

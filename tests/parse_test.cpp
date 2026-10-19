@@ -2,6 +2,7 @@
 #include <cstdio>
 
 #include "analysis.h"
+#include "game.h"
 
 using namespace ng;
 
@@ -13,6 +14,82 @@ static int failures = 0;
 			++failures;                                                       \
 		}                                                                     \
 	} while (0)
+
+// every move of a position searched, with the value given by `value(sq)`
+template <class F>
+static void searched(AnalysisCache &c, const Position &p, F value, int depth = 10)
+{
+	PosInfo &info = c.get(p);
+	for (auto &m : info.moves) {
+		m.searched = true;
+		m.score = value(m.sq);
+		m.depth = depth;
+	}
+	info.search_done = true;
+}
+
+static void test_backward()
+{
+	Game g;
+	for (const char *mv : {"f5", "d6"}) g.play(parse_square(mv));
+	AnalysisCache c;
+	const int f5 = parse_square("f5"), d6 = parse_square("d6");
+	searched(c, g.at(0), [&](int sq) { return sq == f5 ? 1 : -2; });
+	searched(c, g.at(1), [&](int sq) { return sq == d6 ? -3 : -6; });  // white to move: best -3
+	auto line = backward_line(g, c, true, true);
+	CHECK(line.size() == 3 && line[1].known && line[1].complete && line[1].best == -3);
+	// f5 takes 3 (the best of the next position, from the other side), marked
+	CHECK(line[0].played_known && line[0].played == 3 && line[0].played_improved && line[0].best == 3);
+	// off: the search value stays
+	line = backward_line(g, c, true, false);
+	CHECK(line[0].played == 1 && !line[0].played_improved && line[0].best == 1);
+	// the next position not complete: no change
+	c.get(g.at(1)).moves[0].searched = false;
+	line = backward_line(g, c, true, true);
+	CHECK(!line[1].complete && line[0].played == 1 && !line[0].played_improved);
+	c.get(g.at(1)).moves[0].searched = true;
+	// a book value is kept
+	MoveEval *m = c.get(g.at(0)).find(f5);
+	m->in_book = m->book_row = true;
+	m->book_value = 0;
+	line = backward_line(g, c, true, true);
+	CHECK(line[0].played == 0 && !line[0].played_improved);
+	m->in_book = m->book_row = false;
+	// a search to the end is kept
+	m->depth = 59;
+	m->selectivity = 100;
+	line = backward_line(g, c, true, true);
+	CHECK(line[0].played == 1 && line[0].played_exact && !line[0].played_improved);
+
+	// a pass between: the value goes back with the sign of the side to move
+	const char *moves = "f5 f4 d3 f6 g6 c4 f7 d2 f3 g7 d6 f8 g8 f2 g3 h7 c3 b4 d1 e2 c2 h3 e8 c7 h6 e1 g4 c5 b5 b3 e6 c1 a3 "
+	                    "g5 a4 h8 b6 e7 g2 g1 b1 f1 e3 b2 h2 a7 h5 a2 d7 a6 h4 a5 b7 a1 pa b8";
+	Game h;
+	replay(h, Position{}, parse_moves(moves).moves);
+	int pass_at = -1;
+	for (int i = 0; i < h.size(); ++i)
+		if (h.moves()[i] == kPass) pass_at = i;
+	CHECK(pass_at > 0 && h.at(pass_at).must_pass());
+	AnalysisCache d;
+	searched(d, h.at(pass_at + 1), [](int) { return 7; }, 1);  // shallow: not a search to the end
+	line = backward_line(h, d, true, true);
+	CHECK(line[pass_at].known && line[pass_at].best == -7);  // the side to move changes with the pass
+	searched(d, h.at(pass_at - 1), [](int) { return 0; }, 1);
+	line = backward_line(h, d, true, true);
+	// two side changes (the move, then the pass): the same side as after the pass
+	CHECK(line[pass_at - 1].played_improved && line[pass_at - 1].played == 7);
+}
+
+static void test_missing()
+{
+	auto a = parse_missing_line(Fields("@line id=2 moves=d3e3 leaf=f4 value=-3 empties=58"));
+	CHECK(a && a->moves.size() == 2 && a->moves[0] == parse_square("d3") && a->leaf == parse_square("f4"));
+	CHECK(a && a->value == -3 && a->empties == 58);
+	auto b = parse_missing_line(Fields("@line id=2 moves=a1pab2 leaf=c3 value=4 empties=3 loss=2"));
+	CHECK(b && b->moves.size() == 3 && b->moves[1] == kPass);
+	CHECK(!parse_missing_line(Fields("@line id=2 moves=a1x leaf=c3")));
+	CHECK(!parse_missing_line(Fields("@end id=2 count=1 shown=1 stage=1 ms=0")));
+}
 
 int main()
 {
@@ -69,6 +146,8 @@ int main()
 		cache.get(p.play(parse_square("d3")));
 		CHECK(cache.size() == 2 && cache.peek(p) == nullptr);
 	}
+	test_backward();
+	test_missing();
 	if (failures) {
 		std::printf("%d failures\n", failures);
 		return 1;

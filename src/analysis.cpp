@@ -288,3 +288,98 @@ int echo_marker(std::string_view line)
 }
 
 }  // namespace ng
+
+#include "game.h"
+
+namespace ng {
+
+bool move_exact(const MoveEval &m, const Position &p)
+{
+	return m.searched && m.selectivity >= 100 && m.depth >= p.empties() - 1;
+}
+
+std::vector<LineEval> backward_line(const Game &g, const AnalysisCache &cache, bool use_book, bool backward)
+{
+	const int n = g.size();
+	std::vector<LineEval> line(n + 1);
+	for (int i = n; i >= 0; --i) {
+		const Position &p = g.at(i);
+		LineEval &e = line[i];
+		const LineEval *next = i < n ? &line[i + 1] : nullptr;
+		const bool turn = i < n && g.at(i + 1).side != p.side;  // the side changes to the next position
+		auto from_next = [&](int v) { return turn ? -v : v; };
+		if (p.game_over()) {
+			const int b = std::popcount(p.black), w = std::popcount(p.white), em = 64 - b - w;
+			const int diff = b > w ? b - w + em : b < w ? b - w - em : 0;
+			e.known = e.complete = e.exact = true;
+			e.best = p.side == kBlack ? diff : -diff;
+			continue;
+		}
+		if (p.must_pass()) {
+			if (next && next->known) {
+				e.known = e.played_known = true;
+				e.complete = next->complete;
+				e.best = e.played = from_next(next->best);
+				e.exact = e.played_exact = next->exact;
+			}
+			continue;
+		}
+		const PosInfo *info = cache.peek(p);
+		if (!info) continue;
+		int best = -999;
+		bool all = !info->moves.empty(), best_exact = false;
+		for (const MoveEval &m : info->moves) {
+			int v = 0;
+			bool known = shown_value(m, use_book, &v);
+			bool ex = known && !(use_book && m.in_book) && move_exact(m, p);
+			bool improved = false;
+			const bool played = i < n && m.sq == g.moves()[i];
+			if (played && backward && next && next->complete && !(use_book && m.in_book) && !ex) {
+				v = from_next(next->best);
+				ex = next->exact;
+				known = improved = true;
+			}
+			if (played) {
+				e.played_known = known;
+				e.played = v;
+				e.played_exact = ex;
+				e.played_improved = improved;
+			}
+			if (!known) {
+				all = false;
+				continue;
+			}
+			if (v > best) {
+				best = v;
+				best_exact = ex;
+			}
+		}
+		if (best != -999) {
+			e.known = true;
+			e.best = best;
+			e.exact = best_exact;
+		}
+		e.complete = all;
+	}
+	return line;
+}
+
+std::optional<MissingLine> parse_missing_line(const Fields &f)
+{
+	if (f.kind() != "line") return std::nullopt;
+	MissingLine ml;
+	const std::string_view mv = f.get("moves").value_or("");
+	if (mv.size() % 2) return std::nullopt;
+	for (size_t k = 0; k < mv.size(); k += 2) {
+		const int sq = parse_square(mv.substr(k, 2));
+		if (sq == kNoMove) return std::nullopt;
+		ml.moves.push_back(sq);
+	}
+	ml.leaf = parse_square(f.get("leaf").value_or(""));
+	ml.value = static_cast<int>(f.num("value").value_or(0));
+	ml.empties = static_cast<int>(f.num("empties").value_or(0));
+	if (ml.moves.empty()) return std::nullopt;
+	return ml;
+}
+
+}  // namespace ng
