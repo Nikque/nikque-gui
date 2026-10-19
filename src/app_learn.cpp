@@ -103,7 +103,7 @@ void App::learn_command(int id)
 	case cmd::LearnCheck: {
 		const std::wstring f = pick_file(hwnd_);
 		if (f.empty()) return;
-		const auto p = engine_path_or_say(f, true);  // the engine reads the name up to a space
+		const auto p = engine_path_or_say(f, FileUse::Read, 0);  // the engine reads the name up to a space
 		if (!p) return;
 		c = std::string(id == cmd::LearnAdd ? "book add " : id == cmd::LearnLearn ? "book learn " : "book check ") + *p;
 		break;
@@ -167,12 +167,12 @@ void App::learning_line(const std::string &line)
 {
 	// the progress ("Book deviate2...11/26 done: ...", "Book deviate 34 todo", one or more lines a round) is shown
 	// under the board; only the lines with a result ("...finished: ...", "Fixing book...0 done", "...1 positions
-	// added", errors) go to the log as well
+	// added", warnings and errors; not "...402270 (0 error found)", which is progress) go to the log as well
 	if (line.starts_with("Book ") || line.find("...") != std::string::npos) {
 		learn_progress_ = widen(line);
 		const bool result = line.find("finished") != std::string::npos || line.ends_with("done") ||
 		                    line.find("done (") != std::string::npos || line.find("added") != std::string::npos ||
-		                    line.find("rror") != std::string::npos;
+		                    line.starts_with("WARNING") || line.find("ERROR") != std::string::npos;
 		if (result) log(widen(line));
 		else invalidate();
 		return;
@@ -186,6 +186,7 @@ void App::learning_ended()
 	learning_ = false;
 	learn_end_id_ = 0;
 	log(lang::f("learn.ended", {widen(learn_cmd_), std::to_wstring(s / 60), std::to_wstring(s % 60)}));
+	finish_moves(0);
 	learn_progress_.clear();
 	// the book has changed: its analyses again
 	cache_.clear_book();
@@ -222,6 +223,7 @@ void App::stop_learning()
 	missing_ = MissingList{};
 	cache_.clear_book();
 	log(lang::t("learn.stopped"));
+	finish_moves(0);
 	start_engines();
 	update_menu();
 	position_changed();
@@ -245,7 +247,7 @@ void App::continue_learning()
 	if (MessageBoxW(hwnd_, lang::f("learn.ask_continue", {saved.path, local_time(saved.time), widen(last)}).c_str(),
 	                lang::t("app.title").c_str(), MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
 		return;
-	const auto path = engine_path_or_say(saved.path, true);  // the engine reads the name up to a space
+	const auto path = engine_path_or_say(saved.path, FileUse::Read, 0);  // the engine reads the name up to a space
 	if (!path) return;
 	send(0, "book load " + *path + "\n");
 	cache_.clear_book();

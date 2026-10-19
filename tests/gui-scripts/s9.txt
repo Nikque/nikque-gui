@@ -1,0 +1,13 @@
+# files with spaces and Japanese letters on D: (no short names there): through the temporary folder
+log s9 start
+engine nikque18
+wait 40
+tool solve "空白 の dir\p q.obf"
+tool base convert "空白 の dir\g a.txt" "空白 の dir\g a.sgf"
+tool base correct "空白 の dir\g c.txt" 14
+tool base complete "空白 の dir\g short.txt"
+moves d3e3f5e6
+edax book export "空白 の dir\book export.txt"
+edax book save "空白 の dir\book copy.dat"
+savelog s9-log.txt
+quit

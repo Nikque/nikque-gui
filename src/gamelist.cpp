@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <bit>
 #include <cstdio>
 #include <cstring>
 #include <numeric>
+#include <thread>
 
 #include "game.h"
 
@@ -429,15 +431,14 @@ unsigned symmetries_of(const Position &p) noexcept
 
 namespace {
 
-// plays the moves, choosing at each symmetric position a symmetry with `pick` (bits of the symmetries, the
-// position, the move as it is now) -> the symmetry to apply to the rest
+// plays the moves into `out`, choosing at each symmetric position a symmetry with `pick` (bits of the
+// symmetries, the position, the move as it is now) -> the symmetry to apply to the rest
 template <class Pick>
-std::vector<std::uint8_t> reoriented(const Position &start, std::span<const std::uint8_t> moves, Pick pick)
+void reoriented_into(const Position &start, std::span<const std::uint8_t> moves, Pick pick, std::vector<std::uint8_t> &out)
 {
 	std::array<std::uint8_t, 64> map;
 	for (int i = 0; i < 64; ++i) map[i] = static_cast<std::uint8_t>(i);
-	std::vector<std::uint8_t> out;
-	out.reserve(moves.size());
+	out.clear();
 	Position p = start;
 	for (const auto m : moves) {
 		// a move that turns nothing for the side to move comes after a forced pass (a symmetry keeping the
@@ -469,66 +470,135 @@ std::vector<std::uint8_t> reoriented(const Position &start, std::span<const std:
 		}
 		p.side ^= 1;
 	}
-	return out;
+}
+
+// the first form of a move among the symmetries keeping the position (f5 first)
+int normal_pick(unsigned sym, int t)
+{
+	int best = 0, key = orient_key(t);
+	for (int s = 1; s < 8; ++s)
+		if ((sym >> s) & 1) {
+			const int k = orient_key(symmetric_square(t, s));
+			if (k < key) {
+				key = k;
+				best = s;
+			}
+		}
+	return best;
+}
+
+// one of the symmetries in `sym`, drawn with r
+int drawn_pick(unsigned sym, std::uint64_t r)
+{
+	int k = static_cast<int>(r % static_cast<unsigned>(std::popcount(sym)));
+	for (int s = 0; s < 8; ++s)
+		if ((sym >> s) & 1 && k-- == 0) return s;
+	return 0;
+}
+
+// Work over many games is split into parts on threads: each part has at least 65,536 games, at most 8 threads
+// (the work of a moment; the engines keep the rest of the CPU).
+unsigned parts_for(size_t n)
+{
+	const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
+	return static_cast<unsigned>(std::clamp<size_t>(n / 65536, 1, std::min(8u, hw)));
+}
+
+template <class F>
+void in_parts(size_t n, unsigned k, F f)
+{
+	if (k <= 1) {
+		f(size_t{0}, n, 0u);
+		return;
+	}
+	std::vector<std::jthread> threads;
+	for (unsigned part = 0; part < k; ++part) threads.emplace_back(f, n * part / k, n * (part + 1) / k, part);
+}
+
+// The list made again from new moves of every game (`make(i, out)`), in parts; false when stopped (the list
+// stays as it was).
+template <class Make>
+bool rebuild(GameList &list, std::stop_token stop, Make make)
+{
+	const size_t n = list.size();
+	const unsigned k = parts_for(n);
+	struct Part {
+		std::vector<std::uint8_t> pool, lens;
+	};
+	std::vector<Part> parts(k);
+	std::atomic<bool> stopped{false};
+	in_parts(n, k, [&](size_t b, size_t e, unsigned part) {
+		Part &pt = parts[part];
+		pt.lens.reserve(e - b);
+		pt.pool.reserve((e - b) * 60);
+		std::vector<std::uint8_t> buf;
+		buf.reserve(64);
+		for (size_t i = b; i < e; ++i) {
+			if ((i & 4095) == 0 && (stop.stop_requested() || stopped)) {
+				stopped = true;
+				return;
+			}
+			make(i, buf);
+			pt.pool.insert(pt.pool.end(), buf.begin(), buf.end());
+			pt.lens.push_back(static_cast<std::uint8_t>(buf.size()));
+		}
+	});
+	if (stopped) return false;
+	size_t total = 0;
+	for (const auto &pt : parts) total += pt.pool.size();
+	GameList out;
+	out.reserve(n, total);
+	size_t i = 0;
+	for (const auto &pt : parts) {
+		size_t off = 0;
+		for (const auto len : pt.lens) {
+			out.add(list.start(i++), std::span<const std::uint8_t>(pt.pool.data() + off, len));
+			off += len;
+		}
+	}
+	list = std::move(out);
+	return true;
 }
 
 }  // namespace
 
 std::vector<std::uint8_t> normalized_moves(const Position &start, std::span<const std::uint8_t> moves)
 {
-	return reoriented(start, moves, [](unsigned sym, const Position &, int t) {
-		int best = 0, key = orient_key(t);
-		for (int s = 1; s < 8; ++s)
-			if ((sym >> s) & 1) {
-				const int k = orient_key(symmetric_square(t, s));
-				if (k < key) {
-					key = k;
-					best = s;
-				}
-			}
-		return best;
-	});
+	std::vector<std::uint8_t> out;
+	reoriented_into(start, moves, [](unsigned sym, const Position &, int t) { return normal_pick(sym, t); }, out);
+	return out;
 }
 
 std::vector<std::uint8_t> scattered_moves(const Position &start, std::span<const std::uint8_t> moves,
                                           std::mt19937_64 &rng, int sides)
 {
-	return reoriented(start, moves, [&](unsigned sym, const Position &p, int) {
-		if (!((sides >> p.side) & 1)) return 0;
-		int n = std::popcount(sym);
-		int k = static_cast<int>(rng() % static_cast<unsigned>(n));
-		for (int s = 0; s < 8; ++s)
-			if ((sym >> s) & 1 && k-- == 0) return s;
-		return 0;
-	});
+	std::vector<std::uint8_t> out;
+	reoriented_into(start, moves, [&](unsigned sym, const Position &p, int) {
+		return (sides >> p.side) & 1 ? drawn_pick(sym, rng()) : 0;
+	}, out);
+	return out;
 }
 
 void normalize_list(GameList &list, std::stop_token stop)
 {
-	GameList out;
-	out.reserve(list.size(), moves_in(list));
-	for (size_t i = 0; i < list.size(); ++i) {
-		if ((i & 4095) == 0 && stop.stop_requested()) return;  // the list stays as it was
-		out.add(list.start(i), normalized_moves(list.start(i), list.moves(i)));
-	}
-	list = std::move(out);
+	rebuild(list, stop, [&](size_t i, std::vector<std::uint8_t> &out) {
+		reoriented_into(list.start(i), list.moves(i), [](unsigned sym, const Position &, int t) { return normal_pick(sym, t); }, out);
+	});
 }
 
 void scatter_list(GameList &list, std::uint64_t seed, int sides, std::stop_token stop)
 {
-	std::mt19937_64 rng(seed);
-	GameList out;
-	out.reserve(list.size(), moves_in(list));
-	for (size_t i = 0; i < list.size(); ++i) {
-		if ((i & 4095) == 0 && stop.stop_requested()) return;
-		out.add(list.start(i), scattered_moves(list.start(i), list.moves(i), rng, sides));
-	}
-	list = std::move(out);
+	// every game draws from its own numbers (the seed and its place): the same list whatever the threads
+	rebuild(list, stop, [&](size_t i, std::vector<std::uint8_t> &out) {
+		std::uint64_t r = seed ^ (static_cast<std::uint64_t>(i) * 0xD1B54A32D192ED03ULL);
+		reoriented_into(list.start(i), list.moves(i), [&](unsigned sym, const Position &p, int) {
+			return (sides >> p.side) & 1 ? drawn_pick(sym, splitmix(r)) : 0;
+		}, out);
+	});
 }
 
 std::vector<ListHit> search_list(const GameList &list, const Position &target, bool symmetries, std::stop_token stop)
 {
-	std::vector<ListHit> hits;
 	const int td = std::popcount(target.black | target.white);
 	Position ts[8];
 	const int ns = symmetries ? 8 : 1;
@@ -538,19 +608,25 @@ std::vector<ListHit> search_list(const GameList &list, const Position &target, b
 			if (q == ts[s]) return s;
 		return -1;
 	};
-	for (size_t i = 0; i < list.size(); ++i) {
-		if ((i & 4095) == 0 && stop.stop_requested()) break;
-		const Position &st = list.start(i);
-		// a move adds one disc: the position can only be after this number of moves
-		const int k = td - std::popcount(st.black | st.white);
-		const auto mv = list.moves(i);
-		if (k < 0 || k > static_cast<int>(mv.size())) continue;
-		Position p = st;
-		for (int j = 0; j < k; ++j) play_known(p, mv[j]);
-		int m = match(p);
-		if (m < 0 && p.must_pass()) m = match(p.play(kPass));
-		if (m >= 0) hits.push_back({static_cast<std::uint32_t>(i), static_cast<std::uint8_t>(k), static_cast<std::uint8_t>(m)});
-	}
+	const unsigned k = parts_for(list.size());
+	std::vector<std::vector<ListHit>> found(k);
+	in_parts(list.size(), k, [&](size_t b, size_t e, unsigned part) {
+		for (size_t i = b; i < e; ++i) {
+			if ((i & 4095) == 0 && stop.stop_requested()) break;
+			const Position &st = list.start(i);
+			// a move adds one disc: the position can only be after this number of moves
+			const int kk = td - std::popcount(st.black | st.white);
+			const auto mv = list.moves(i);
+			if (kk < 0 || kk > static_cast<int>(mv.size())) continue;
+			Position p = st;
+			for (int j = 0; j < kk; ++j) play_known(p, mv[j]);
+			int m = match(p);
+			if (m < 0 && p.must_pass()) m = match(p.play(kPass));
+			if (m >= 0) found[part].push_back({static_cast<std::uint32_t>(i), static_cast<std::uint8_t>(kk), static_cast<std::uint8_t>(m)});
+		}
+	});
+	std::vector<ListHit> hits;
+	for (auto &f : found) hits.insert(hits.end(), f.begin(), f.end());
 	return hits;
 }
 

@@ -10,6 +10,7 @@
 #include "app.h"
 #include "form.h"
 #include "lang.h"
+#include "paths.h"
 
 namespace ng {
 
@@ -19,41 +20,6 @@ bool file_exists(const std::wstring &p)
 {
 	const DWORD a = GetFileAttributesW(p.c_str());
 	return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
-}
-
-std::optional<std::string> acp(const std::wstring &w)
-{
-	BOOL lost = FALSE;
-	const int n = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, w.c_str(), -1, nullptr, 0, nullptr, &lost);
-	if (n <= 0 || lost) return std::nullopt;
-	std::string s(static_cast<size_t>(n - 1), '\0');
-	WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, w.c_str(), -1, s.data(), n, nullptr, &lost);
-	if (lost) return std::nullopt;
-	return s;
-}
-
-// A name the engine can open: in the code page of the system and without a space (the engine reads a name up
-// to a space). A name with spaces or other letters becomes its short (8.3) form when the drive keeps those;
-// for a file still to be made, the folder's short form and the name.
-std::optional<std::string> engine_path(const std::wstring &path, bool exists)
-{
-	auto plain = [](const std::wstring &w) -> std::optional<std::string> {
-		if (w.find(L' ') != std::wstring::npos) return std::nullopt;
-		return acp(w);
-	};
-	if (auto s = plain(path)) return s;
-	wchar_t buf[MAX_PATH * 4];
-	const DWORD size = static_cast<DWORD>(std::size(buf));
-	if (exists) {
-		const DWORD n = GetShortPathNameW(path.c_str(), buf, size);
-		if (n == 0 || n >= size) return std::nullopt;
-		return plain(buf);
-	}
-	const size_t slash = path.find_last_of(L"\\/");
-	if (slash == std::wstring::npos) return std::nullopt;
-	const DWORD n = GetShortPathNameW(path.substr(0, slash).c_str(), buf, size);
-	if (n == 0 || n >= size) return std::nullopt;
-	return plain(std::wstring(buf) + L"\\" + path.substr(slash + 1));
 }
 
 // a filter of the file dialogs: the words, the patterns, then all files
@@ -130,11 +96,44 @@ std::wstring App::pick_save(const wchar_t *patterns_or_filter, const wchar_t *ex
 	return GetSaveFileNameW(&of) ? std::wstring(file) : std::wstring();
 }
 
-std::optional<std::string> App::engine_path_or_say(const std::wstring &path, bool exists)
+std::optional<std::string> App::engine_path_or_say(const std::wstring &path, FileUse use, int role)
 {
-	auto p = engine_path(path, exists);
-	if (!p) MessageBoxW(hwnd_, lang::f("err.engine_path", {path}).c_str(), lang::t("app.title").c_str(), MB_ICONWARNING);
-	return p;
+	if (auto p = engine_path(path, use != FileUse::Write)) return p;
+	// a drive without short names: the file goes through the temporary folder (the extension is kept: it
+	// tells the engine the form of the file)
+	const size_t slash = path.find_last_of(L"\\/"), dot = path.find_last_of(L'.');
+	const std::wstring ext = dot != std::wstring::npos && (slash == std::wstring::npos || dot > slash) ? path.substr(dot) : L"";
+	const std::wstring tmp = temp_dir_ + L"\\f" + std::to_wstring(++temp_files_) + ext;
+	const auto tp = engine_path(tmp, false);
+	if (!tp) {
+		MessageBoxW(hwnd_, lang::f("err.engine_path", {path}).c_str(), lang::t("app.title").c_str(), MB_ICONWARNING);
+		return std::nullopt;
+	}
+	if (use != FileUse::Write) {
+		if (!CopyFileW(path.c_str(), tmp.c_str(), FALSE)) {
+			MessageBoxW(hwnd_, lang::f("err.engine_path", {path}).c_str(), lang::t("app.title").c_str(), MB_ICONWARNING);
+			return std::nullopt;
+		}
+		log(lang::f("log.file_via_temp", {path}));
+	}
+	if (use != FileUse::Read) moves_after_job_.push_back({tmp, path, role});  // written there, then moved
+	return tp;
+}
+
+// after a job of the engine: the files it wrote in the temporary folder go to their places
+void App::finish_moves(int role)
+{
+	for (auto it = moves_after_job_.begin(); it != moves_after_job_.end();) {
+		if (it->role != role) {
+			++it;
+			continue;
+		}
+		if (GetFileAttributesW(it->from.c_str()) != INVALID_FILE_ATTRIBUTES) {
+			const bool ok = MoveFileExW(it->from.c_str(), it->to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED);
+			log(lang::f(ok ? "log.file_moved" : "log.file_not_moved", {it->to, it->from}));
+		}
+		it = moves_after_job_.erase(it);
+	}
 }
 
 // the lines of the log as a text file (UTF-8)
@@ -212,6 +211,7 @@ void App::tool_ended(bool stopped)
 	log(lang::f(stopped ? "tool.stopped" : "tool.ended", {tool_label_, std::to_wstring(s / 60), std::to_wstring(s % 60)}));
 	eng_[2].proc.close(stopped ? 0 : 2000);
 	eng_[2].alive = false;
+	finish_moves(2);
 	DeleteFileW((temp_dir_ + L"\\nobook-tool.dat").c_str());
 	update_menu();
 	invalidate();
@@ -236,7 +236,7 @@ void App::tool_command(int id)
 	case cmd::ToolSolve: {
 		const std::wstring f = pick_open(filter("filter.obf", L"*.obf").c_str(), t("menu.tool.solve"));
 		if (f.empty()) return;
-		const auto p = engine_path_or_say(f, true);
+		const auto p = engine_path_or_say(f, FileUse::Read, 2);
 		if (!p) return;
 		c = "solve " + *p;
 		label = L"solve " + file_name(f);
@@ -296,10 +296,10 @@ void App::base_command(int id)
 {
 	using lang::t;
 	const std::wstring games = filter("filter.games", kGames);
-	auto in_file = [&](const std::wstring &title) -> std::optional<std::pair<std::wstring, std::string>> {
+	auto in_file = [&](const std::wstring &title, bool rewrite = false) -> std::optional<std::pair<std::wstring, std::string>> {
 		const std::wstring f = pick_open(games.c_str(), title);
 		if (f.empty()) return std::nullopt;
-		auto p = engine_path_or_say(f, true);
+		auto p = engine_path_or_say(f, rewrite ? FileUse::Rewrite : FileUse::Read, 2);
 		if (!p) return std::nullopt;
 		return std::pair{f, *p};
 	};
@@ -317,7 +317,7 @@ void App::base_command(int id)
 			MessageBoxW(hwnd_, lang::f("base.cannot_replace", {f}).c_str(), t("app.title").c_str(), MB_ICONWARNING);
 			return std::nullopt;
 		}
-		return engine_path_or_say(f, false);
+		return engine_path_or_say(f, FileUse::Write, 2);
 	};
 	auto empties = [&](const std::wstring &title) {
 		return ask_number(hwnd_, title, t("base.empties"), ini_.get_int("tools", "base_empties", 24, 0, 60), 0, 60, t("base.empties.note"));
@@ -351,7 +351,7 @@ void App::base_command(int id)
 	case cmd::BaseCheck:
 	case cmd::BaseCorrect: {
 		const std::wstring title = t(id == cmd::BaseCheck ? "menu.base.check" : "menu.base.correct");
-		auto in = in_file(title);
+		auto in = in_file(title, id == cmd::BaseCorrect);
 		if (!in) return;
 		const auto n = empties(title);
 		if (!n) return;
@@ -362,7 +362,7 @@ void App::base_command(int id)
 		break;
 	}
 	case cmd::BaseComplete: {
-		auto in = in_file(t("menu.base.complete"));
+		auto in = in_file(t("menu.base.complete"), true);
 		if (!in || !rewrites(in->first)) return;
 		c = "base complete " + in->second;
 		label = widen(c);
@@ -404,7 +404,7 @@ bool App::book_job(int id, std::string *command, std::wstring *warning)
 	case cmd::LearnMerge: {
 		const std::wstring f = pick_open(books.c_str(), t("menu.learn.merge"));
 		if (f.empty()) return false;
-		auto p = engine_path_or_say(f, true);
+		auto p = engine_path_or_say(f, FileUse::Read, 0);
 		if (!p) return false;
 		*command = "book merge " + *p;
 		*warning = t("warn.merge");
@@ -430,7 +430,7 @@ bool App::book_job(int id, std::string *command, std::wstring *warning)
 			MessageBoxW(hwnd_, lang::f("base.cannot_replace", {f}).c_str(), t("app.title").c_str(), MB_ICONWARNING);
 			return false;
 		}
-		auto p = engine_path_or_say(f, false);
+		auto p = engine_path_or_say(f, FileUse::Write, 0);
 		if (!p) return false;
 		*command = std::string(ex ? "book export " : "book extract ") + *p;
 		return true;
@@ -438,7 +438,7 @@ bool App::book_job(int id, std::string *command, std::wstring *warning)
 	case cmd::LearnImport: {
 		const std::wstring f = pick_open(texts.c_str(), t("menu.learn.import"));
 		if (f.empty()) return false;
-		auto p = engine_path_or_say(f, true);
+		auto p = engine_path_or_say(f, FileUse::Read, 0);
 		if (!p) return false;
 		*command = "book import " + *p;
 		*warning = t("warn.import") + L"\n" + t("warn.book_replaced");
@@ -469,7 +469,7 @@ bool App::book_job(int id, std::string *command, std::wstring *warning)
 			*command = "book save";
 			return true;
 		}
-		auto p = engine_path_or_say(f, false);
+		auto p = engine_path_or_say(f, FileUse::Write, 0);
 		if (!p) return false;
 		*command = "book save " + *p;
 		return true;

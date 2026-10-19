@@ -546,3 +546,7 @@ action.edit_board=开始或确定摆放局面
 menu.view.save_log=导出日志…
 status.log_saved=已导出日志：{0}
 task.took={0}（{1} 秒）
+log.file_via_temp=引擎无法接受此位置，因此复制到临时文件夹后传入：{0}
+log.file_moved=已把写在临时文件夹中的文件放到目标位置：{0}
+log.file_not_moved=无法把临时文件夹中的文件放到目标位置：{0}（保留：{1}）
+script.bad_file=无法把文件名传给引擎（"…" 未闭合，或无法传入的位置）

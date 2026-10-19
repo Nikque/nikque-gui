@@ -546,3 +546,7 @@ action.edit_board=Start or finish setting up a position
 menu.view.save_log=Save the log…
 status.log_saved=Log saved: {0}
 task.took={0} ({1} s)
+log.file_via_temp=The engine cannot take this path, so a copy in the temporary folder was given: {0}
+log.file_moved=The file written in the temporary folder was put in its place: {0}
+log.file_not_moved=Could not put the file of the temporary folder in its place: {0} (left: {1})
+script.bad_file=A file name cannot be given to the engine (a "..." not closed, or a path that cannot be given)

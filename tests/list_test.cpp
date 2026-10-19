@@ -304,6 +304,41 @@ static void test_find_line(int argc, char **argv)
 	            found, nodes, worst, worst_ms, ms_since(t0));
 }
 
+// a list large enough to be split into parts on threads: the same results as one game at a time
+static void test_parts()
+{
+	std::mt19937_64 rng(21);
+	GameList l;
+	for (int i = 0; i < 140000; ++i) l.add(Position{}, random_game(rng, 40));
+	GameList n = l;
+	normalize_list(n);
+	CHECK(n.size() == l.size());
+	bool same = true;
+	for (size_t i = 0; i < l.size(); i += 97) {
+		const auto want = normalized_moves(l.start(i), l.moves(i));
+		const auto got = n.moves(i);
+		same &= want.size() == got.size() && std::equal(want.begin(), want.end(), got.begin());
+	}
+	CHECK(same);
+	GameList a = l, b = l;
+	scatter_list(a, 5, 3);
+	scatter_list(b, 5, 3);
+	bool equal = a.size() == b.size(), legal = true;
+	for (size_t i = 0; i < a.size(); i += 53) {
+		equal &= list_line(a.start(i), a.moves(i)) == list_line(b.start(i), b.moves(i));
+		legal &= legal_game(a.start(i), a.moves(i)) && a.moves(i).size() == l.moves(i).size();
+	}
+	CHECK(equal && legal);
+	// the search: every game where the position after 6 moves of game 77 appears, against a plain count
+	const Position target = play_all(l.start(77), l.moves(77), 6);
+	const auto hits = search_list(l, target, false);
+	size_t plain = 0;
+	for (size_t i = 0; i < l.size(); ++i)
+		if (l.moves(i).size() >= 6 && play_all(l.start(i), l.moves(i), 6) == target) ++plain;
+	CHECK(hits.size() == plain && plain >= 1);
+	for (size_t k = 1; k < hits.size(); ++k) CHECK(hits[k - 1].game < hits[k].game);  // in the order of the list
+}
+
 // timings on a large list of random games
 static void timings()
 {
@@ -362,6 +397,7 @@ int main(int argc, char **argv)
 	test_orientations();
 	test_search();
 	test_find_line(argc, argv);
+	test_parts();
 	timings();
 	if (failures) {
 		std::printf("%d failures\n", failures);

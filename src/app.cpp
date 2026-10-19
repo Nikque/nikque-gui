@@ -9,6 +9,7 @@
 #include <bit>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
 
 #include "lang.h"
 #include "measure.h"
@@ -283,11 +284,13 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		stop_engines();
 		DestroyWindow(hwnd);
 		return 0;
-	case WM_DESTROY:
-		DeleteFileW((temp_dir_ + L"\\nobook.dat").c_str());
-		RemoveDirectoryW(temp_dir_.c_str());
+	case WM_DESTROY: {
+		// the temporary folder of this run (empty books, files given to the engines)
+		std::error_code ec;
+		std::filesystem::remove_all(temp_dir_, ec);
 		PostQuitMessage(0);
 		return 0;
+	}
 	}
 	return DefWindowProcW(hwnd, msg, wp, lp);
 }

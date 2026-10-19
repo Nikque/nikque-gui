@@ -534,7 +534,17 @@ public:
 	bool book_job(int id, std::string *command, std::wstring *warning);  // the command of a book menu item (false: nothing to do)
 	std::wstring pick_open(const wchar_t *filter, const std::wstring &title = {});
 	std::wstring pick_save(const wchar_t *filter, const wchar_t *ext, const std::wstring &name, const std::wstring &title = {});
-	std::optional<std::string> engine_path_or_say(const std::wstring &path, bool exists);
+	// a name for the engine (role 0 main, 2 tools); a name the engine cannot take goes through the temporary
+	// folder: a file read is copied there, a file written is moved to its place when the job ends
+	enum class FileUse { Read, Write, Rewrite };
+	std::optional<std::string> engine_path_or_say(const std::wstring &path, FileUse use, int role);
+	void finish_moves(int role);
+	struct PendingMove {
+		std::wstring from, to;
+		int role;
+	};
+	std::vector<PendingMove> moves_after_job_;
+	int temp_files_ = 0;
 	void open_log();
 	bool save_log(const std::wstring &path) const;
 

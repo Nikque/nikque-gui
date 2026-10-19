@@ -546,3 +546,7 @@ action.edit_board=開始或確定擺放局面
 menu.view.save_log=匯出記錄…
 status.log_saved=已匯出記錄：{0}
 task.took={0}（{1} 秒）
+log.file_via_temp=引擎無法接受此位置，因此複製到暫存資料夾後傳入：{0}
+log.file_moved=已把寫在暫存資料夾中的檔案放到目標位置：{0}
+log.file_not_moved=無法把暫存資料夾中的檔案放到目標位置：{0}（保留：{1}）
+script.bad_file=無法把檔名傳給引擎（"…" 未閉合，或無法傳入的位置）

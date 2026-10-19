@@ -546,3 +546,7 @@ action.edit_board=盤面配置を始める・決める
 menu.view.save_log=ログを書き出す…
 status.log_saved=ログを書き出しました：{0}
 task.took={0}（{1} 秒）
+log.file_via_temp=エンジンに渡せない場所なので、一時フォルダに写して渡しました：{0}
+log.file_moved=一時フォルダに書かれたファイルを置きました：{0}
+log.file_not_moved=一時フォルダのファイルを置けませんでした：{0}（残り：{1}）
+script.bad_file=ファイルの名前をエンジンに渡せません（"…" の閉じ忘れか、渡せない場所）

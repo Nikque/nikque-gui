@@ -10,6 +10,7 @@
 #include "app.h"
 #include "form.h"
 #include "lang.h"
+#include "paths.h"
 
 namespace ng {
 
@@ -436,8 +437,11 @@ bool App::ask_book_lines(int loss, int depth, int n, bool add)
 	if (!eng_[0].alive || learning_) return false;
 	const std::wstring file = temp_dir_ + L"\\book-lines.txt";
 	DeleteFileW(file.c_str());
-	const auto path = engine_path_or_say(file, false);
-	if (!path) return false;
+	const auto path = engine_path(file, false);  // the temporary folder
+	if (!path) {
+		MessageBoxW(hwnd_, lang::f("err.engine_path", {file}).c_str(), lang::t("app.title").c_str(), MB_ICONWARNING);
+		return false;
+	}
 	std::string moves;
 	for (int i = 0; i < game_.cursor(); ++i) moves += square_name(game_.moves()[i]);
 	std::string out = "setboard " + game_.start().to_board_string() + "\n";

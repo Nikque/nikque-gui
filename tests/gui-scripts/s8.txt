@@ -1,0 +1,31 @@
+# the commands not run before (nikque.18 type, on the copy of the test book), and run inside a script
+log s8 start
+engine nikque18
+wait 40
+run s8b.txt
+# base on the tool engine
+tool base check D:\nikque-gui\_test\run-b1\games.txt 14
+tool base problem D:\nikque-gui\_test\run-b1\games.txt 20 D:\nikque-gui\_test\run-b1\s8-problem.obf
+tool base tofen D:\nikque-gui\_test\run-b1\games.txt 20 D:\nikque-gui\_test\run-b1\s8-fen.txt
+tool base correct D:\nikque-gui\_test\run-b1\games-c.txt 14
+tool base complete D:\nikque-gui\_test\run-b1\games-short.txt
+# book commands on the main engine
+edax book problem 24 3
+edax book extract D:\nikque-gui\_test\run-b1\s8-extract.txt
+edax book correct
+moves d3e3f5e6f7c2f2c5
+edax book leaf recalculate 1 1
+edax book leaf recalculate4 1 1
+new
+edax book merge D:\nikque-gui\_test\books\book3.dat
+edax book info
+edax book prune
+edax book info
+edax book depth 30
+edax book info
+edax book import D:\nikque-gui\_test\run-b1\s3-export.txt
+edax book info
+edax book new 10 30
+edax book info
+savelog s8-log.txt
+quit

@@ -399,15 +399,36 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		update_menu();
 		return true;
 	}
+	// file names in "..." (also with spaces) are given to the engine as it can open them: a file there is read
+	// (rewritten by base correct and complete), a file not there is written
+	auto with_files = [&](std::string cmd, int role, std::string *out) {
+		const bool rewrites = cmd.starts_with("base correct") || cmd.starts_with("base complete");
+		for (size_t a; (a = cmd.find('"')) != std::string::npos;) {
+			const size_t b = cmd.find('"', a + 1);
+			if (b == std::string::npos) return false;
+			const std::wstring f = path(cmd.substr(a + 1, b - a - 1));
+			const bool there = GetFileAttributesW(f.c_str()) != INVALID_FILE_ATTRIBUTES;
+			const auto p = engine_path_or_say(f, there ? (rewrites ? FileUse::Rewrite : FileUse::Read) : FileUse::Write, role);
+			if (!p) return false;
+			cmd = cmd.substr(0, a) + *p + cmd.substr(b + 1);
+		}
+		*out = cmd;
+		return true;
+	};
 	if (c == "edax") {
 		if (!eng_[0].alive) return bad("learn.no_engine");
 		if (learning_) return bad("learn.busy");
-		start_learning(rest_after(line, 1));
+		std::string cmd;
+		if (!with_files(rest_after(line, 1), 0, &cmd)) return bad("script.bad_file");
+		start_learning(cmd);
 		wait(ScriptWait::Learn);
 		return true;
 	}
 	if (c == "tool") {
-		if (!start_tool(rest_after(line, 1), widen(rest_after(line, 1)))) return bad("tool.busy");
+		if (tool_busy_) return bad("tool.busy");
+		std::string cmd;
+		if (!with_files(rest_after(line, 1), 2, &cmd)) return bad("script.bad_file");
+		if (!start_tool(cmd, widen(rest_after(line, 1)))) return bad("tool.busy");
 		wait(ScriptWait::Tool);
 		return true;
 	}
