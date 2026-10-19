@@ -60,6 +60,9 @@ struct PosInfo {
 	bool levels_done = false;
 	std::vector<std::pair<int, long long>> levels;
 	long long levels_positions = -1;
+	// the lines of best moves (book bestlines, loss 0): lines, end positions, and those not solved
+	bool best_done = false, best_error = false;
+	long long best_lines = -1, best_ends = -1, best_incomplete = -1, best_incomplete_ends = -1;
 
 	MoveEval *find(int sq);
 	const MoveEval *find(int sq) const;

@@ -560,6 +560,7 @@ void App::on_command(int id)
 		break;
 	}
 	case cmd::ExportMissing: export_missing(); break;
+	case cmd::ExportBest: export_best(); break;
 	case cmd::FixRecord:
 		fixed_on_ = !fixed_on_;
 		if (fixed_on_) {

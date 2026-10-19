@@ -342,6 +342,16 @@ void draw_book_tab(App &app, const Theme &th)
 		s += L"（" + lang::t("book.total") + L" " + group(info->levels_positions) + L"）";
 		line(s, th.text);
 	}
+	// the lines of best moves (both sides) and their ends not solved yet
+	if (!info->best_done) {
+		line(lang::t("best.head") + L"：" + lang::t("book.counting"), th.text_dim);
+	} else if (info->best_error) {
+		line(lang::t("best.head") + L"：" + lang::t("best.too_many"), th.text_dim);
+	} else {
+		line(lang::f("best.count", {group(info->best_lines), group(info->best_ends), group(info->best_incomplete),
+		                            group(info->best_incomplete_ends)}),
+		     th.text);
+	}
 	y += rh * 0.3f;
 
 	// the leaves missing for the next stage of a move

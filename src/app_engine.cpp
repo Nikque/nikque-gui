@@ -164,7 +164,7 @@ void App::start_engines()
 		log(lang::f("log.engine_started", {lang::t(role ? "engine.search" : "engine.main"), exe,
 		                                   role == 0 ? book : lang::t("log.no_book")}));
 	}
-	if (!eng_[0].alive) book_id_ = count_id_ = levels_id_ = 0;
+	if (!eng_[0].alive) book_id_ = count_id_ = levels_id_ = best_id_ = 0;
 	if (!eng_[1].alive) hint_busy_ = false;
 }
 
@@ -176,7 +176,7 @@ void App::stop_engines()
 		s.board.reset();
 	}
 	requests_.clear();
-	book_id_ = count_id_ = levels_id_ = 0;
+	book_id_ = count_id_ = levels_id_ = best_id_ = 0;
 	graph_id_ = missing_id_ = 0;
 	missing_ = MissingList{};
 	learning_ = false;
@@ -256,6 +256,7 @@ void App::request_analysis()
 		cancel(book_id_, book_on && same(book_id_) && !params_changed);
 		cancel(count_id_, book_on && count_ && same(count_id_));
 		cancel(levels_id_, book_on && tab_ == Tab::Book && same(levels_id_));
+		cancel(best_id_, book_on && tab_ == Tab::Book && same(best_id_));
 		if (info) {
 			auto board = [&] {
 				if (eng_[0].board != key) {
@@ -281,6 +282,12 @@ void App::request_analysis()
 				levels_id_ = next_id_++;
 				out += "book levels id=" + std::to_string(levels_id_) + "\n";
 				requests_[levels_id_] = {Request::Levels, key, 0};
+			}
+			if (tab_ == Tab::Book && !info->best_done && !best_id_) {
+				board();
+				best_id_ = next_id_++;
+				out += "book bestlines id=" + std::to_string(best_id_) + "\n";  // loss 0: the best moves only
+				requests_[best_id_] = {Request::Best, key, 0};
 			}
 			request_missing(out, p);
 		}
@@ -362,7 +369,7 @@ void App::on_engine(WPARAM tag, bool ended)
 	if (static_cast<unsigned>(tag >> 1) != s.generation) return;  // from a process closed before
 	std::vector<std::string> lines;
 	s.proc.take_lines(lines);
-	bool changed = false;
+	bool changed = false, ask_missing = false;
 	const PosKey here = key_of(game_.now());
 
 	for (const std::string &line : lines) {
@@ -402,6 +409,21 @@ void App::on_engine(WPARAM tag, bool ended)
 				changed = true;
 				continue;
 			}
+			if (req.kind == Request::BestExport) {
+				if (f.kind() == "end") {
+					if (f.num("error").value_or(0))
+						log(lang::f("best.export_failed", {best_file_}));
+					else
+						log(lang::f("best.written", {std::to_wstring(f.num("written").value_or(0)), best_file_,
+						                             std::to_wstring(f.num("lines").value_or(0)),
+						                             std::to_wstring(f.num("incomplete_ends").value_or(0))}));
+					requests_.erase(it);
+				} else if (f.kind() == "cancel") {
+					log(lang::f("best.export_failed", {best_file_}));
+					requests_.erase(it);
+				}
+				continue;
+			}
 			PosInfo &info = cache_.get(Position{req.pos.black, req.pos.white, req.pos.side});
 			if (f.kind() == "begin") {
 				info.book_begun = true;
@@ -416,6 +438,7 @@ void App::on_engine(WPARAM tag, bool ended)
 				if (req.kind == Request::Book) {
 					info.book_done = done;
 					if (book_id_ == id) book_id_ = 0;
+					if (done && req.pos == here) ask_missing = true;  // the best book move is known now
 				} else if (req.kind == Request::Graph) {
 					info.book_done = done;
 					changed = true;  // a point of the graph
@@ -428,6 +451,14 @@ void App::on_engine(WPARAM tag, bool ended)
 					if (done) info.levels_positions = f.num("positions").value_or(-1);
 					else info.levels.clear();
 					if (levels_id_ == id) levels_id_ = 0;
+				} else if (req.kind == Request::Best) {
+					info.best_done = done;
+					info.best_error = done && f.num("error").value_or(0);
+					info.best_lines = f.num("lines").value_or(-1);
+					info.best_ends = f.num("ends").value_or(-1);
+					info.best_incomplete = f.num("incomplete").value_or(-1);
+					info.best_incomplete_ends = f.num("incomplete_ends").value_or(-1);
+					if (best_id_ == id) best_id_ = 0;
 				}
 				requests_.erase(it);
 			}
@@ -504,12 +535,17 @@ void App::on_engine(WPARAM tag, bool ended)
 		s.alive = false;
 		log(lang::f("log.engine_ended", {lang::t(role ? "engine.search" : "engine.main")}));
 		if (role == 0) {
-			book_id_ = count_id_ = levels_id_ = 0;
+			book_id_ = count_id_ = levels_id_ = best_id_ = 0;
 			learning_ = false;
 			queue_running_ = false;
 		}
 		else hint_busy_ = hint_accept_ = false;
 		changed = true;
+	}
+	if (ask_missing && s.alive && !learning_) {
+		std::string out;
+		request_missing(out, game_.now());
+		send(0, out);
 	}
 	if (role == 0) pump_graph();
 	else if (!hint_busy_) pump_search();
@@ -548,7 +584,7 @@ void App::switch_book(const std::wstring &path)
 	eng_[0].alive = false;
 	eng_[0].board.reset();
 	for (auto it = requests_.begin(); it != requests_.end();) it = it->second.engine == 0 ? requests_.erase(it) : std::next(it);
-	book_id_ = count_id_ = levels_id_ = graph_id_ = missing_id_ = 0;
+	book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = 0;
 	missing_ = MissingList{};
 	cache_.clear_book();
 	start_engines();
@@ -594,7 +630,8 @@ void App::export_missing()
 
 namespace ng {
 
-// the move whose missing leaves are listed: the move chosen, else the best move
+// the move whose missing leaves are listed: the move chosen, else the best move of the book (only book moves
+// have missing leaves; the search values would change the move again and again while they come)
 int App::missing_target() const
 {
 	const Position &p = game_.now();
@@ -603,9 +640,8 @@ int App::missing_target() const
 	if (!info) return kNoMove;
 	int best = -999, sq = kNoMove;
 	for (const auto &m : info->moves) {
-		int v;
-		if (m.sq != kPass && shown_value(m, use_book_, &v) && v > best) {
-			best = v;
+		if (m.sq != kPass && m.in_book && m.book_value > best) {
+			best = m.book_value;
 			sq = m.sq;
 		}
 	}
@@ -667,7 +703,7 @@ void App::watch_engines()
 			s.board.reset();
 			if (role == 0) {
 				for (auto it = requests_.begin(); it != requests_.end();) it = it->second.engine == 0 ? requests_.erase(it) : std::next(it);
-				book_id_ = count_id_ = levels_id_ = graph_id_ = missing_id_ = 0;
+				book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = 0;
 				missing_ = MissingList{};
 			} else {
 				hint_busy_ = hint_accept_ = hint_background_ = false;

@@ -130,7 +130,7 @@ void App::start_learning_at(const std::string &command, const Position &start, c
 {
 	std::string out;
 	// the analyses of the main engine stop here (the engine also stops them before a command changing the book)
-	for (int *id : {&book_id_, &count_id_, &levels_id_, &graph_id_, &missing_id_})
+	for (int *id : {&book_id_, &count_id_, &levels_id_, &best_id_, &graph_id_, &missing_id_})
 		if (*id) {
 			out += "stop id=" + std::to_string(*id) + "\n";
 			requests_.erase(*id);
@@ -209,7 +209,7 @@ void App::stop_learning()
 	learn_end_id_ = 0;
 	learn_progress_.clear();
 	for (auto it = requests_.begin(); it != requests_.end();) it = it->second.engine == 0 ? requests_.erase(it) : std::next(it);
-	book_id_ = count_id_ = levels_id_ = graph_id_ = missing_id_ = 0;
+	book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = 0;
 	missing_ = MissingList{};
 	cache_.clear_book();
 	log(lang::t("learn.stopped"));

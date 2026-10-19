@@ -1,5 +1,9 @@
 // The windows of settings: the range of the analyses (stages, umigame numbers, level, threads) and the
 // settings of book learning, sent to the main engine as commands.
+#include <windows.h>
+
+#include <commdlg.h>
+
 #include <cwchar>
 
 #include "app.h"
@@ -195,6 +199,75 @@ void App::open_learn_settings()
 	// the engine takes them at once (between two commands; a learning in progress keeps its own)
 	if (!learning_) send(0, learn_options_commands());
 	log(t("learnopt.sent"));
+}
+
+// The lines of best moves from the position shown (book bestlines): the conditions, then the file. The engine
+// writes the file itself (one line a end position, the moves from the start of the game).
+void App::export_best()
+{
+	using lang::t;
+	if (!eng_[0].alive || learning_) return;
+	std::vector<FormField> f(4);
+	f[0].kind = FormField::Number;
+	f[0].label = t("best.loss");
+	f[0].text = std::to_wstring(ini_.get_int("bestlines", "loss", 0, 0, 129));
+	f[0].lo = 0;
+	f[0].hi = 129;
+	f[0].note = t("best.loss.note");
+	f[1].kind = FormField::Number;
+	f[1].label = t("best.depth");
+	f[1].text = std::to_wstring(ini_.get_int("bestlines", "depth", 60, 1, 60));
+	f[1].lo = 1;
+	f[1].hi = 60;
+	f[1].note = t("best.depth.note");
+	f[2].kind = FormField::Check;
+	f[2].label = t("best.follow");
+	f[2].checked = ini_.get("bestlines", "solved") == "follow";
+	f[2].note = t("best.follow.note");
+	f[3].kind = FormField::Choice;
+	f[3].label = t("best.which");
+	f[3].choices = {t("best.which.all"), t("best.which.incomplete")};
+	f[3].choice = ini_.get("bestlines", "which") == "incomplete" ? 1 : 0;
+	if (!run_form(hwnd_, t("best.window"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return;
+	const int loss = std::stoi(f[0].text), depth = std::stoi(f[1].text);
+	const std::string solved = f[2].checked ? "follow" : "stop", which = f[3].choice ? "incomplete" : "all";
+	ini_.set("bestlines", "loss", std::to_string(loss));
+	ini_.set("bestlines", "depth", std::to_string(depth));
+	ini_.set("bestlines", "solved", solved);
+	ini_.set("bestlines", "which", which);
+	save_config();
+
+	wchar_t file[MAX_PATH] = L"bestlines.txt";
+	OPENFILENAMEW of{sizeof of};
+	of.hwndOwner = hwnd_;
+	of.lpstrFilter = L"*.txt\0*.txt\0*.*\0*.*\0";
+	of.lpstrFile = file;
+	of.nMaxFile = MAX_PATH;
+	of.lpstrDefExt = L"txt";
+	of.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+	if (!GetSaveFileNameW(&of)) return;
+	// the engine opens the file with the code page of the system
+	BOOL lost = FALSE;
+	const int n = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, file, -1, nullptr, 0, nullptr, &lost);
+	std::string path(n > 0 ? n - 1 : 0, '\0');
+	if (n > 0) WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, file, -1, path.data(), n, nullptr, &lost);
+	if (n <= 0 || lost) {
+		MessageBoxW(hwnd_, t("best.bad_path").c_str(), t("app.title").c_str(), MB_ICONWARNING);
+		return;
+	}
+	best_file_ = file;
+	// the game up to the place shown (the lines start from the start of the game), then the command
+	std::string moves;
+	for (int i = 0; i < game_.cursor(); ++i) moves += square_name(game_.moves()[i]);
+	std::string out = "setboard " + game_.start().to_board_string() + "\n";
+	if (!moves.empty()) out += "play " + moves + "\n";
+	eng_[0].board = key_of(game_.now());
+	const int id = next_id_++;
+	out += "book bestlines id=" + std::to_string(id) + " loss=" + std::to_string(loss) + " depth=" +
+	       std::to_string(depth) + " solved=" + solved + " which=" + which + " file=\"" + path + "\"\n";
+	requests_[id] = {Request::BestExport, key_of(game_.now()), 0};
+	send(0, out);
+	log(lang::f("best.started", {best_file_}));
 }
 
 }  // namespace ng

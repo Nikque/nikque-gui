@@ -49,6 +49,7 @@ enum : int {
 	BookInfo,
 	OpenBook,
 	ExportMissing,
+	ExportBest,
 	RecentBook0 = 1250,  // + index of the recent books (up to 8)
 	LearnDeviate = 1300,
 	LearnDeviate2,
@@ -170,7 +171,7 @@ struct MissingList {
 
 // a request to the main engine, by id
 struct Request {
-	enum Kind { Book, Count, Levels, Marker, Graph, Missing } kind;
+	enum Kind { Book, Count, Levels, Marker, Graph, Missing, Best, BestExport } kind;
 	PosKey pos;
 	int engine;
 };
@@ -221,7 +222,8 @@ public:
 	EngineSlot eng_[2];
 	int next_id_ = 1;
 	std::unordered_map<int, Request> requests_;
-	int book_id_ = 0, count_id_ = 0, levels_id_ = 0;   // running on the main engine
+	int book_id_ = 0, count_id_ = 0, levels_id_ = 0, best_id_ = 0;   // running on the main engine
+	std::wstring best_file_;   // the file the best lines are written to (book bestlines file=)
 	int graph_id_ = 0;         // the book analysis of another position of the game (for the graph), one at a time
 	int missing_id_ = 0;
 	MissingList missing_;
@@ -332,6 +334,7 @@ public:
 	int missing_target() const;
 	void switch_book(const std::wstring &path);
 	void export_missing();
+	void export_best();
 	// app_settings.cpp
 	void open_range_settings();
 	void open_learn_settings();

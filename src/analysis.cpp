@@ -37,6 +37,8 @@ void PosInfo::reset_book()
 	levels_done = false;
 	levels.clear();
 	levels_positions = -1;
+	best_done = best_error = false;
+	best_lines = best_ends = best_incomplete = best_incomplete_ends = -1;
 }
 
 void PosInfo::reset_search()

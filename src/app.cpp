@@ -398,6 +398,7 @@ void App::build_menu()
 	sub(book, base, t("menu.book.base"));
 	item(book, cmd::BookInfo, t("menu.book.info"));
 	item(book, cmd::ExportMissing, t("menu.book.export_missing"));
+	item(book, cmd::ExportBest, t("menu.book.export_best"));
 	sub(bar, book, t("menu.book"));
 
 	HMENU learn = CreatePopupMenu();
@@ -497,6 +498,7 @@ void App::update_menu()
 	EnableMenuItem(m, cmd::LearnStop, MF_BYCOMMAND | (learning_ ? MF_ENABLED : MF_GRAYED));
 	for (int id = cmd::LearnDeviate; id <= cmd::LearnFix; ++id) EnableMenuItem(m, id, MF_BYCOMMAND | (learning_ ? MF_GRAYED : MF_ENABLED));
 	EnableMenuItem(m, cmd::LearnContinue, MF_BYCOMMAND | (learning_ ? MF_GRAYED : MF_ENABLED));
+	EnableMenuItem(m, cmd::ExportBest, MF_BYCOMMAND | (learning_ ? MF_GRAYED : MF_ENABLED));
 	EnableMenuItem(m, cmd::QueueStart, MF_BYCOMMAND | (learning_ || learn_queue_.empty() ? MF_GRAYED : MF_ENABLED));
 	EnableMenuItem(m, cmd::QueueClear, MF_BYCOMMAND | (learn_queue_.empty() ? MF_GRAYED : MF_ENABLED));
 	check(cmd::UseBook, use_book_);
