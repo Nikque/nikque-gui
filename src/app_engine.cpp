@@ -106,8 +106,7 @@ void App::start_engines()
 	}
 	const std::string ev = ini_.get(sec, "eval");
 	const std::wstring eval = ev.empty() ? dir + L"\\data\\eval.dat" : absolute(dir, ev);
-	const std::string bk = ini_.get(sec, "book");
-	const std::wstring book = bk.empty() ? dir + L"\\data\\book.dat" : absolute(dir, bk);
+	const std::wstring book = book_file();
 	int n = threads_;
 	if (n <= 0) n = static_cast<int>(GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
 
@@ -172,6 +171,7 @@ void App::stop_engines()
 	book_id_ = count_id_ = levels_id_ = 0;
 	graph_id_ = missing_id_ = 0;
 	missing_ = MissingList{};
+	learning_ = false;
 	hint_busy_ = hint_accept_ = hint_background_ = false;
 	DeleteFileW((temp_dir_ + L"\\nobook.dat").c_str());
 }
@@ -194,7 +194,7 @@ void App::request_levels()
 // while the position shown has nothing waiting, so that it is never kept waiting by them.
 void App::pump_graph()
 {
-	if (!eng_[0].alive || !use_book_ || !show_eval_ || graph_id_ || book_id_) return;
+	if (!eng_[0].alive || learning_ || !use_book_ || !show_eval_ || graph_id_ || book_id_) return;
 	const std::string params = book_params();
 	for (int i = 0; i <= game_.size(); ++i) {
 		const Position &p = game_.at(i);
@@ -227,7 +227,7 @@ void App::request_analysis()
 	const bool want = show_eval_ && !p.game_over();
 
 	// ---- main engine: the book analyses of the position
-	if (eng_[0].alive) {
+	if (eng_[0].alive && !learning_) {  // no analysis while the book is learning
 		std::string out;
 		auto cancel = [&](int &id, bool keep) {
 			if (!id || keep) return;
@@ -464,6 +464,17 @@ void App::on_engine(WPARAM tag, bool ended)
 				continue;
 			}
 		}
+		if (role == 0) {
+			// the end of a learning command ("echo M<n>" after it), and its progress
+			if (const int mark = echo_marker(line); mark >= 0) {
+				if (learning_ && mark == learn_end_id_) learning_ended();
+				continue;
+			}
+			if (learning_) {
+				learning_line(line);
+				continue;
+			}
+		}
 		// other lines of the engines go to the log (not the prompts and the search lines)
 		if (line[0] == '<' || parse_hint_line(line)) continue;
 		log(lang::t(role ? "engine.search" : "engine.main") + L": " + widen(line));
@@ -471,7 +482,10 @@ void App::on_engine(WPARAM tag, bool ended)
 	if (ended && s.alive) {
 		s.alive = false;
 		log(lang::f("log.engine_ended", {lang::t(role ? "engine.search" : "engine.main")}));
-		if (role == 0) book_id_ = count_id_ = levels_id_ = 0;
+		if (role == 0) {
+			book_id_ = count_id_ = levels_id_ = 0;
+			learning_ = false;
+		}
 		else hint_busy_ = hint_accept_ = false;
 		changed = true;
 	}

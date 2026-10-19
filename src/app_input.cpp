@@ -439,6 +439,18 @@ void App::paste_moves()
 
 void App::on_command(int id)
 {
+	if (id >= cmd::LearnDeviate && id <= cmd::LearnFix) {
+		learn_command(id);
+		return;
+	}
+	if (id == cmd::LearnStop) {
+		stop_learning();
+		return;
+	}
+	if (id == cmd::LearnContinue) {
+		continue_learning();
+		return;
+	}
 	if (id >= cmd::RecentBook0 && id < cmd::RecentBook0 + 8) {
 		const std::string r = ini_.get("books", "recent" + std::to_string(id - cmd::RecentBook0 + 1));
 		if (!r.empty()) switch_book(widen(r));

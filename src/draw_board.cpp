@@ -362,8 +362,15 @@ void draw_cell(App &app, int sq, double t)
 			                         gx.brush(th.select_frame), 2.5f * s);
 		}
 	}
-	if (v.has_value) draw_value(app, th, rc, v, t);
-	else if (v.pending) draw_pending(app, th, rc, t);
+	if (v.has_value) {
+		// while the book is learning, its stages are the values before: drawn faint
+		const bool faint = app.learning_ && v.stage > 0;
+		if (faint) dc->PushLayer(D2D1::LayerParameters1(rc, nullptr, D2D1_ANTIALIAS_MODE_ALIASED, D2D1::IdentityMatrix(), 0.45f), nullptr);
+		draw_value(app, th, rc, v, t);
+		if (faint) dc->PopLayer();
+	} else if (v.pending) {
+		draw_pending(app, th, rc, t);
+	}
 
 	// the fixed record: a red frame on its losing move, a mark where it goes another way than the game
 	if (v.fixed_bad) {

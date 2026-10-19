@@ -569,8 +569,20 @@ void draw_log(App &app)
 	dc->DrawLine({L.log.left, L.log.top + 0.5f}, {L.log.right, L.log.top + 0.5f}, gx.brush(th.line), 1.0f);
 	IDWriteTextFormat *f = gx.text(L.font_s, false);
 	const float rh = std::round(L.font_s * 1.6f);
+	// the learning in progress, on the right of the row
+	float right = L.log.right - 10 * L.scale;
+	if (app.learning_) {
+		const auto s = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - app.learn_t0_).count();
+		wchar_t el[32];
+		swprintf(el, 32, L"%lld:%02lld", static_cast<long long>(s / 60), static_cast<long long>(s % 60));
+		const std::wstring txt = lang::f("learn.bar", {widen(app.learn_cmd_), app.learn_progress_, el});
+		const float tw = std::min(gx.text_width(txt, f) + 4, (L.log.right - L.log.left) * 0.6f);
+		const D2D1_RECT_F r{right - tw, L.log.bottom - rh - 2 * L.scale, right, L.log.bottom - 2 * L.scale};
+		gx.draw_text(txt, f, r, th.accent);
+		right = r.left - 10 * L.scale;
+	}
 	if (!app.log_open_) {
-		gx.draw_text(app.status_, f, D2D1::RectF(L.log.left + 10 * L.scale, L.log.top, L.log.right - 10 * L.scale, L.log.bottom), th.text_dim);
+		gx.draw_text(app.status_, f, D2D1::RectF(L.log.left + 10 * L.scale, L.log.top, right, L.log.bottom), th.text_dim);
 		return;
 	}
 	float y = L.log.bottom - rh - 4 * L.scale;

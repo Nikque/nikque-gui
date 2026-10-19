@@ -108,13 +108,13 @@ void EngineProcess::read_loop()
 		if (!ReadFile(out_read_, buf, sizeof buf, &n, nullptr) || n == 0) break;
 		size_t i = 0;
 		for (DWORD k = 0; k < n; ++k) {
-			if (buf[k] != '\n') continue;
+			// a line ends with '\n'; the progress of the book commands is rewritten after '\r'
+			if (buf[k] != '\n' && buf[k] != '\r') continue;
 			partial_.append(buf + i, k - i);
 			i = k + 1;
-			if (!partial_.empty() && partial_.back() == '\r') partial_.pop_back();
 			// the engine's prompt ">" may come before a line
 			size_t a = 0;
-			while (a < partial_.size() && (partial_[a] == '>' || partial_[a] == ' ' || partial_[a] == '\r')) ++a;
+			while (a < partial_.size() && (partial_[a] == '>' || partial_[a] == ' ')) ++a;
 			if (a < partial_.size()) batch.emplace_back(partial_.substr(a));
 			partial_.clear();
 		}

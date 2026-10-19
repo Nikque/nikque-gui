@@ -391,7 +391,25 @@ void App::build_menu()
 	sub(bar, book, t("menu.book"));
 
 	HMENU learn = CreatePopupMenu();
-	AppendMenuW(learn, MF_STRING | MF_GRAYED, cmd::LearnSoon, t("menu.learn.soon").c_str());
+	item(learn, cmd::LearnDeviate, t("menu.learn.deviate"));
+	item(learn, cmd::LearnDeviate2, t("menu.learn.deviate2"));
+	item(learn, cmd::LearnDeviate3, t("menu.learn.deviate3"));
+	item(learn, cmd::LearnEnhance, t("menu.learn.enhance"));
+	item(learn, cmd::LearnLeafExpand, t("menu.learn.leaf_expand"));
+	item(learn, cmd::LearnFill, t("menu.learn.fill"));
+	item(learn, cmd::LearnFill2, t("menu.learn.fill2"));
+	item(learn, cmd::LearnPlay, t("menu.learn.play"));
+	AppendMenuW(learn, MF_SEPARATOR, 0, nullptr);
+	item(learn, cmd::LearnStore, t("menu.learn.store"));
+	item(learn, cmd::LearnAdd, t("menu.learn.add"));
+	item(learn, cmd::LearnLearn, t("menu.learn.learn"));
+	item(learn, cmd::LearnCheck, t("menu.learn.check"));
+	AppendMenuW(learn, MF_SEPARATOR, 0, nullptr);
+	item(learn, cmd::LearnNegamax, t("menu.learn.negamax"));
+	item(learn, cmd::LearnFix, t("menu.learn.fix"));
+	AppendMenuW(learn, MF_SEPARATOR, 0, nullptr);
+	item(learn, cmd::LearnStop, t("menu.learn.stop"));
+	item(learn, cmd::LearnContinue, t("menu.learn.continue"));
 	sub(bar, learn, t("menu.learn"));
 
 	HMENU eng = CreatePopupMenu();
@@ -459,6 +477,9 @@ void App::update_menu()
 	check(cmd::ShowEval, show_eval_);
 	check(cmd::Backward, backward_);
 	check(cmd::FixRecord, fixed_on_);
+	EnableMenuItem(m, cmd::LearnStop, MF_BYCOMMAND | (learning_ ? MF_ENABLED : MF_GRAYED));
+	for (int id = cmd::LearnDeviate; id <= cmd::LearnFix; ++id) EnableMenuItem(m, id, MF_BYCOMMAND | (learning_ ? MF_GRAYED : MF_ENABLED));
+	EnableMenuItem(m, cmd::LearnContinue, MF_BYCOMMAND | (learning_ ? MF_GRAYED : MF_ENABLED));
 	check(cmd::UseBook, use_book_);
 	check(cmd::CountOn, count_);
 	check(cmd::TogglePanel, panel_hidden_);

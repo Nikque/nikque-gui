@@ -50,7 +50,22 @@ enum : int {
 	OpenBook,
 	ExportMissing,
 	RecentBook0 = 1250,  // + index of the recent books (up to 8)
-	LearnSoon = 1300,
+	LearnDeviate = 1300,
+	LearnDeviate2,
+	LearnDeviate3,
+	LearnEnhance,
+	LearnLeafExpand,
+	LearnFill,
+	LearnFill2,
+	LearnPlay,
+	LearnStore,
+	LearnAdd,
+	LearnLearn,
+	LearnCheck,
+	LearnNegamax,
+	LearnFix,
+	LearnStop,
+	LearnContinue,
 	EngineNikque = 1400,
 	EngineNewedax,
 	RestartEngines,
@@ -206,6 +221,12 @@ public:
 	std::vector<int> fixed_;
 	Position fixed_start_{};
 	bool fixed_on_ = false;
+	// book learning on the main engine
+	bool learning_ = false;
+	int learn_end_id_ = 0;
+	std::string learn_cmd_;
+	std::wstring learn_progress_;
+	std::chrono::steady_clock::time_point learn_t0_{};
 	// search engine: the hint in progress
 	int marker_id_ = 0;
 	bool hint_busy_ = false, hint_accept_ = false;
@@ -293,6 +314,14 @@ public:
 	int missing_target() const;
 	void switch_book(const std::wstring &path);
 	void export_missing();
+	// app_learn.cpp
+	std::wstring book_file() const;
+	void learn_command(int id);
+	void start_learning(const std::string &command);
+	void stop_learning();
+	void continue_learning();
+	void learning_line(const std::string &line);
+	void learning_ended();
 	void send_hint(const Position &p, bool background);
 	void compute_line();
 	std::string book_params() const;
