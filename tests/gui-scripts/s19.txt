@@ -1,0 +1,29 @@
+# B: finding the moves of a position shown in another orientation (the other start position)
+log s19 start
+engine newedax
+wait 40
+game free
+book on
+moves d3c3e6f4f5d6f3e7c5e3c4b5
+rotate 1
+estimate
+screenshot s19-00-book2-lr.png
+moves d3c3e6f4f5d6f3e7c5e3c4b5
+rotate 6
+estimate
+moves f5d6c3d3c4
+rotate 1
+estimate
+screenshot s19-01-book-lr.png
+moves f5d6c3d3c4
+rotate 3
+estimate
+book off
+moves f5d6c3d3c4f4e3
+rotate 5
+estimate
+screenshot s19-02-search-90.png
+book on
+savelog s19-log.txt
+quit
+

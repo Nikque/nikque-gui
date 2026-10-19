@@ -396,6 +396,7 @@ public:
 	Position edit_pos_{};
 	int findline_id_ = 0;          // book findline asked of the main engine
 	Position findline_target_{};
+	int findline_sym_ = 0;         // the symmetry of the target asked (0, or 1 for the other start position)
 	bool findline_found_ = false;
 
 	// the game list
@@ -612,7 +613,9 @@ public:
 	bool edit_key(WPARAM vk);
 	void estimate_line();
 	void findline_answer(const Fields &f, bool end);
+	void send_findline();
 	void estimate_without_book(const Position &target);
+	void show_found_line(const Game &g, int sym);
 	void copy_position(int id);
 	void import_position();
 	bool take_position_text(const std::string &text);

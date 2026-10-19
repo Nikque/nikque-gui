@@ -262,6 +262,7 @@ void App::continue_learning()
 		replay(g, *start, pm.moves);
 		game_ = g;
 		game_.go_to(game_.size());
+		orient_ = 0;  // the game as it was learned from
 	}
 	start_learning(last);
 }

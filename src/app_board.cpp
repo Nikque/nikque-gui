@@ -135,19 +135,38 @@ void App::estimate_line()
 		return;
 	}
 	findline_target_ = target;
+	findline_sym_ = 0;
 	findline_found_ = false;
 	if (eng_[0].alive && !learning_ && use_book_) {
-		findline_id_ = next_id_++;
-		const std::string t = target.to_board_string();  // "<64> X": the side right after the squares
-		std::string out = "setboard " + Position{}.to_board_string() + "\n";
-		eng_[0].board = key_of(Position{});
-		out += "book findline id=" + std::to_string(findline_id_) + " target=" + t.substr(0, 64) + t.substr(65, 1) + "\n";
-		requests_[findline_id_] = {Request::FindLine, key_of(target), 0};
-		send(0, out);
-		set_status(lang::t("estimate.book"));
+		send_findline();
 		return;
 	}
 	estimate_without_book(target);
+}
+
+// The start position stays itself under 4 symmetries (0, 180 degrees and the two diagonals) and goes to the start
+// with the colors of the center swapped under the 4 others: a position reached from that other start (a game
+// turned by "left and right", say) is looked for turned by symmetry 1, and shown turned back.
+static constexpr int kOtherStart = 1;
+
+void App::send_findline()
+{
+	findline_id_ = next_id_++;
+	const Position target = symmetric(findline_target_, findline_sym_);
+	const std::string t = target.to_board_string();  // "<64> X": the side right after the squares
+	std::string out = "setboard " + Position{}.to_board_string() + "\n";
+	eng_[0].board = key_of(Position{});
+	out += "book findline id=" + std::to_string(findline_id_) + " target=" + t.substr(0, 64) + t.substr(65, 1) + "\n";
+	requests_[findline_id_] = {Request::FindLine, key_of(target), 0};
+	send(0, out);
+	set_status(lang::t("estimate.book"));
+}
+
+// a game from the usual start that reaches the target turned by `sym`: shown turned back to the target
+void App::show_found_line(const Game &g, int sym)
+{
+	set_game(g, true);
+	if (sym != 0) orient_to(symmetry_inverse(sym));
 }
 
 void App::findline_answer(const Fields &f, bool end)
@@ -156,16 +175,22 @@ void App::findline_answer(const Fields &f, bool end)
 		const ParsedMoves pm = parse_moves(f.get("moves").value_or(""));
 		Game g;
 		replay(g, Position{}, pm.moves);
-		if (g.now() == findline_target_) {
+		if (g.now() == symmetric(findline_target_, findline_sym_)) {
 			findline_found_ = true;
-			set_game(g, true);
+			show_found_line(g, findline_sym_);
 			log(lang::f("estimate.found_book", {std::to_wstring(g.size())}));
 		}
 	}
 	if (!end) return;
 	findline_id_ = 0;
 	if (!findline_found_) {
-		log(lang::t(f.num("unknown").value_or(0) ? "estimate.no_command" : "estimate.not_in_book"));
+		const bool unknown = f.num("unknown").value_or(0) != 0;
+		if (!unknown && findline_sym_ == 0 && symmetric(findline_target_, kOtherStart) != findline_target_) {
+			findline_sym_ = kOtherStart;  // the same position from the other start
+			send_findline();
+			return;
+		}
+		log(lang::t(unknown ? "estimate.no_command" : "estimate.not_in_book"));
 		estimate_without_book(findline_target_);
 	}
 	schedule_script();
@@ -175,15 +200,25 @@ void App::estimate_without_book(const Position &target)
 {
 	run_task(lang::t("estimate.searching"), [this, target](std::stop_token st) -> std::function<void()> {
 		const auto t0 = std::chrono::steady_clock::now();
-		const LineSearch r = find_line(Position{}, target, kSearchNodes, st);
+		LineSearch r = find_line(Position{}, target, kSearchNodes, st);
+		int sym = 0;
+		const Position other = symmetric(target, kOtherStart);
+		if (!r.line && !st.stop_requested() && other != target) {
+			const long long nodes = r.nodes;
+			const bool gave_up = r.gave_up;
+			r = find_line(Position{}, other, kSearchNodes, st);
+			r.nodes += nodes;
+			r.gave_up = r.gave_up || gave_up;
+			sym = kOtherStart;
+		}
 		const long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
-		return [this, r, target, ms] {
+		return [this, r, target, sym, ms] {
 			if (r.line) {
 				Game g;
 				for (const int m : *r.line)
 					if (m != kPass) g.play(m);
-				if (g.now() == target) {
-					set_game(g, true);
+				if (g.now() == symmetric(target, sym)) {
+					show_found_line(g, sym);
 					log(lang::f("estimate.found_search", {std::to_wstring(g.size()), std::to_wstring(r.nodes), std::to_wstring(ms)}));
 					return;
 				}
