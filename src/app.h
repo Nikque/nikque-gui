@@ -294,6 +294,8 @@ public:
 	Openings openings_;
 	bool show_opening_ = true;
 	D2D1_RECT_F opening_rect_{};   // the opening name in the bar (a click hides it)
+	// the small menus of book commands (greyed as a whole while the book is learning)
+	HMENU book_menu_ = nullptr, keep_menu_ = nullptr, learn_menu_ = nullptr, leaf_menu_ = nullptr;
 
 	Design design_ = Design::Standard;
 	Effects effects_ = Effects::On;

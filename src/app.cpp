@@ -501,6 +501,8 @@ void App::build_menu()
 	item(keep, cmd::LearnExtract, t("menu.learn.extract"));
 	item(keep, cmd::BookProblem, t("menu.book.problem"));
 	sub(book, keep, t("menu.book.keep"));
+	book_menu_ = book;
+	keep_menu_ = keep;
 	sub(bar, book, t("menu.book"));
 
 	HMENU learn = CreatePopupMenu();
@@ -527,6 +529,8 @@ void App::build_menu()
 	item(leaf, cmd::LearnLeafRecalc3, t("menu.learn.leaf3"));
 	item(leaf, cmd::LearnLeafRecalc4, t("menu.learn.leaf4"));
 	sub(learn, leaf, t("menu.learn.leaf"));
+	learn_menu_ = learn;
+	leaf_menu_ = leaf;
 	sep(learn);
 	item(learn, cmd::LearnStop, t("menu.learn.stop"));
 	item(learn, cmd::LearnContinue, t("menu.learn.continue"));
@@ -699,6 +703,14 @@ void App::update_menu()
 	auto check = [&](int id, bool on) { CheckMenuItem(m, id, MF_BYCOMMAND | (on ? MF_CHECKED : MF_UNCHECKED)); };
 	auto radio = [&](int first, int last, int on) { CheckMenuRadioItem(m, first, last, on, MF_BYCOMMAND); };
 	auto enable = [&](int id, bool on) { EnableMenuItem(m, id, MF_BYCOMMAND | (on ? MF_ENABLED : MF_GRAYED)); };
+	// a small menu as a whole (by its place in the menu above it)
+	auto enable_popup = [&](HMENU parent, HMENU child, bool on) {
+		if (!parent || !child) return;
+		for (int i = 0, n = GetMenuItemCount(parent); i < n; ++i)
+			if (GetSubMenu(parent, i) == child) EnableMenuItem(parent, static_cast<UINT>(i), MF_BYPOSITION | (on ? MF_ENABLED : MF_GRAYED));
+	};
+	enable_popup(book_menu_, keep_menu_, !learning_);
+	enable_popup(learn_menu_, leaf_menu_, !learning_);
 	check(cmd::ShowEval, show_eval_);
 	check(cmd::Backward, backward_);
 	check(cmd::FixRecord, fixed_on_);
