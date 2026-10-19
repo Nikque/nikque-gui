@@ -64,7 +64,8 @@ void load(const std::wstring &exe_dir, std::string_view code)
 		}
 	}
 	const std::wstring path = exe_dir + L"\\lang\\" + widen(code) + L".txt";
-	if (FILE *fp = _wfopen(path.c_str(), L"rb")) {
+	FILE *fp = nullptr;
+	if (_wfopen_s(&fp, path.c_str(), L"rb") == 0 && fp) {
 		std::string all;
 		char buf[16384];
 		size_t n;

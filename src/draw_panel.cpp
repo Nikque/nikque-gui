@@ -266,7 +266,10 @@ void draw_moves_table(App &app, const Theme &th)
 				break;
 			case Column::Level: {
 				const int lv = (app.use_book_ && m.in_book) ? m.book_level : shown_level(m, app.use_book_);
-				if (lv > 0) gx.draw_text(std::to_wstring(lv), f, r, th.text);
+				const bool exact = !(app.use_book_ && m.in_book) && m.searched && m.selectivity >= 100 &&
+				                   m.depth >= p.empties() - 1;
+				if (exact) gx.draw_text(lang::t("cell.exact"), gx.text(L.font, true, DWRITE_TEXT_ALIGNMENT_CENTER), r, th.text);
+				else if (lv > 0) gx.draw_text(std::to_wstring(lv), f, r, th.text);
 				break;
 			}
 			case Column::Umi:

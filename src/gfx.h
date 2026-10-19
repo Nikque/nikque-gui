@@ -3,6 +3,7 @@
 #pragma once
 
 #include <d2d1_1.h>
+#include <d2d1_3.h>
 #include <d3d11.h>
 #include <dwrite.h>
 #include <dxgi1_2.h>
@@ -20,6 +21,9 @@ using Microsoft::WRL::ComPtr;
 struct NumberShape {
 	ComPtr<ID2D1PathGeometry> geom;  // glyph outlines, the baseline origin at (0, 0)
 	D2D1_RECT_F bounds{};
+	// the shape cut into triangles once (filling and the outline), so that a frame does not do it again
+	mutable ComPtr<ID2D1GeometryRealization> fill_real, stroke_real;
+	mutable float stroke_w = 0;
 };
 
 struct Glow {
@@ -55,6 +59,9 @@ public:
 
 	// the outline of a text (number font, bold); kept
 	const NumberShape &shape(std::wstring_view text, float em, Face face = Face::Number);
+	// fills (or outlines with round joins, the line `stroke_w` wide) a shape at the current transform
+	void fill_shape(const NumberShape &s, ID2D1Brush *b);
+	void stroke_shape(const NumberShape &s, ID2D1Brush *b, float stroke_w);
 	// a soft glow of a shape; must be made outside begin_frame/end_frame (prepare_glow), then read with glow()
 	void prepare_glow(std::wstring_view text, float em, const D2D1_COLOR_F &color, float radius, Face face = Face::Number);
 	const Glow *glow(std::wstring_view text, float em, const D2D1_COLOR_F &color, float radius,
@@ -86,6 +93,7 @@ private:
 	ComPtr<IDXGISwapChain1> swap_;
 	ComPtr<ID2D1Device> device_;
 	ComPtr<ID2D1DeviceContext> dc_;
+	ComPtr<ID2D1DeviceContext1> dc1_;  // geometry realizations (null: drawn as geometries)
 	ComPtr<ID2D1Bitmap1> target_;
 	ComPtr<ID2D1SolidColorBrush> brush_;
 	ComPtr<ID2D1StrokeStyle> round_join_;

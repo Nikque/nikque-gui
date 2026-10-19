@@ -101,6 +101,7 @@ bool Gfx::create_device()
 	dxgi->SetMaximumFrameLatency(1);
 	if (FAILED(factory_->CreateDevice(dxgi.Get(), &device_))) return false;
 	if (FAILED(device_->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &dc_))) return false;
+	dc_.As(&dc1_);
 	dc_->SetDpi(96.0f, 96.0f);
 	dc_->SetUnitMode(D2D1_UNIT_MODE_PIXELS);
 
@@ -142,9 +143,11 @@ void Gfx::release_device()
 {
 	glows_.clear();
 	gradients_.clear();
+	shapes_.clear();  // the realizations belong to the device
 	brush_.Reset();
 	target_.Reset();
 	dc_.Reset();
+	dc1_.Reset();
 	device_.Reset();
 	swap_.Reset();
 	d3d_.Reset();
@@ -386,6 +389,34 @@ void Gfx::clear_shapes()
 {
 	shapes_.clear();
 	glows_.clear();
+}
+
+}  // namespace ng
+
+namespace ng {
+
+// the realizations are made for scales up to 1.1 (the pulse of the stages 6 and 7)
+static float tolerance()
+{
+	return D2D1::ComputeFlatteningTolerance(D2D1::Matrix3x2F::Identity(), 96.0f, 96.0f, 1.1f);
+}
+
+void Gfx::fill_shape(const NumberShape &s, ID2D1Brush *b)
+{
+	if (dc1_ && !s.fill_real) dc1_->CreateFilledGeometryRealization(s.geom.Get(), tolerance(), &s.fill_real);
+	if (s.fill_real) dc1_->DrawGeometryRealization(s.fill_real.Get(), b);
+	else dc_->FillGeometry(s.geom.Get(), b);
+}
+
+void Gfx::stroke_shape(const NumberShape &s, ID2D1Brush *b, float stroke_w)
+{
+	if (dc1_ && (!s.stroke_real || s.stroke_w != stroke_w)) {
+		s.stroke_real.Reset();
+		dc1_->CreateStrokedGeometryRealization(s.geom.Get(), tolerance(), stroke_w, round_join_.Get(), &s.stroke_real);
+		s.stroke_w = stroke_w;
+	}
+	if (s.stroke_real) dc1_->DrawGeometryRealization(s.stroke_real.Get(), b);
+	else dc_->DrawGeometry(s.geom.Get(), b, stroke_w, round_join_.Get());
 }
 
 }  // namespace ng

@@ -202,6 +202,8 @@ public:
 	bool animating_ = false;
 	std::chrono::steady_clock::time_point t0_ = std::chrono::steady_clock::now();
 	bool active_ = true;
+	int anim_fps_ = 20;        // frames a second of the moving effects (config.ini [view] fps, 5..60)
+	int font_px_ = 0;          // text size at 96 DPI (config.ini [view] font; 0: by the window height)
 
 	// ---- app.cpp
 	void load_config();

@@ -19,7 +19,6 @@ namespace ng {
 namespace {
 
 constexpr UINT_PTR kTimerAnim = 1;
-constexpr UINT kAnimMs = 33;  // at most 30 frames a second
 
 LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
@@ -246,6 +245,8 @@ void App::load_config()
 	if (stages_.empty() || stages_.find_first_not_of("0123456789/,") != std::string::npos)
 		stages_ = "1/1,2/2,3/3,4/4,5/5";
 	count_ = ini_.get_bool("analysis", "count", true);
+	anim_fps_ = ini_.get_int("view", "fps", 20, 5, 60);
+	font_px_ = ini_.get_int("view", "font", 0, 0, 72);
 	kind_ = lower(ini_.get("engine", "kind", "nikque18")) == "newedax" ? EngineKind::Newedax : EngineKind::Nikque18;
 	search_engine_ = ini_.get_bool("engine", "search", true);
 	panel_w_ = static_cast<float>(ini_.get_int("window", "panel_w", 420, 200, 4000));
@@ -271,6 +272,8 @@ void App::save_config()
 	ini_.set("view", "design", design_ == Design::Paw ? "paw" : "standard");
 	ini_.set("view", "effects", effects_ == Effects::Off ? "off" : effects_ == Effects::Subdued ? "subdued" : "on");
 	if (ini_.get("view", "language").empty()) ini_.set("view", "language", "ja");
+	ini_.set_int("view", "fps", anim_fps_);
+	ini_.set_int("view", "font", font_px_);
 	ini_.set_int("analysis", "show", show_eval_);
 	ini_.set_int("analysis", "book", use_book_);
 	ini_.set_int("analysis", "level", level_);
@@ -454,8 +457,10 @@ void App::layout()
 	const float W = static_cast<float>(gfx_.width()), H = static_cast<float>(gfx_.height());
 	const Theme &th = theme(design_);
 	L.scale = GetDpiForWindow(hwnd_) / 96.0f;
-	L.font = std::round(14.0f * L.scale);
-	L.font_s = std::round(11.5f * L.scale);
+	// the text grows with a tall window (14 to 22 pixels at 96 DPI), or is the size set in config.ini
+	const float base = font_px_ > 0 ? static_cast<float>(font_px_) : std::clamp(H / L.scale / 60.0f, 14.0f, 22.0f);
+	L.font = std::round(base * L.scale);
+	L.font_s = std::round(base * 0.82f * L.scale);
 	L.row = std::round(L.font * 1.8f);
 	L.bar = {0, 0, W, L.row};
 	const float log_h = log_open_ ? std::max(L.row * 8, std::round(H * 0.28f)) : L.row;
@@ -580,7 +585,7 @@ void App::update_animation_timer()
 	const bool want = effects_ == Effects::On && active_ && hwnd_ && !IsIconic(hwnd_) && !animated_cells().empty();
 	if (want == animating_) return;
 	animating_ = want;
-	if (want) SetTimer(hwnd_, kTimerAnim, kAnimMs, nullptr);
+	if (want) SetTimer(hwnd_, kTimerAnim, 1000 / anim_fps_, nullptr);
 	else KillTimer(hwnd_, kTimerAnim);
 }
 

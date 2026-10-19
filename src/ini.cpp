@@ -49,7 +49,8 @@ bool Ini::load(const std::wstring &path)
 {
 	lines_.clear();
 	dirty_ = false;
-	FILE *f = _wfopen(path.c_str(), L"rb");
+	FILE *f = nullptr;
+	if (_wfopen_s(&f, path.c_str(), L"rb") != 0) f = nullptr;
 	if (!f) return false;
 	std::string all;
 	char buf[16384];
@@ -72,7 +73,8 @@ bool Ini::load(const std::wstring &path)
 bool Ini::save(const std::wstring &path)
 {
 	const std::wstring tmp = path + L".tmp";
-	FILE *f = _wfopen(tmp.c_str(), L"wb");
+	FILE *f = nullptr;
+	if (_wfopen_s(&f, tmp.c_str(), L"wb") != 0) f = nullptr;
 	if (!f) return false;
 	bool ok = true;
 	for (const auto &l : lines_) {

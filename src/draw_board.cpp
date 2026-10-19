@@ -135,15 +135,15 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 
 	// outline, then the fill over its inner half
 	dc->SetTransform(M);
-	dc->DrawGeometry(s.geom.Get(), gx.brush(st.edge), em * 0.17f, gx.round_join());
+	gx.stroke_shape(s, gx.brush(st.edge), em * 0.17f);
 	if (st.gem) {
 		const D2D1_GRADIENT_STOP stops[3] = {{0, st.top}, {0.5f, st.mid}, {1, st.bottom}};
 		auto *g = gx.gradient(100 + k + (th.design == Design::Paw ? 10 : 0), stops, 3);
 		g->SetStartPoint({0, s.bounds.top});
 		g->SetEndPoint({0, s.bounds.bottom});
-		dc->FillGeometry(s.geom.Get(), g);
+		gx.fill_shape(s, g);
 	} else {
-		dc->FillGeometry(s.geom.Get(), gx.brush(st.mid));
+		gx.fill_shape(s, gx.brush(k == 0 && v.exact ? th.exact : st.mid));
 	}
 
 	if (fx) {
@@ -156,7 +156,7 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 		gl->SetOpacity(shine);
 		gl->SetStartPoint({s.bounds.left, s.bounds.top});
 		gl->SetEndPoint({s.bounds.left + w * 0.55f, s.bounds.top + h * 0.75f});
-		dc->FillGeometry(s.geom.Get(), gl);
+		gx.fill_shape(s, gl);
 
 		// bands of light crossing the number
 		const D2D1_GRADIENT_STOP band[3] = {{0, rgb(0xffffff, 0)}, {0.5f, rgb(0xffffff, 0.8f)}, {1, rgb(0xffffff, 0)}};
@@ -174,7 +174,7 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 			g->SetStartPoint({bx - bw, s.bounds.top});
 			g->SetEndPoint({bx + bw, s.bounds.bottom});
 			g->SetOpacity(shine);
-			dc->FillGeometry(s.geom.Get(), g);
+			gx.fill_shape(s, g);
 		}
 	}
 	dc->SetTransform(I);
@@ -250,8 +250,8 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 		const D2D1_MATRIX_3X2_F m = D2D1::Matrix3x2F::Translation(rc.right - c * 0.07f - lw - ls.bounds.left,
 		                                                          rc.bottom - c * 0.07f - ls.bounds.bottom);
 		dc->SetTransform(m);
-		dc->DrawGeometry(ls.geom.Get(), gx.brush(rgb(0x09090b)), sem * 0.2f, gx.round_join());
-		dc->FillGeometry(ls.geom.Get(), gx.brush(rgb(0xe4e4e7)));
+		gx.stroke_shape(ls, gx.brush(rgb(0x09090b)), sem * 0.2f);
+		gx.fill_shape(ls, gx.brush(rgb(0xe4e4e7)));
 		dc->SetTransform(I);
 	}
 }

@@ -69,8 +69,8 @@ inline void summary(FILE *f, const char *name, std::vector<double> v)
 }
 inline void finish(const std::wstring &dir)
 {
-	FILE *f = _wfopen((dir + L"\\measure.log").c_str(), L"a");
-	if (!f) return;
+	FILE *f = nullptr;
+	if (_wfopen_s(&f, (dir + L"\\measure.log").c_str(), L"a") != 0 || !f) return;
 	std::fprintf(f, "first frame: %.1f ms\n", state().first_frame_ms);
 	std::fprintf(f, "first answer: main %.1f ms, search %.1f ms\n", state().first_answer_ms[0], state().first_answer_ms[1]);
 	summary(f, "full frames", state().full);
