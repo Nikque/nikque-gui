@@ -358,7 +358,7 @@ void draw_book_tab(App &app, const Theme &th)
 
 	// the leaves missing for the next stage of a move
 	const MissingList &ms = app.missing_;
-	if (!ms.asked || ms.sq == kNoMove) {
+	if (!ms.asked || ms.sq == kNoMove || !(ms.pos == key_of(app.game_.now()))) {
 		line(lang::t("book.missing.choose"), th.text_dim);
 		return;
 	}

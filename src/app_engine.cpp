@@ -701,7 +701,16 @@ void App::request_missing(std::string &out, const Position &p)
 {
 	if (tab_ != Tab::Book) return;
 	const int sq = missing_target();
-	if (sq == kNoMove) return;
+	if (sq == kNoMove) {
+		// no book move here (yet): the list of another position goes
+		if (missing_id_) {
+			out += "stop id=" + std::to_string(missing_id_) + "\n";
+			requests_.erase(missing_id_);
+			missing_id_ = 0;
+		}
+		missing_ = MissingList{};
+		return;
+	}
 	const PosKey key = key_of(p);
 	const std::string params = "base=" + base_ + " stages=" + stages_ + " x=" + std::to_string(loss_x_) +
 	                           " y=" + std::to_string(loss_y_);
