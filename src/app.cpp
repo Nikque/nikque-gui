@@ -231,6 +231,8 @@ void App::load_config()
 	design_ = d == "paw" ? Design::Paw : Design::Standard;
 	const std::string e = lower(ini_.get("view", "effects", "on"));
 	effects_ = e == "off" ? Effects::Off : e == "subdued" ? Effects::Subdued : Effects::On;
+	const std::string te = lower(ini_.get("view", "top_effect", "normal"));
+	top_effect_ = te == "strong" ? TopEffect::Strong : te == "weak" ? TopEffect::Weak : TopEffect::Normal;
 	show_eval_ = ini_.get_bool("analysis", "show", true);
 	use_book_ = ini_.get_bool("analysis", "book", true);
 	level_ = ini_.get_int("analysis", "level", 21, 1, 60);
@@ -271,6 +273,7 @@ void App::save_config()
 {
 	ini_.set("view", "design", design_ == Design::Paw ? "paw" : "standard");
 	ini_.set("view", "effects", effects_ == Effects::Off ? "off" : effects_ == Effects::Subdued ? "subdued" : "on");
+	ini_.set("view", "top_effect", top_effect_ == TopEffect::Strong ? "strong" : top_effect_ == TopEffect::Weak ? "weak" : "normal");
 	if (ini_.get("view", "language").empty()) ini_.set("view", "language", "ja");
 	ini_.set_int("view", "fps", anim_fps_);
 	ini_.set_int("view", "font", font_px_);
@@ -380,6 +383,11 @@ void App::build_menu()
 	item(eff, cmd::EffectsSubdued, t("menu.view.effects.subdued"));
 	item(eff, cmd::EffectsOff, t("menu.view.effects.off"));
 	sub(view, eff, t("menu.view.effects"));
+	HMENU top = CreatePopupMenu();
+	item(top, cmd::TopStrong, t("menu.view.top.strong"));
+	item(top, cmd::TopNormal, t("menu.view.top.normal"));
+	item(top, cmd::TopWeak, t("menu.view.top.weak"));
+	sub(view, top, t("menu.view.top"));
 	AppendMenuW(view, MF_SEPARATOR, 0, nullptr);
 	item(view, cmd::TabMoves, t("menu.view.tab.moves"));
 	item(view, cmd::TabBook, t("menu.view.tab.book"));
@@ -429,6 +437,7 @@ void App::update_menu()
 	radio(cmd::DesignStandard, cmd::DesignPaw, design_ == Design::Paw ? cmd::DesignPaw : cmd::DesignStandard);
 	radio(cmd::EffectsOn, cmd::EffectsOff,
 	      effects_ == Effects::On ? cmd::EffectsOn : effects_ == Effects::Subdued ? cmd::EffectsSubdued : cmd::EffectsOff);
+	radio(cmd::TopStrong, cmd::TopWeak, cmd::TopStrong + static_cast<int>(top_effect_));
 	radio(cmd::TabMoves, cmd::TabRecord, cmd::TabMoves + static_cast<int>(tab_));
 	radio(cmd::LangJa, cmd::LangJa, cmd::LangJa);
 }

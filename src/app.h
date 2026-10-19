@@ -57,6 +57,9 @@ enum : int {
 	EffectsOn,
 	EffectsSubdued,
 	EffectsOff,
+	TopStrong,
+	TopNormal,
+	TopWeak,
 	TogglePanel,
 	ToggleLog,
 	TabMoves,
@@ -71,6 +74,8 @@ enum : int {
 inline constexpr int kLevels[] = {1, 5, 10, 15, 18, 21, 24, 27, 30, 35, 40, 60};
 
 enum class Effects : int { On = 0, Subdued = 1, Off = 2 };
+// how much of its effects the top stage (7) shows
+enum class TopEffect : int { Strong = 0, Normal = 1, Weak = 2 };
 enum class Tab : int { Moves = 0, Book = 1, Record = 2, Count };
 enum class EngineKind : int { Nikque18 = 0, Newedax = 1 };
 enum class UmiMode : int { Best = 0, Loss = 1, Off = 2 };
@@ -145,6 +150,7 @@ public:
 
 	Design design_ = Design::Standard;
 	Effects effects_ = Effects::On;
+	TopEffect top_effect_ = TopEffect::Normal;
 	Tab tab_ = Tab::Moves;
 	bool show_eval_ = true;
 	bool use_book_ = true;

@@ -94,12 +94,17 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 	const float cx = (rc.left + rc.right) / 2, cy = (rc.top + rc.bottom) / 2 - (k == 0 && v.level ? c * 0.04f : 0);
 	const D2D1_MATRIX_3X2_F I = D2D1::Matrix3x2F::Identity();
 
+	// the top stage shows more or less of its effects (setting)
+	const TopEffect top = app.top_effect_;
+	const bool top_strong = k == 7 && top == TopEffect::Strong, top_weak = k == 7 && top == TopEffect::Weak;
+
 	// stage 7: light rays turning behind the number
-	if (fx && k >= 7) {
+	if (fx && k >= 7 && !top_weak) {
 		auto *b = gx.brush(th.effect_light);
-		b->SetOpacity(0.2f + 0.06f * wave(t, 1.2));
+		b->SetOpacity(top_strong ? 0.2f + 0.06f * wave(t, 1.2) : 0.1f + 0.03f * wave(t, 1.2));
+		const float reach = top_strong ? 0.75f : 0.6f;
 		fill_shape(dc, gx.rays(), b,
-		           D2D1::Matrix3x2F::Scale(c * 0.75f, c * 0.75f) *
+		           D2D1::Matrix3x2F::Scale(c * reach, c * reach) *
 		               D2D1::Matrix3x2F::Rotation(static_cast<float>(std::fmod(t * 22.0, 360.0))) *
 		               D2D1::Matrix3x2F::Translation(cx, cy));
 		dc->SetTransform(I);
@@ -107,7 +112,7 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 
 	float scale = 1;
 	if (fx && k == 6) scale = 1 + 0.035f * wave(t, 1.6);
-	if (fx && k == 7) scale = 1 + 0.05f * wave(t, 1.2);
+	if (fx && k == 7 && !top_weak) scale = 1 + (top_strong ? 0.05f : 0.025f) * wave(t, 1.2);
 	const D2D1_MATRIX_3X2_F M = D2D1::Matrix3x2F::Translation(-(s.bounds.left + w / 2), -(s.bounds.top + h / 2)) *
 	                            D2D1::Matrix3x2F::Scale(scale, scale) * D2D1::Matrix3x2F::Translation(cx, cy);
 
@@ -121,7 +126,8 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 			const Glow *g = gx.glow(text, em, gs[i].color, gs[i].radius);
 			if (!g) continue;
 			float op = i == 0 ? base[k] + amp[k] * wave(t, 2.6 - 0.2 * k) : 0.75f;
-			if (k == 7 && i == 0) {
+			if (k == 7 && !top_strong) op *= top_weak ? 0.55f : 0.75f;
+			if (top_strong && i == 0) {
 				// a short flash every few seconds
 				const float f = frac(t / 4.5);
 				if (f < 0.08f) op += 0.6f * std::sin(f / 0.08f * static_cast<float>(std::numbers::pi));
@@ -198,7 +204,7 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 	if (fx && k >= 5) {
 		// stars (hearts in the paw design) around the number
 		const float pos[5][2] = {{0.17f, 0.19f}, {0.84f, 0.2f}, {0.83f, 0.82f}, {0.18f, 0.8f}, {0.5f, 0.11f}};
-		const int n = k == 5 ? 2 : k == 6 ? 3 : 5;
+		const int n = k == 5 ? 2 : k == 6 ? 3 : top_strong ? 5 : top_weak ? 3 : 4;
 		const D2D1_COLOR_F col = k == 7 ? th.effect_light : st.top;
 		for (int i = 0; i < n; ++i) {
 			const float a = eff == Effects::Subdued ? 0.85f : 0.35f + 0.65f * std::abs(wave(t, 1.8, i * 0.27));
@@ -215,7 +221,7 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 		}
 		dc->SetTransform(I);
 	}
-	if (fx && k >= 6 && eff == Effects::On) {
+	if (fx && k >= 6 && eff == Effects::On && !top_weak) {
 		// small lights rising
 		const D2D1_COLOR_F col = k == 7 ? th.effect_light : st.top;
 		for (int i = 0; i < 6; ++i) {
@@ -230,7 +236,7 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 				                                                                   th.particle_edge.b, a}), 1.0f);
 		}
 	}
-	if (fx && k >= 7 && eff == Effects::On) {
+	if (fx && top_strong && eff == Effects::On) {
 		// lights going round the number
 		for (int i = 0; i < 6; ++i) {
 			const float a = static_cast<float>(t * 1.4) + i * kTau / 6;

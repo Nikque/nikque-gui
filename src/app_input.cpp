@@ -505,6 +505,13 @@ void App::on_command(int id)
 		update_animation_timer();
 		invalidate();
 		break;
+	case cmd::TopStrong:
+	case cmd::TopNormal:
+	case cmd::TopWeak:
+		top_effect_ = static_cast<TopEffect>(id - cmd::TopStrong);
+		update_menu();
+		invalidate();
+		break;
 	case cmd::TogglePanel:
 		panel_hidden_ = !panel_hidden_;
 		update_menu();
