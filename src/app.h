@@ -582,6 +582,7 @@ public:
 	void continue_learning();
 	void learning_line(const std::string &line);
 	void learning_ended();
+	void forget_engine_state(int role);  // after "stop": the position and level sent before are unknown
 	void send_hint(const Position &p, bool background);
 	void compute_line();
 	std::string book_params() const;

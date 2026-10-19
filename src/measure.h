@@ -16,11 +16,14 @@ namespace ng::measure {
 
 #ifdef NG_MEASURE
 
+inline constexpr bool kOn = true;
+
 struct State {
 	LARGE_INTEGER freq{}, start{};
 	double first_frame_ms = -1;
 	std::vector<double> full, anim;
 	double first_answer_ms[2] = {-1, -1};
+	std::vector<std::string> trace;  // lines written to measure-trace.log at the end
 };
 inline State &state()
 {
@@ -55,6 +58,13 @@ private:
 	bool full_;
 	LARGE_INTEGER t_;
 };
+// a line of the trace, with the time since the start
+inline void trace(const std::string &s)
+{
+	char t[32];
+	std::snprintf(t, sizeof t, "%10.1f ", ms_since(state().start));
+	state().trace.push_back(t + s);
+}
 inline void summary(FILE *f, const char *name, std::vector<double> v)
 {
 	if (v.empty()) {
@@ -77,10 +87,18 @@ inline void finish(const std::wstring &dir)
 	summary(f, "effect frames", state().anim);
 	std::fprintf(f, "----\n");
 	std::fclose(f);
+	if (state().trace.empty()) return;
+	FILE *g = nullptr;
+	if (_wfopen_s(&g, (dir + L"\\measure-trace.log").c_str(), L"a") != 0 || !g) return;
+	for (const auto &s : state().trace) std::fprintf(g, "%s\n", s.c_str());
+	std::fprintf(g, "----\n");
+	std::fclose(g);
 }
 
 #else
 
+inline constexpr bool kOn = false;
+inline void trace(const std::string &) {}
 inline void start() {}
 inline void first_frame() {}
 inline void engine_answer(int) {}

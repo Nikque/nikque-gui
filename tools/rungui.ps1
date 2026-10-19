@@ -7,14 +7,20 @@ $text = [regex]::Replace($text, "(?m)^startup=.*$", "startup=$Script")
 [System.IO.File]::WriteAllText($ini, $text, (New-Object System.Text.UTF8Encoding($false)))
 $exe = Join-Path $Dir "nikque-gui.exe"
 $t0 = Get-Date
-cmd /c start "" /min "$exe"
-Start-Sleep -Milliseconds 500
-$p = Get-Process nikque-gui -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }
+# started from a hidden cmd of its own: a "cmd /c start" here would hand the GUI the pipe of this output when the
+# output is taken by the caller, and the caller would wait for the GUI to end
+Start-Process -FilePath cmd.exe -ArgumentList "/c start `"`" /min `"$exe`"" -WindowStyle Hidden
+# a file written a moment ago may start late (it is scanned first): up to 30 seconds
+$p = $null
+for ($i = 0; $i -lt 60 -and -not $p; ++$i) {
+	Start-Sleep -Milliseconds 500
+	$p = Get-Process nikque-gui -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }
+}
 if (-not $p) { "not started"; exit 1 }
-$peak = 0
+$peak = 0; $priv = 0  # the peaks the system keeps (0 once the process has ended)
 while (-not $p.HasExited) {
 	Start-Sleep -Milliseconds 500
-	try { $p.Refresh(); if ($p.WorkingSet64 -gt $peak) { $peak = $p.WorkingSet64 } } catch {}
+	try { $p.Refresh(); $peak = [Math]::Max($peak, $p.PeakWorkingSet64); $priv = [Math]::Max($priv, $p.PeakPagedMemorySize64) } catch {}
 	if (((Get-Date) - $t0).TotalSeconds -gt $Timeout) { "timeout: killed"; $p.Kill(); break }
 }
-"elapsed {0:N1} s, peak working set {1:N1} MB" -f ((Get-Date) - $t0).TotalSeconds, ($peak / 1MB)
+"elapsed {0:N1} s, peak working set {1:N1} MB, peak private {2:N1} MB" -f ((Get-Date) - $t0).TotalSeconds, ($peak / 1MB), ($priv / 1MB)

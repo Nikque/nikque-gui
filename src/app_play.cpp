@@ -11,6 +11,7 @@
 #include "app.h"
 #include "form.h"
 #include "lang.h"
+#include "measure.h"
 
 namespace ng {
 
@@ -271,6 +272,21 @@ void App::game_end_check()
 	if (!p.game_over() || game_.cursor() != game_.size()) return;
 	game_end_done_ = true;
 	clock_switch();
+	if constexpr (measure::kOn) {
+		// the points of the graph at the end, with what each comes from
+		const auto line = backward_line(game_, cache_, use_book_, backward_);
+		for (int i = 0; i <= game_.size(); ++i) {
+			const Position &q = game_.at(i);
+			std::string s = "GRAPH " + std::to_string(i) + " " + q.to_board_string() + " known=" + std::to_string(line[i].known) +
+			                " best=" + std::to_string(line[i].best);
+			if (const PosInfo *info = cache_.peek(q))
+				for (const MoveEval &m : info->moves)
+					s += " [" + square_name(m.sq) + " s=" + std::to_string(m.searched) + ":" + std::to_string(m.score) + "@" +
+					     std::to_string(m.depth) + " b=" + std::to_string(m.in_book) + ":" + std::to_string(m.book_value) + " l=" +
+					     std::to_string(m.leaf) + ":" + std::to_string(m.leaf_value) + "]";
+			measure::trace(s);
+		}
+	}
 	const int b = std::popcount(p.black), w = std::popcount(p.white);
 	log(lang::f(b > w ? "play.won_black" : b < w ? "play.won_white" : "play.draw", {std::to_wstring(b), std::to_wstring(w)}));
 	if (end_keep_) keep_now(true);
@@ -416,13 +432,17 @@ void App::compare_request()
 	if (info.cmp_done && info.cmp_level == level_) {
 		if (cmp_busy_ && !(cmp_pos_ == key)) {
 			send(4, "stop\n");
+			forget_engine_state(4);
 			cmp_busy_ = cmp_accept_ = false;
 		}
 		return;
 	}
 	if (cmp_busy_ && cmp_pos_ == key && cmp_level_ == level_) return;
 	std::string out;
-	if (cmp_busy_) out += "stop\n";
+	if (cmp_busy_) {
+		out += "stop\n";
+		forget_engine_state(4);
+	}
 	if (engine_level_[4] != level_) {
 		out += "level " + std::to_string(level_) + "\n";
 		engine_level_[4] = level_;

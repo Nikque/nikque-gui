@@ -334,7 +334,9 @@ void App::request_analysis()
 			// a search of another position is stopped, unless it is the background work on the game
 			const bool keep = hint_background_ && backward_ && show_eval_;
 			if (hint_busy_ && !keep) {
+				if constexpr (measure::kOn) measure::trace("STOP shown=" + p.to_board_string());
 				send(1, "stop\n");
+				forget_engine_state(1);
 				hint_busy_ = hint_accept_ = false;
 			}
 			pump_search();
@@ -347,11 +349,22 @@ void App::request_analysis()
 	compare_request();
 }
 
+// Edax drops the commands it has not read yet when it reads "stop" (not "stop id=", a book analysis): the
+// position and the level sent before it may never have been set, so they are sent again after it.
+void App::forget_engine_state(int role)
+{
+	eng_[role].board.reset();
+	engine_level_[role] = -1;
+}
+
 void App::send_hint(const Position &p, bool background)
 {
 	const PosKey key = key_of(p);
 	std::string out;
-	if (hint_busy_) out += "stop\n";  // the commands sent after it are kept
+	if (hint_busy_) {
+		out += "stop\n";  // the commands sent after it are kept
+		forget_engine_state(1);
+	}
 	if (engine_level_[1] != level_) {
 		out += "level " + std::to_string(level_) + "\n";
 		engine_level_[1] = level_;
@@ -376,6 +389,8 @@ void App::send_hint(const Position &p, bool background)
 	hint_background_ = background;
 	hint_pos_ = key;
 	hint_level_ = level_;
+	if constexpr (measure::kOn)
+		measure::trace("SEND " + p.to_board_string() + " bg=" + std::to_string(background) + " M" + std::to_string(marker_id_) + " end=M" + std::to_string(hint_end_id_));
 	send(1, out);
 }
 
@@ -495,6 +510,8 @@ void App::on_engine(WPARAM tag, bool ended)
 				continue;
 			}
 			PosInfo &info = cache_.get(Position{req.pos.black, req.pos.white, req.pos.side});
+			if constexpr (measure::kOn)
+				measure::trace("BOOK " + Position{req.pos.black, req.pos.white, req.pos.side}.to_board_string() + " | " + line);
 			if (f.kind() == "begin") {
 				info.book_begun = true;
 				info.in_book = f.num("book").value_or(0) == 1;
@@ -550,6 +567,7 @@ void App::on_engine(WPARAM tag, bool ended)
 		if (line.starts_with("copyright")) continue;
 		if (role == 1) {
 			if (const int mark = echo_marker(line); mark >= 0) {
+				if constexpr (measure::kOn) measure::trace("MARK M" + std::to_string(mark) + " start=M" + std::to_string(marker_id_) + " end=M" + std::to_string(hint_end_id_) + " busy=" + std::to_string(hint_busy_));
 				if (mark == marker_id_) {
 					hint_accept_ = true;
 					s.loaded = true;
@@ -564,8 +582,13 @@ void App::on_engine(WPARAM tag, bool ended)
 				}
 				continue;
 			}
-			if (!hint_accept_) continue;  // lines of a search stopped before
+			if (!hint_accept_) {
+				if constexpr (measure::kOn) measure::trace("SKIP " + line);
+				continue;  // lines of a search stopped before
+			}
 			if (auto h = parse_hint_line(line); h && !h->book) {
+				if constexpr (measure::kOn)
+					measure::trace("HINT " + Position{hint_pos_.black, hint_pos_.white, hint_pos_.side}.to_board_string() + " | " + line);
 				PosInfo &info = cache_.get(Position{hint_pos_.black, hint_pos_.white, hint_pos_.side});
 				if (MoveEval *m = info.find(h->pv[0])) {
 					m->searched = true;

@@ -21,6 +21,25 @@ constexpr int name_key(int sq) noexcept { return (sq & 7) * 8 + (sq >> 3); }
 // the key that makes f5 the first of the four first moves (and orders the other squares in a fixed way)
 int orient_key(int sq) noexcept { return symmetric_square(sq, 7); }
 
+// Work over many games is split into parts on threads: each part has at least 65,536 games, at most 8 threads
+// (the work of a moment; the engines keep the rest of the CPU).
+unsigned parts_for(size_t n)
+{
+	const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
+	return static_cast<unsigned>(std::clamp<size_t>(n / 65536, 1, std::min(8u, hw)));
+}
+
+template <class F>
+void in_parts(size_t n, unsigned k, F f)
+{
+	if (k <= 1) {
+		f(size_t{0}, n, 0u);
+		return;
+	}
+	std::vector<std::jthread> threads;
+	for (unsigned part = 0; part < k; ++part) threads.emplace_back(f, n * part / k, n * (part + 1) / k, part);
+}
+
 std::uint64_t splitmix(std::uint64_t &s) noexcept
 {
 	std::uint64_t z = (s += 0x9E3779B97F4A7C15ULL);
@@ -231,19 +250,16 @@ std::string list_line(const Position &start, std::span<const std::uint8_t> moves
 
 namespace {
 
-// reads lines from text, the last one may be incomplete when `final` is false (it is left in `text`)
-void take_lines(std::string &text, bool final, GameList &list, ListReadStats &st, std::stop_token stop, const Position &usual)
+// reads the lines of text (whole lines; the last one may lack its end)
+void take_lines(std::string_view text, GameList &list, ListReadStats &st, std::stop_token stop, const Position &usual)
 {
 	Position start;
 	std::vector<std::uint8_t> moves;
 	size_t i = 0;
-	for (;;) {
+	while (i < text.size()) {
 		size_t e = text.find('\n', i);
-		if (e == std::string::npos) {
-			if (!final) break;
-			e = text.size();
-		}
-		std::string_view line(text.data() + i, e - i);
+		if (e == std::string_view::npos) e = text.size();
+		std::string_view line = text.substr(i, e - i);
 		if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
 		bool cut = false;
 		if (parse_list_line(line, &start, &moves, &cut, usual)) {
@@ -253,17 +269,51 @@ void take_lines(std::string &text, bool final, GameList &list, ListReadStats &st
 			if (cut) ++st.cut;
 			if ((st.lines & 4095) == 0 && stop.stop_requested()) {
 				st.cancelled = true;
-				text.clear();
 				return;
 			}
 		}
-		if (e >= text.size()) {
-			text.clear();
-			return;
-		}
 		i = e + 1;
 	}
-	text.erase(0, i);
+}
+
+// A block of whole lines read in parts on threads (cut at line ends), the games added to `list` in their order.
+void take_block(std::string_view text, GameList &list, ListReadStats &st, std::stop_token stop, const Position &usual)
+{
+	// a part per 512 KB of text (about 4,000 games), at most 8
+	const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
+	const unsigned k = static_cast<unsigned>(std::clamp<size_t>(text.size() >> 19, 1, std::min(8u, hw)));
+	if (k <= 1) {
+		take_lines(text, list, st, stop, usual);
+		return;
+	}
+	std::vector<size_t> cut(k + 1, text.size());
+	cut[0] = 0;
+	for (unsigned p = 1; p < k; ++p) {
+		const size_t e = text.find('\n', std::max(cut[p - 1], text.size() * p / k));
+		cut[p] = e == std::string_view::npos ? text.size() : e + 1;
+	}
+	struct Part {
+		GameList list;
+		ListReadStats st;
+	};
+	std::vector<Part> parts(k);
+	{
+		std::vector<std::jthread> threads;
+		for (unsigned p = 0; p < k; ++p)
+			threads.emplace_back([&, p] {
+				const std::string_view t = text.substr(cut[p], cut[p + 1] - cut[p]);
+				parts[p].list.reserve(t.size() / 100, t.size() / 2);
+				take_lines(t, parts[p].list, parts[p].st, stop, usual);
+			});
+	}
+	for (Part &pt : parts) {
+		for (size_t i = 0; i < pt.list.size(); ++i) list.add(pt.list.start(i), pt.list.moves(i));
+		st.lines += pt.st.lines;
+		st.games += pt.st.games;
+		st.cut += pt.st.cut;
+		st.cancelled = st.cancelled || pt.st.cancelled;
+		pt.list.clear();
+	}
 }
 
 }  // namespace
@@ -272,8 +322,7 @@ ListReadStats read_list_text(std::string_view text, GameList &list, std::stop_to
 {
 	ListReadStats st;
 	st.opened = true;
-	std::string t(text);
-	take_lines(t, true, list, st, stop, usual);
+	take_block(text, list, st, stop, usual);
 	return st;
 }
 
@@ -289,18 +338,24 @@ ListReadStats read_list(const std::wstring &path, GameList &list, std::stop_toke
 		if (size > 0) list.reserve(static_cast<size_t>(size / 100), static_cast<size_t>(size / 2));
 		_fseeki64(f, 0, SEEK_SET);
 	}
+	// blocks of 4 MB read after the rest of the block before: the whole lines are read on threads
+	constexpr size_t kBlock = 4u << 20;
 	std::string text;
-	char buf[1 << 16];
-	size_t n;
 	bool first = true;
-	while (!st.cancelled && (n = fread(buf, 1, sizeof buf, f)) > 0) {
-		size_t skip = 0;
-		if (first && n >= 3 && buf[0] == '\xEF' && buf[1] == '\xBB' && buf[2] == '\xBF') skip = 3;
+	while (!st.cancelled) {
+		const size_t had = text.size();
+		text.resize(had + kBlock);
+		const size_t n = fread(text.data() + had, 1, kBlock, f);
+		text.resize(had + n);
+		if (n == 0) break;
+		if (first && text.size() >= 3 && text.compare(0, 3, "\xEF\xBB\xBF") == 0) text.erase(0, 3);
 		first = false;
-		text.append(buf + skip, n - skip);
-		take_lines(text, false, list, st, stop, usual);
+		const size_t end = text.rfind('\n');
+		if (end == std::string::npos) continue;
+		take_block(std::string_view(text).substr(0, end + 1), list, st, stop, usual);
+		text.erase(0, end + 1);
 	}
-	if (!st.cancelled) take_lines(text, true, list, st, stop, usual);
+	if (!st.cancelled && !text.empty()) take_block(text, list, st, stop, usual);
 	fclose(f);
 	return st;
 }
@@ -323,17 +378,42 @@ bool write_list(const std::wstring &path, const GameList &list)
 	return fclose(f) == 0 && ok;
 }
 
+// Shorter games first, then by the moves in the order of their names; the same games keep their order. Each game
+// gets a key of its length and first 7 moves (most comparisons end there); the parts are sorted on threads and
+// merged.
 void sort_list(GameList &list)
 {
-	std::vector<std::uint32_t> order(list.size());
-	std::iota(order.begin(), order.end(), 0u);
-	std::stable_sort(order.begin(), order.end(), [&](std::uint32_t a, std::uint32_t b) {
-		const auto x = list.moves(a), y = list.moves(b);
-		if (x.size() != y.size()) return x.size() < y.size();
-		for (size_t k = 0; k < x.size(); ++k)
-			if (x[k] != y[k]) return name_key(x[k]) < name_key(y[k]);
-		return false;
+	const size_t n = list.size();
+	struct Item {
+		std::uint64_t key;
+		std::uint32_t index;
+	};
+	std::vector<Item> items(n);
+	in_parts(n, parts_for(n), [&](size_t b, size_t e, unsigned) {
+		for (size_t i = b; i < e; ++i) {
+			const auto m = list.moves(i);
+			std::uint64_t key = static_cast<std::uint64_t>(m.size()) << 56;
+			for (size_t k = 0; k < 7 && k < m.size(); ++k) key |= static_cast<std::uint64_t>(name_key(m[k])) << (48 - 8 * k);
+			items[i] = {key, static_cast<std::uint32_t>(i)};
+		}
 	});
+	auto less = [&](const Item &a, const Item &b) {
+		if (a.key != b.key) return a.key < b.key;
+		const auto x = list.moves(a.index), y = list.moves(b.index);
+		for (size_t k = 7; k < x.size(); ++k)
+			if (x[k] != y[k]) return name_key(x[k]) < name_key(y[k]);
+		return a.index < b.index;
+	};
+	const unsigned k = parts_for(n);
+	std::vector<size_t> cut(k + 1);
+	for (unsigned p = 0; p <= k; ++p) cut[p] = n * p / k;
+	in_parts(n, k, [&](size_t b, size_t e, unsigned) { std::sort(items.begin() + b, items.begin() + e, less); });
+	// the sorted parts merged two by two
+	for (unsigned w = 1; w < k; w *= 2)
+		for (unsigned p = 0; p + w < k; p += 2 * w)
+			std::inplace_merge(items.begin() + cut[p], items.begin() + cut[p + w], items.begin() + cut[std::min(k, p + 2 * w)], less);
+	std::vector<std::uint32_t> order(n);
+	for (size_t i = 0; i < n; ++i) order[i] = items[i].index;
 	list.reorder(order);
 }
 
@@ -496,24 +576,6 @@ int drawn_pick(unsigned sym, std::uint64_t r)
 	return 0;
 }
 
-// Work over many games is split into parts on threads: each part has at least 65,536 games, at most 8 threads
-// (the work of a moment; the engines keep the rest of the CPU).
-unsigned parts_for(size_t n)
-{
-	const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
-	return static_cast<unsigned>(std::clamp<size_t>(n / 65536, 1, std::min(8u, hw)));
-}
-
-template <class F>
-void in_parts(size_t n, unsigned k, F f)
-{
-	if (k <= 1) {
-		f(size_t{0}, n, 0u);
-		return;
-	}
-	std::vector<std::jthread> threads;
-	for (unsigned part = 0; part < k; ++part) threads.emplace_back(f, n * part / k, n * (part + 1) / k, part);
-}
 
 // The list made again from new moves of every game (`make(i, out)`), in parts; false when stopped (the list
 // stays as it was).

@@ -1,11 +1,13 @@
 // Tests of the game list (reading, writing, sorting, joining, cutting, shuffling, orientations, searching),
 // the symmetries, the bitboards and the line found without the book; then timings on a large list.
 // Arguments: the game files of the test books (one game a line).
+#include <algorithm>
 #include <bit>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <numeric>
 #include <random>
 #include <set>
 #include <sstream>
@@ -337,6 +339,63 @@ static void test_parts()
 		if (l.moves(i).size() >= 6 && play_all(l.start(i), l.moves(i), 6) == target) ++plain;
 	CHECK(hits.size() == plain && plain >= 1);
 	for (size_t k = 1; k < hits.size(); ++k) CHECK(hits[k - 1].game < hits[k].game);  // in the order of the list
+
+	// sorting in parts: the order of a plain stable sort (games of every length, the same moves from another start
+	// keep their order)
+	GameList s;
+	for (int i = 0; i < 100000; ++i) {
+		const auto g = random_game(rng, 1 + static_cast<int>(rng() % 60));
+		s.add(Position{}, g);
+		if (i % 7 == 0) s.add(symmetric(Position{}, 1), g);
+		if (i % 11 == 0) s.add(Position{}, g);
+	}
+	std::vector<std::uint32_t> want(s.size());
+	std::iota(want.begin(), want.end(), 0u);
+	auto key = [](int sq) { return (sq & 7) * 8 + (sq >> 3); };
+	std::stable_sort(want.begin(), want.end(), [&](std::uint32_t a, std::uint32_t b) {
+		const auto x = s.moves(a), y = s.moves(b);
+		if (x.size() != y.size()) return x.size() < y.size();
+		for (size_t k = 0; k < x.size(); ++k)
+			if (x[k] != y[k]) return key(x[k]) < key(y[k]);
+		return false;
+	});
+	GameList sorted = s;
+	sort_list(sorted);
+	bool same_order = sorted.size() == s.size();
+	for (size_t i = 0; i < s.size() && same_order; ++i)
+		same_order = list_line(sorted.start(i), sorted.moves(i)) == list_line(s.start(want[i]), s.moves(want[i]));
+	CHECK(same_order);
+
+	// reading in parts (more than 1 MB of text): the games of the list, in order (games from the other start are
+	// turned with it, so that they can be played)
+	GameList rl;
+	for (int i = 0; i < 100000; ++i) {
+		auto g = random_game(rng, 1 + static_cast<int>(rng() % 60));
+		if (i % 7 == 0) {
+			for (auto &m : g) m = static_cast<std::uint8_t>(symmetric_square(m, 1));
+			rl.add(symmetric(Position{}, 1), g);
+		} else {
+			rl.add(Position{}, g);
+		}
+	}
+	s = std::move(rl);
+	std::string text;
+	for (size_t i = 0; i < s.size(); ++i) text += list_line(s.start(i), s.moves(i)) + (i % 3 ? "\n" : "\r\n");
+	CHECK(text.size() > (2u << 20));
+	GameList r1;
+	const ListReadStats st1 = read_list_text(text, r1);
+	const std::wstring path = (std::filesystem::temp_directory_path() / "ng_list_parts.txt").wstring();
+	CHECK(write_list(path, s));
+	GameList r2;
+	const ListReadStats st2 = read_list(path, r2);
+	std::filesystem::remove(path);
+	bool read_same = r1.size() == s.size() && r2.size() == s.size() && st1.games == s.size() && st2.games == s.size() &&
+	                 st1.cut == 0 && st2.cut == 0;
+	for (size_t i = 0; i < s.size() && read_same; ++i) {
+		const std::string w = list_line(s.start(i), s.moves(i));
+		read_same = list_line(r1.start(i), r1.moves(i)) == w && list_line(r2.start(i), r2.moves(i)) == w;
+	}
+	CHECK(read_same);
 }
 
 // timings on a large list of random games
