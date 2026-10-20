@@ -45,7 +45,7 @@ menu.learn.fix=重新连接 link（book fix）
 menu.learn.stop=停止学习…
 menu.learn.continue=从中途保存继续…
 menu.engine=引擎(&E)
-menu.engine.nikque=nikque.18 系
+menu.engine.nikque=nikque 系
 menu.engine.newedax=newedax 系
 menu.engine.restart=重新启动
 menu.engine.version=将版本输出到日志
@@ -85,6 +85,7 @@ bar.discs=黑{0} 白{1}
 bar.game_over=终局
 bar.no_engine=无引擎
 bar.loading=正在读取 book
+bar.old_engine=无 book 分析（旧引擎）
 bar.book_off=不使用 book
 bar.opening_hidden=（定式名）
 bar.accuracy=book 的精度
@@ -166,7 +167,7 @@ action.right_click=右键：后退一步
 help.keys_change=按键可在 config.ini 的 [keys] 中更改（例：back=Left, Backspace）。
 help.about=nikque GUI {0}\n\nMIT License\n引擎（Edax nikque、newedax）为 GPL，作为独立程序运行。
 
-engine.nikque=nikque.18
+engine.nikque=nikque
 engine.newedax=newedax
 engine.main=主引擎
 engine.search=仅搜索引擎
@@ -174,6 +175,7 @@ engine.search=仅搜索引擎
 log.engine_lost=无法向{0}发送命令
 log.no_exe=找不到引擎：{0}
 log.no_eval=找不到评价文件：{0}
+log.old_engine=主引擎（{0}）是不支持 book 分析命令（book moveinfo 等）的旧版本。棋盘上的 book 值、树与 book 标签页不会显示。请使用 v4.5.5-nikque.19 或 newedax.4 以后的版本。
 log.start_failed=无法启动引擎：{0}（{1}）
 log.engine_started=已启动{0}：{1}（book：{2}）
 log.no_book=不读取
@@ -182,7 +184,7 @@ log.analysis_error=分析命令出错：{0}
 log.engine_ended={0}已结束（引擎 → 重新启动）
 
 err.d2d=无法开始画面绘制（Direct2D）。
-err.book_form2=此 book 为 newedax 的形式 2（NEDXBOOK）。nikque.18 无法读取，因此不启动主引擎。
+err.book_form2=此 book 为 newedax 的形式 2（NEDXBOOK）。nikque 系（C 版）无法读取，因此不启动主引擎。
 
 learn.busy=正在学习。请等待结束或停止后再进行。
 learn.no_engine=主引擎未运行。

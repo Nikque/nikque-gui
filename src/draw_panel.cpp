@@ -801,6 +801,7 @@ void draw_bar(App &app)
 	if (!app.eng_[0].version.empty()) eng += L" " + app.eng_[0].version;
 	eng += L"  Lv" + std::to_wstring(app.level_);
 	if (!app.eng_[0].alive && !app.eng_[1].alive) eng += L"  " + lang::t("bar.no_engine");
+	else if (app.eng_[0].alive && app.eng_[0].old) eng += L"  " + lang::t("bar.old_engine");
 	else if (app.use_book_ && app.eng_[0].alive && !app.eng_[0].loaded) eng += L"  " + lang::t("bar.loading");
 	if (!app.use_book_) eng += L"  " + lang::t("bar.book_off");
 	// the opening name (a click hides it; hidden, a short mark stays to click again)

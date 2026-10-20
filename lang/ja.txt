@@ -45,7 +45,7 @@ menu.learn.fix=link を張り直す（book fix）
 menu.learn.stop=学習を止める…
 menu.learn.continue=途中保存から続ける…
 menu.engine=エンジン(&E)
-menu.engine.nikque=nikque.18 系
+menu.engine.nikque=nikque 系
 menu.engine.newedax=newedax 系
 menu.engine.restart=起動し直す
 menu.engine.version=版をログに出す
@@ -85,6 +85,7 @@ bar.discs=黒{0} 白{1}
 bar.game_over=終局
 bar.no_engine=エンジンなし
 bar.loading=book を読み込み中
+bar.old_engine=book の解析なし（古いエンジン）
 bar.book_off=book を使わない
 bar.opening_hidden=（定石名）
 bar.accuracy=book の精度
@@ -166,7 +167,7 @@ action.right_click=右クリック：1 手戻る
 help.keys_change=キーは config.ini の [keys] で変えられます（例：back=Left, Backspace）。
 help.about=nikque GUI {0}\n\nMIT License\nエンジン（Edax nikque・newedax）は GPL で、別のプログラムとして動きます。
 
-engine.nikque=nikque.18
+engine.nikque=nikque
 engine.newedax=newedax
 engine.main=主のエンジン
 engine.search=探索だけのエンジン
@@ -174,6 +175,7 @@ engine.search=探索だけのエンジン
 log.engine_lost={0}に命令を送れませんでした
 log.no_exe=エンジンが見つかりません：{0}
 log.no_eval=評価ファイルが見つかりません：{0}
+log.old_engine=主のエンジン（{0}）は book の解析の命令（book moveinfo など）を知らない古い版です。盤の book の値・木・book のタブは出ません。v4.5.5-nikque.19・newedax.4 以降を使ってください。
 log.start_failed=エンジンを起動できませんでした：{0}（{1}）
 log.engine_started={0}を起動しました：{1}（book：{2}）
 log.no_book=読まない
@@ -182,7 +184,7 @@ log.analysis_error=解析の命令の誤り：{0}
 log.engine_ended={0}が終わりました（エンジン → 起動し直す）
 
 err.d2d=画面の描画（Direct2D）を始められませんでした。
-err.book_form2=この book は newedax の形 2（NEDXBOOK）です。nikque.18 では読めないので、主のエンジンを起動しません。
+err.book_form2=この book は newedax の形 2（NEDXBOOK）です。nikque 系（C 版）では読めないので、主のエンジンを起動しません。
 
 learn.busy=学習の途中です。終わるか、止めてから行ってください。
 learn.no_engine=主のエンジンが動いていません。

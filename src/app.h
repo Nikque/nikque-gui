@@ -282,6 +282,8 @@ struct EngineSlot {
 	int ping_id = 0;                   // the echo marker the engine has not answered yet (watch)
 	std::chrono::steady_clock::time_point ping_sent{};
 	std::wstring version;              // from "Edax version ..."
+	int probe_id = 0;                  // "stop id=<n>" sent first, not answered yet ("@cancel id=<n>": the book analyses are known)
+	bool old = false;                  // the version came before that answer: an engine without the book analyses
 	std::wstring error;
 };
 

@@ -45,7 +45,7 @@ menu.learn.fix=Relink the book (book fix)
 menu.learn.stop=Stop learning…
 menu.learn.continue=Continue from the file saved on the way…
 menu.engine=&Engine
-menu.engine.nikque=nikque.18 type
+menu.engine.nikque=nikque type
 menu.engine.newedax=newedax type
 menu.engine.restart=Restart
 menu.engine.version=Version to the log
@@ -85,6 +85,7 @@ bar.discs=Black {0} White {1}
 bar.game_over=Game over
 bar.no_engine=No engine
 bar.loading=Reading the book
+bar.old_engine=No book analyses (old engine)
 bar.book_off=Book not used
 bar.opening_hidden=(opening)
 bar.accuracy=Book accuracy
@@ -166,7 +167,7 @@ action.right_click=Right click: one move back
 help.keys_change=Keys can be changed in config.ini, [keys] (for example back=Left, Backspace).
 help.about=nikque GUI {0}\n\nMIT License\nThe engines (Edax nikque, newedax) are GPL and run as separate programs.
 
-engine.nikque=nikque.18
+engine.nikque=nikque
 engine.newedax=newedax
 engine.main=Main engine
 engine.search=Search engine
@@ -174,6 +175,7 @@ engine.search=Search engine
 log.engine_lost=Could not send a command to the {0}
 log.no_exe=Engine not found: {0}
 log.no_eval=Evaluation file not found: {0}
+log.old_engine=The main engine ({0}) does not know the book analyses (book moveinfo and the others): the book values, the tree and the book tab stay empty. Use v4.5.5-nikque.19 or newedax.4 or later.
 log.start_failed=Could not start the engine: {0} ({1})
 log.engine_started={0} started: {1} (book: {2})
 log.no_book=none
@@ -182,7 +184,7 @@ log.analysis_error=Error in an analysis command: {0}
 log.engine_ended={0} has ended (Engine → Restart)
 
 err.d2d=Could not start the drawing (Direct2D).
-err.book_form2=This book is form 2 of newedax (NEDXBOOK). nikque.18 cannot read it, so the main engine is not started.
+err.book_form2=This book is form 2 of newedax (NEDXBOOK). The nikque engine (C version) cannot read it, so the main engine is not started.
 
 learn.busy=Learning is in progress. Wait for its end or stop it first.
 learn.no_engine=The main engine is not running.

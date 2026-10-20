@@ -168,6 +168,14 @@ void App::start_engines()
 			log(lang::f("log.start_failed", {exe, err}));
 			continue;
 		}
+		s.old = false;
+		s.probe_id = 0;
+		if (role == 0) {
+			// first: an engine with the book analyses answers "@cancel id=<n> state=none" at once, before the version;
+			// an engine without them reads a "stop" with nothing to drop yet
+			s.probe_id = next_id_++;
+			send(0, "stop id=" + std::to_string(s.probe_id) + "\n");
+		}
 		send(role, "mode 3\n");
 		if (role == 0) send(0, learn_options_commands());  // the settings of book learning
 		s.version.clear();
@@ -449,6 +457,10 @@ void App::on_engine(WPARAM tag, bool ended)
 			const Fields f(line);
 			const int id = static_cast<int>(f.num("id").value_or(-1));
 			if (role == 1) continue;  // the search engine is asked no book analysis
+			if (s.probe_id && id == s.probe_id) {
+				s.probe_id = 0;  // the book analyses are known
+				continue;
+			}
 			if (!s.loaded) {
 				s.loaded = true;
 				changed = true;
@@ -561,6 +573,11 @@ void App::on_engine(WPARAM tag, bool ended)
 			std::string v = line.substr(13);
 			if (const size_t f = v.find(" for "); f != std::string::npos) v.resize(f);
 			s.version = widen(v);
+			if (role == 0 && s.probe_id) {
+				s.probe_id = 0;
+				s.old = true;
+				log(lang::f("log.old_engine", {engine_exe()}));
+			}
 			changed = true;
 			continue;
 		}
