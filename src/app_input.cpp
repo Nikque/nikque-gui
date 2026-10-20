@@ -79,13 +79,14 @@ void App::do_action(Action a)
 			position_changed();
 			break;
 		}
-		if (play_mode_ == PlayMode::Engines) set_play_mode(PlayMode::Free);
+		leave_engines_game();
 		if (game_.back()) position_changed();
 		break;
 	case Action::Forward:
 		if (game_.forward()) position_changed();
 		break;
 	case Action::Back10:
+		leave_engines_game();
 		for (int i = 0; i < 10 && game_.back(); ++i) {}
 		position_changed();
 		break;
@@ -94,6 +95,7 @@ void App::do_action(Action a)
 		position_changed();
 		break;
 	case Action::Start:
+		leave_engines_game();
 		game_.go_to(0);
 		position_changed();
 		break;
@@ -150,6 +152,11 @@ void App::do_action(Action a)
 	case Action::EditBoard: on_command(cmd::EditBoard); break;
 	default: break;
 	}
+}
+
+void App::leave_engines_game()
+{
+	if (play_mode_ == PlayMode::Engines) set_play_mode(PlayMode::Free);
 }
 
 void App::on_key(WPARAM vk)
@@ -296,7 +303,7 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 			}
 		for (auto &[s, r] : row_rects_)
 			if (inside(r, fx, fy)) {
-				if (dbl && game_.play(s)) {
+				if (dbl && !com_turn() && game_.play(s)) {  // not on the computer's move
 					selected_sq_ = kNoMove;
 					position_changed();
 				} else {
@@ -309,7 +316,9 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 	if (tab_ == Tab::Book) {
 		for (auto &[k, r] : missing_rects_)
 			if (inside(r, fx, fy) && k < static_cast<int>(missing_.lines.size())) {
-				// to the position where the leaf is to be added
+				// to the position where the leaf is to be added (not in a game against the computer: the moves of both
+				// sides would be played, as by the tree)
+				if (play_mode_ != PlayMode::Free) return;
 				for (const int mv : missing_.lines[k].moves)
 					if (mv != kPass) game_.play(mv);
 				selected_sq_ = kNoMove;
@@ -320,6 +329,7 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 	if (tab_ == Tab::Record) {
 		for (auto &[n, r] : record_rects_)
 			if (inside(r, fx, fy)) {
+				leave_engines_game();
 				game_.go_to(n);
 				position_changed();
 				return;
@@ -355,6 +365,7 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 	}
 	if (inside(lay_.graph, fx, fy) && graph_plot_.right > graph_plot_.left) {
 		// to the position nearest to the place clicked
+		leave_engines_game();
 		const int ply = static_cast<int>(std::lround((fx - graph_plot_.left) / (graph_plot_.right - graph_plot_.left) * 60));
 		int best = 0;
 		for (int i = 0; i <= game_.size(); ++i)
@@ -704,8 +715,21 @@ void App::on_command(int id)
 		invalidate();
 		break;
 	case cmd::Recompute:
+		// the analyses in progress stop first: the rest of their answers would come to the positions cleared
+		if (!learning_) send(0, stop_main_analyses());
+		if (hint_busy_) {
+			send(1, "stop\n");
+			forget_engine_state(1);
+			hint_busy_ = hint_accept_ = false;
+		}
+		if (cmp_busy_) {
+			send(4, "stop\n");
+			forget_engine_state(4);
+			cmp_busy_ = cmp_accept_ = false;
+		}
 		cache_.clear_search();
 		cache_.clear_book();
+		missing_ = MissingList{};
 		request_analysis();
 		invalidate();
 		break;
@@ -728,10 +752,7 @@ void App::on_command(int id)
 		position_changed();
 		break;
 	case cmd::ReloadBook:
-		cache_.clear_book();
-		eng_[0].proc.close();
-		start_engines();
-		position_changed();
+		if (!refuse_while_learning()) restart_main_engine();
 		break;
 	case cmd::BaseDeviate:
 	case cmd::BaseDeviate2:
@@ -768,7 +789,7 @@ void App::on_command(int id)
 	case cmd::EngineNikque:
 	case cmd::EngineNewedax: {
 		const EngineKind k = id == cmd::EngineNewedax ? EngineKind::Newedax : EngineKind::Nikque18;
-		if (k == kind_) break;
+		if (k == kind_ || refuse_while_learning()) break;
 		if (MessageBoxW(hwnd_, lang::t("ask.switch_engine").c_str(), lang::t("app.title").c_str(),
 		                MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
 			break;

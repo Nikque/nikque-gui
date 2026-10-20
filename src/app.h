@@ -355,7 +355,7 @@ public:
 	std::wstring tool_label_;
 	std::chrono::steady_clock::time_point tool_t0_{};
 	int hash_bits_ = 0;        // hash-table-size given to the engines (0: their own)
-	int next_id_ = 1;
+	int next_id_ = 0;          // the number of the last request (new_id)
 	std::unordered_map<int, Request> requests_;
 	int book_id_ = 0, count_id_ = 0, levels_id_ = 0, best_id_ = 0;   // running on the main engine
 	std::wstring best_file_;   // the file the best lines are written to (book bestlines file=)
@@ -476,6 +476,8 @@ public:
 	PosKey com_once_pos_{};          // the position it was asked in (played there only)
 	bool com_thinking_ = false;      // the play engine searches a move
 	bool com_pondering_ = false;
+	int com_marker_id_ = 0;          // the echo marker sent before the "go" in progress
+	bool com_accept_ = false;        // its answer came: a move now is the answer of this "go"
 	PosKey com_pos_{};
 	int com_book_move_ = kNoMove;    // a book move to play when the timer comes
 	bool game_end_done_ = false;     // the end of this game handled
@@ -549,6 +551,7 @@ public:
 	void on_command(int id);
 	void do_action(Action a);
 	void position_changed();
+	void leave_engines_game();  // the person moves the board: the computer on both sides stops (as with the left arrow)
 	void copy_moves();
 	void paste_moves();
 	bool paste_text(const std::string &utf8);  // moves, a board or bitboards; false when none
@@ -560,6 +563,8 @@ public:
 	void start_engines();
 	void stop_engines();
 	void restart_engines();
+	void restart_main_engine();    // the main engine alone (another book, the book read again)
+	bool refuse_while_learning();  // while the book learns: says so and returns true (the engine is not closed)
 	void on_engine(WPARAM tag, bool ended);
 	void request_analysis();
 	void request_levels();
@@ -588,6 +593,12 @@ public:
 	void learning_ended();
 	void forget_engine_state(int role);  // after "stop": the position and level sent before are unknown
 	void send_hint(const Position &p, bool background);
+	int new_id();                     // the number of a request (id=, echo markers): 1 .. kMaxRequestId, again from 1
+	void forget_main_requests();      // the main engine closed: its requests and the analyses asked of it go
+	std::string stop_main_analyses(); // the book analyses in progress stop ("stop id=" lines to send), their answers dropped
+	// the options of an engine without the book (an empty book of its own in the temporary folder); none when the
+	// engine could not open that name
+	std::optional<std::wstring> nobook_args(const wchar_t *name) const;
 	void compute_line();
 	std::string book_params() const;
 	std::wstring engine_dir() const { return engine_dir(kind_); }
@@ -697,6 +708,7 @@ public:
 	void schedule_script();  // pump_script later, from the message loop (never inside the reading of an engine's answers)
 	bool script_command(const std::string &line, int depth, std::wstring *error);
 	bool script_waiting() const;
+	bool script_condition() const;  // what the script waits for has not come (its time not looked at)
 };
 
 // drawing (draw_board.cpp, draw_panel.cpp)

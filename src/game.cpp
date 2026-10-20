@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <charconv>
 #include <cstdio>
 
 namespace ng {
@@ -202,24 +203,31 @@ std::optional<std::vector<int>> parse_param_lines(std::string_view text)
 		const size_t q2 = q1 == std::string_view::npos ? q1 : text.find('"', q1 + 1);
 		if (q2 == std::string_view::npos) return std::nullopt;
 		const std::string_view v = text.substr(q1 + 1, q2 - q1 - 1);
-		// numbers separated by anything, or 8 cells of 2 digits written together
+		// numbers separated by anything, or 8 cells of 2 digits written together; a number too large for an int is
+		// no number of a move: no board
 		std::vector<int> nums;
 		std::string digits;
 		bool separated = false;
+		auto push = [&nums](std::string_view d) {
+			int x = 0;
+			if (std::from_chars(d.data(), d.data() + d.size(), x).ec != std::errc()) return false;
+			nums.push_back(x);
+			return true;
+		};
 		for (char c : v) {
 			if (c >= '0' && c <= '9') digits += c;
 			else {
 				separated = true;
-				if (!digits.empty()) nums.push_back(std::stoi(digits));
+				if (!digits.empty() && !push(digits)) return std::nullopt;
 				if (c != ' ' && c != ',' && c != '\t' && digits.empty()) nums.push_back(0);  // a mark for a first disc
 				digits.clear();
 			}
 		}
 		if (!digits.empty()) {
 			if (!separated && digits.size() == 16) {
-				for (int i = 0; i < 8; ++i) nums.push_back(std::stoi(digits.substr(i * 2, 2)));
-			} else {
-				nums.push_back(std::stoi(digits));
+				for (int i = 0; i < 8; ++i) push(std::string_view(digits).substr(i * 2, 2));
+			} else if (!push(digits)) {
+				return std::nullopt;
 			}
 		}
 		if (nums.size() != 8) return std::nullopt;

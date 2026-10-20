@@ -1,0 +1,19 @@
+# C: a new game while the computer thinks: the move of the search stopped is not taken for the new position (the
+# computer used to stop there, or to play that move), the computer plays the new game to its end
+log s24 start
+engine newedax
+wait 40
+comlevel 2
+opening search
+clock 0
+game engines 1
+comlevel 30
+waitgame 1
+comlevel 2
+new
+waitgame 30
+keep
+screenshot s24-01-new.png
+game free
+savelog s24-log.txt
+quit

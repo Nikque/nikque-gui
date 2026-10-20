@@ -823,7 +823,8 @@ void draw_bar(App &app)
 	std::wstring eng = app.engine_name();
 	if (!app.eng_[0].version.empty()) eng += L" " + app.eng_[0].version;
 	eng += L"  Lv" + std::to_wstring(app.level_);
-	if (!app.eng_[0].alive && !app.eng_[1].alive) eng += L"  " + lang::t("bar.no_engine");
+	if (!app.eng_[0].alive && !app.eng_[0].error.empty()) eng += L"  " + lang::t("bar.book_name");
+	else if (!app.eng_[0].alive && !app.eng_[1].alive) eng += L"  " + lang::t("bar.no_engine");
 	else if (app.eng_[0].alive && app.eng_[0].old) eng += L"  " + lang::t("bar.old_engine");
 	else if (app.use_book_ && app.eng_[0].alive && !app.eng_[0].loaded) eng += L"  " + lang::t("bar.loading");
 	if (!app.use_book_) eng += L"  " + lang::t("bar.book_off");

@@ -151,7 +151,7 @@ static constexpr int kOtherStart = 1;
 
 void App::send_findline()
 {
-	findline_id_ = next_id_++;
+	findline_id_ = new_id();
 	const Position target = symmetric(findline_target_, findline_sym_);
 	const std::string t = target.to_board_string();  // "<64> X": the side right after the squares
 	std::string out = "setboard " + Position{}.to_board_string() + "\n";

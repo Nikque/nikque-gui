@@ -447,7 +447,7 @@ bool App::ask_book_lines(int loss, int depth, int n, bool add)
 	std::string out = "setboard " + game_.start().to_board_string() + "\n";
 	if (!moves.empty()) out += "play " + moves + "\n";
 	eng_[0].board = key_of(game_.now());
-	const int id = next_id_++;
+	const int id = new_id();
 	out += "book bestlines id=" + std::to_string(id) + " loss=" + std::to_string(std::clamp(loss, 0, 129)) +
 	       " depth=" + std::to_string(std::clamp(depth, 1, 60)) + " solved=stop which=all file=\"" + *path + "\"\n";
 	requests_[id] = {add ? Request::ListBookAdd : Request::ListBook, key_of(game_.now()), 0};
@@ -471,9 +471,13 @@ void App::list_book_written(bool add, bool ok)
 	const int limit = list_book_limit_;
 	const Position start = list_book_start_;
 	run_task(lang::t("menu.list.book"), [this, nl, file, add, limit, start](std::stop_token st) -> std::function<void()> {
-		read_list(file, *nl, st, start);
+		const bool cancelled = read_list(file, *nl, st, start).cancelled;
 		DeleteFileW(file.c_str());
-		return [this, nl, add, limit] {
+		return [this, nl, add, limit, cancelled] {
+			if (cancelled) {  // (the parts read in on threads stop half way each: nothing is added)
+				log(lang::t("task.cancelled"));
+				return;
+			}
 			const size_t n = std::min<size_t>(nl->size(), static_cast<size_t>(limit));
 			if (!add) {
 				list_.clear();

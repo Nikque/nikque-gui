@@ -86,6 +86,7 @@ bar.game_over=终局
 bar.no_engine=无引擎
 bar.loading=正在读取 book
 bar.old_engine=无 book 分析（旧引擎）
+bar.book_name=无法传递 book 位置
 bar.book_off=不使用 book
 bar.opening_hidden=（定式名）
 bar.accuracy=book 的精度
@@ -305,6 +306,8 @@ tool.estimate.n=随机下完的次数
 command.label=命令
 command.note=用 | 分隔可输入多条。从当前局面执行，结束前分析暂停
 err.engine_path=无法把此文件位置传给引擎（含空格或引擎无法读取的字符，且没有短文件名）：\n{0}
+err.book_name=无法把此 book 位置传给引擎（按系统代码页超过 252 字节或含有其中没有的字符，且没有短文件名；引擎会打开别的 book，因此不启动主引擎）：{0}
+err.engine_name=无法把此文件位置传给引擎（过长或含有系统代码页中没有的字符，且没有短文件名）：{0}
 
 # 棋谱文件（base）
 menu.base=棋谱文件（base）
@@ -526,6 +529,7 @@ menu.io.script_stop=停止命令序列
 script.started=已开始命令序列：{0}（{1} 行）
 script.stopped=已停止命令序列
 script.error=已停止命令序列（{0}：{1}）
+script.wait_timeout=已停止等待（超时）
 script.cannot_open=无法打开命令序列文件：{0}
 script.too_deep=命令序列中的 run 最多 {0} 层
 script.unknown=未知命令

@@ -131,19 +131,13 @@ void App::start_learning(const std::string &command)
 // the commands (one or more lines) from the position after `moves` from `start`
 void App::start_learning_at(const std::string &command, const Position &start, const std::string &moves)
 {
-	std::string out;
 	// the analyses of the main engine stop here (the engine also stops them before a command changing the book)
-	for (int *id : {&book_id_, &count_id_, &levels_id_, &best_id_, &graph_id_, &missing_id_})
-		if (*id) {
-			out += "stop id=" + std::to_string(*id) + "\n";
-			requests_.erase(*id);
-			*id = 0;
-		}
+	std::string out = stop_main_analyses();
 	out += "setboard " + start.to_board_string() + "\n";
 	if (!moves.empty()) out += "play " + moves + "\n";
 	eng_[0].board.reset();
 	out += command + "\n";
-	learn_end_id_ = next_id_++;
+	learn_end_id_ = new_id();
 	out += "echo M" + std::to_string(learn_end_id_) + "\n";  // answered when the command has ended
 	learning_ = true;
 	learn_cmd_ = command;
@@ -218,9 +212,7 @@ void App::stop_learning()
 	queue_running_ = false;  // the jobs left stay in the queue
 	learn_end_id_ = 0;
 	learn_progress_.clear();
-	for (auto it = requests_.begin(); it != requests_.end();) it = it->second.engine == 0 ? requests_.erase(it) : std::next(it);
-	book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = findline_id_ = list_book_id_ = 0;
-	missing_ = MissingList{};
+	forget_main_requests();
 	cache_.clear_book();
 	log(lang::t("learn.stopped"));
 	finish_moves(0);

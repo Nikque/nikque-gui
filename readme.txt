@@ -123,10 +123,11 @@ Ntest の形は「空き 手番の側の石 手番」。
   play <手>                今の局面から打つ
   new / goto <n|end> / back [n] / forward [n]
   book on|off / eval on|off / numbers on|off / level <n> / umi best|loss|off
+  book reload              book を読み直す（主のエンジンを起動し直す）
   engine nikque18|newedax / design standard|paw / effects on|subdued|off
   tab moves|book|record|list|kept|tree / rotate <0-7> / cellinfo none|positions|level|stage|umi
   lang ja|en|zh-Hans|zh-Hant
-  wait [秒]                今の局面の解析が終わるまで待つ（既定 30 秒まで）
+  wait [秒]                今の局面の解析が終わるまで待つ（既定 30 秒まで。時間で終わったときはログに出る）
   estimate                 盤から手順を推定する
   keep                     今の手順を控える
   screenshot [ファイル]    画面を PNG に
@@ -143,9 +144,10 @@ Ntest の形は「空き 手番の側の石 手番」。
   game free|black|white|engines [数]  対局を始める（black は人が黒）
   comlevel <n> / clock <分> / ponder on|off / opening search|best|wide [幅] [手数]
   go                       コンピューターに 1 手打たせる / takeback  待った
-  waitgame [秒]            対局が終わるまで待つ（コンピューターどうしは全部の対局）
+  waitgame [秒]            対局が終わるまで待つ（コンピューターどうしは全部の対局。時間で終わったときはログに出る）
   compare on|off           比べるモード
   tree open|close|go <手順>  木の段を開く・閉じる・その局面へ（手順は根から） / tree root  今の局面を根に
+  tree toggle <手順>       行の ▸ ／ ▾ と同じ（その段だけを開く・閉じる）
   log <文字> / quit
 
 8. config.ini の主な項目
@@ -279,9 +281,10 @@ The search finds the games where this position appears (other orientations too);
 A UTF-8 text file with one command a line, run with Input/Output → Run a command script. The script run at
 the start is set in [script] startup= of config.ini. Lines starting with # are notes. A command that starts
 work waits for its end. Relative names are from the script's folder. The commands are listed in the
-Japanese part above (moves, board, play, new, goto, back, forward, book, eval, numbers, level, umi, engine,
-design, effects, tab, rotate, cellinfo, lang, wait, estimate, keep, screenshot, savelog, list ..., search,
+Japanese part above (moves, board, play, new, goto, back, forward, book, book reload, eval, numbers, level, umi,
+engine, design, effects, tab, rotate, cellinfo, lang, wait, estimate, keep, screenshot, savelog, list ..., search,
 learn, edax, tool, run, game, comlevel, clock, ponder, opening, go, takeback, waitgame, compare, tree, log, quit).
+A wait or waitgame that ends by its time says so in the log.
 
 8. config.ini
 -------------

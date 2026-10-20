@@ -80,6 +80,76 @@ static void test_backward()
 	CHECK(line[pass_at - 1].played_improved && line[pass_at - 1].played == 7);
 }
 
+// the book answers cleared (another range, the book changed): the values of the search and of the other engine stay
+static void test_reset_book()
+{
+	AnalysisCache c;
+	PosInfo &info = c.get(Position{});
+	for (auto &m : info.moves) {
+		m.searched = true;
+		m.score = 3;
+		m.depth = 12;
+		m.pv = {m.sq};
+		m.cmp_searched = true;
+		m.cmp_score = -5;
+		m.cmp_depth = 14;
+		m.in_book = m.book_row = true;
+		m.stage = 4;
+	}
+	info.search_done = info.cmp_done = info.book_done = true;
+	info.search_level = info.cmp_level = 21;
+	info.reset_book();
+	CHECK(!info.book_done && info.search_done && info.search_level == 21 && info.cmp_done && info.cmp_level == 21);
+	for (const auto &m : info.moves) {
+		CHECK(!m.in_book && !m.book_row && m.stage == -1);
+		CHECK(m.searched && m.score == 3 && m.depth == 12 && m.pv.size() == 1 && m.pv[0] == m.sq);
+		CHECK(m.cmp_searched && m.cmp_score == -5 && m.cmp_depth == 14);
+	}
+}
+
+// the numbers of the requests: 1 .. 99,999 (the engines take id= up to 100,000), again from 1, the numbers in use skipped
+static void test_request_ids()
+{
+	auto none = [](int) { return false; };
+	static_assert(kMaxRequestId < 100000);
+	CHECK(next_request_id(0, none) == 1);
+	CHECK(next_request_id(41, none) == 42);
+	CHECK(next_request_id(kMaxRequestId - 1, none) == kMaxRequestId);
+	CHECK(next_request_id(kMaxRequestId, none) == 1);
+	CHECK(next_request_id(kMaxRequestId, [](int id) { return id <= 3; }) == 4);
+	CHECK(next_request_id(7, [](int id) { return id == 8 || id == 9; }) == 10);
+	// a long run of requests never goes beyond the limit
+	int id = 0;
+	bool ok = true;
+	for (int k = 0; k < 250000; ++k) {
+		id = next_request_id(id, none);
+		ok = ok && id >= 1 && id <= kMaxRequestId;
+	}
+	CHECK(ok);
+}
+
+// a blog board with a number longer than an int: no board, and nothing thrown
+static void test_param_numbers()
+{
+	auto read = [](const std::string &text, bool *threw) {
+		*threw = false;
+		try {
+			return parse_param_lines(text);
+		} catch (...) {
+			*threw = true;
+			return std::optional<std::vector<int>>{};
+		}
+	};
+	std::string text;
+	for (int row = 1; row <= 8; ++row)
+		text += "<PARAM name=\"Line" + std::to_string(row) + "\" value=\"" + (row == 3 ? "99999999999999999999" : "0,0,0,0,0,0,0,0") + "\">\n";
+	bool threw = false;
+	auto r = read(text, &threw);
+	CHECK(!threw && !r);
+	r = read("<PARAM name=\"Line1\" value=\"1,2,3,4,5,6,7,12345678901\">", &threw);
+	CHECK(!threw && !r);
+}
+
 static void test_missing()
 {
 	auto a = parse_missing_line(Fields("@line id=2 moves=d3e3 leaf=f4 value=-3 empties=58"));
@@ -148,6 +218,9 @@ int main()
 	}
 	test_backward();
 	test_missing();
+	test_reset_book();
+	test_request_ids();
+	test_param_numbers();
 	if (failures) {
 		std::printf("%d failures\n", failures);
 		return 1;

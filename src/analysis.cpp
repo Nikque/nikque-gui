@@ -21,8 +21,9 @@ const MoveEval *PosInfo::find(int sq) const
 
 void PosInfo::reset_book()
 {
+	// the values of the search and of the other engine (compare mode) stay
 	for (auto &m : moves) {
-		const MoveEval keep = m;
+		MoveEval keep = std::move(m);
 		m = MoveEval{};
 		m.sq = keep.sq;
 		m.searched = keep.searched;
@@ -30,7 +31,12 @@ void PosInfo::reset_book()
 		m.depth = keep.depth;
 		m.selectivity = keep.selectivity;
 		m.bound = keep.bound;
-		m.pv = keep.pv;
+		m.pv = std::move(keep.pv);
+		m.cmp_searched = keep.cmp_searched;
+		m.cmp_score = keep.cmp_score;
+		m.cmp_depth = keep.cmp_depth;
+		m.cmp_selectivity = keep.cmp_selectivity;
+		m.cmp_bound = keep.cmp_bound;
 	}
 	book_params.clear();
 	book_begun = book_done = in_book = count_done = false;

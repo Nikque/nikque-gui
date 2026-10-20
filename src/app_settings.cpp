@@ -269,7 +269,7 @@ void App::export_best()
 	std::string out = "setboard " + game_.start().to_board_string() + "\n";
 	if (!moves.empty()) out += "play " + moves + "\n";
 	eng_[0].board = key_of(game_.now());
-	const int id = next_id_++;
+	const int id = new_id();
 	out += "book bestlines id=" + std::to_string(id) + " loss=" + std::to_string(loss) + " depth=" +
 	       std::to_string(depth) + " solved=" + solved + " which=" + which + " file=\"" + path + "\"\n";
 	requests_[id] = {Request::BestExport, key_of(game_.now()), 0};

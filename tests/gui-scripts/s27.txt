@@ -1,0 +1,10 @@
+# A: a book whose name is longer than the engine keeps (252 bytes in the code page of the system): the engine used to
+# ignore it and read its own book (data\book.dat) without a word from the GUI; now the GUI gives a short name, or says
+# it cannot and does not start the main engine. For a config.ini whose [newedax] book= is such a name (not in
+# test_dist.ps1)
+log s27 start
+engine newedax
+wait 20
+screenshot s27-01-long-book.png
+savelog s27-log.txt
+quit

@@ -100,18 +100,22 @@ void App::run_script_file(const std::wstring &file, int depth)
 
 bool App::script_waiting() const
 {
+	if ((script_wait_ == ScriptWait::Game || script_wait_ == ScriptWait::Analysis) && std::chrono::steady_clock::now() >= script_until_)
+		return false;
+	return script_condition();
+}
+
+bool App::script_condition() const
+{
 	switch (script_wait_) {
 	case ScriptWait::Task: return task_busy_;
 	case ScriptWait::Learn: return learning_ || queue_running_;
 	case ScriptWait::Tool: return tool_busy_;
 	case ScriptWait::FindLine: return findline_id_ != 0 || task_busy_;
 	case ScriptWait::BookLines: return list_book_id_ != 0 || task_busy_;
-	case ScriptWait::Game:
-		if (std::chrono::steady_clock::now() >= script_until_) return false;
-		return play_mode_ != PlayMode::Free && !(game_end_done_ && engine_games_left_ == 0);
+	case ScriptWait::Game: return play_mode_ != PlayMode::Free && !(game_end_done_ && engine_games_left_ == 0);
 	case ScriptWait::Com: return com_thinking_ || com_book_move_ != kNoMove || com_waiting_book_;
 	case ScriptWait::Analysis: {
-		if (std::chrono::steady_clock::now() >= script_until_) return false;
 		const Position &p = game_.now();
 		if (!show_eval_ || p.game_over()) return false;
 		const PosInfo *info = cache_.peek(p);
@@ -129,6 +133,9 @@ void App::pump_script()
 	while (!script_.empty() || script_wait_ != ScriptWait::None) {
 		if (script_wait_ != ScriptWait::None) {
 			if (script_waiting()) return;
+			// a wait that ended by its time (wait, waitgame), not by what it waited for: said in the log
+			if ((script_wait_ == ScriptWait::Game || script_wait_ == ScriptWait::Analysis) && script_condition())
+				log(lang::t("script.wait_timeout"));
 			script_wait_ = ScriptWait::None;
 			KillTimer(hwnd_, 3);
 		}
@@ -211,6 +218,10 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		return true;
 	}
 	if (c == "book") {
+		if (a1 == "reload") {
+			on_command(cmd::ReloadBook);
+			return true;
+		}
 		bool v = use_book_;
 		if (!on_off(&v)) return bad("script.on_off");
 		if (v != use_book_) on_command(cmd::UseBook);

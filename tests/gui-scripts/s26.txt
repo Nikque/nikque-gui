@@ -1,0 +1,32 @@
+# A: the numbers of the requests go past 99,999 and start again from 1 (the engines take id= up to 100,000): the book
+# analyses still come. For the measuring build with [measure] first_id=99950 in config.ini (the default build starts
+# from 1 and runs the same lines)
+log s26 start
+engine newedax
+wait 40
+game free
+book on
+tab book
+moves d3e3f5e6f7c2f2c5d2
+wait 30
+back
+wait 30
+back
+wait 30
+back
+wait 30
+back
+wait 30
+back
+wait 30
+back
+wait 30
+back
+wait 30
+back
+wait 30
+forward 8
+wait 30
+screenshot s26-01-turned.png
+savelog s26-log.txt
+quit

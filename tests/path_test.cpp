@@ -67,10 +67,80 @@ static void try_in(const std::filesystem::path &base)
 	fs::remove_all(base / L"ng path test", ec);
 }
 
+// the conversion to a code page: UTF-8 takes every letter (the flags that tell a lost letter in the other code pages
+// are not allowed with it), code page 1252 has no Japanese letters
+static void test_codepage()
+{
+	const auto u = to_codepage(L"C:\\日本語 の dir\\a b.txt", CP_UTF8);
+	CHECK(u && *u == "C:\\\xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E \xE3\x81\xAE dir\\a b.txt");
+	const auto p = to_codepage(L"plain.txt", 1252);
+	CHECK(p && *p == "plain.txt");
+	CHECK(!to_codepage(L"\x65E5\x672C.txt", 1252));
+}
+
+// A name for the command line of an engine: spaces are allowed (it is quoted); a name longer than the engine keeps
+// (252 bytes in the code page of the system) becomes its short form when the drive keeps short names, else none.
+static void test_arg_path(const std::filesystem::path &base)
+{
+	namespace fs = std::filesystem;
+	const fs::path dir = base / L"ng arg test" / std::wstring(120, L'\x3042') / L"a b";  // 120 Japanese letters
+	std::error_code ec;
+	fs::create_directories(dir, ec);
+	CHECK(!ec);
+	const fs::path file = dir / L"book.dat";
+	{
+		FILE *f = nullptr;
+		_wfopen_s(&f, file.c_str(), L"wb");
+		CHECK(f);
+		if (f) {
+			std::fputs("x", f);
+			std::fclose(f);
+		}
+	}
+	const std::wstring s = file.wstring();
+	const auto a = acp(s);
+	if (!a) {
+		std::printf("%ls: the letters are not in the code page of the system\n", base.c_str());
+	} else {
+		CHECK(a->size() > 252);
+		const auto p = engine_arg_path(s, 252);
+		if (!p) {
+			std::printf("%ls: no short names on this drive (the GUI says so and does not start the engine)\n", base.c_str());
+		} else {
+			const auto b = acp(*p);
+			CHECK(b && b->size() <= 252);
+			FILE *f = nullptr;
+			_wfopen_s(&f, p->c_str(), L"rb");
+			CHECK(f);
+			if (f) {
+				CHECK(std::fgetc(f) == 'x');
+				std::fclose(f);
+			}
+			std::printf("%ls: %ls\n", base.c_str(), p->c_str());
+		}
+		// a file still to be made (the empty book of an engine without the book): the short form of its folder
+		const auto q = engine_arg_path((dir / L"nobook.dat").wstring(), 252);
+		if (q) {
+			const auto b = acp(*q);
+			CHECK(b && b->size() <= 252);
+		}
+	}
+	// a name short enough stays as it is, spaces too
+	const std::wstring plain = (base / L"a b" / L"book.dat").wstring();
+	const auto same = engine_arg_path(plain, 252);
+	CHECK(same && *same == plain);
+	fs::remove_all(base / L"ng arg test", ec);
+}
+
 int main(int argc, char **argv)
 {
+	test_codepage();
 	try_in(std::filesystem::temp_directory_path());
-	for (int i = 1; i < argc; ++i) try_in(std::filesystem::path(argv[i]));
+	test_arg_path(std::filesystem::temp_directory_path());
+	for (int i = 1; i < argc; ++i) {
+		try_in(std::filesystem::path(argv[i]));
+		test_arg_path(std::filesystem::path(argv[i]));
+	}
 	if (failures) {
 		std::printf("%d failures\n", failures);
 		return 1;

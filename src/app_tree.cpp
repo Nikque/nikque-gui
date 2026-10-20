@@ -34,7 +34,7 @@ void App::tree_sync()
 		tree_base_.go_to(cur);
 		tree_base_.truncate();
 		tree_open_.clear();
-		tree_open_.insert({});
+		tree_open_.insert(std::vector<int>{});  // the root open ("insert({})" is the insert of an empty list: nothing)
 		tree_scroll_ = 0;
 		tree_set_ = true;
 	}
@@ -122,7 +122,7 @@ void App::tree_go(const std::vector<int> &path)
 	position_changed();
 }
 
-// tree root | tree open <moves> | tree close <moves> | tree go <moves> (the moves from the root)
+// tree root | tree open <moves> | tree close <moves> | tree toggle <moves> | tree go <moves> (the moves from the root)
 bool App::tree_command(const std::vector<std::string> &w, const std::string &rest)
 {
 	if (w.size() < 2) return false;
@@ -142,6 +142,12 @@ bool App::tree_command(const std::vector<std::string> &w, const std::string &res
 			tree_open_.insert(pre);
 		} else if (what == "close") {
 			tree_open_.erase(path);
+		} else if (what == "toggle") {
+			// as the arrow of a row: that node alone opened or closed
+			TreeRow row;
+			row.path = path;
+			row.can_open = true;
+			tree_click(row, true);
 		} else if (what == "go") {
 			tree_go(path);
 		} else {

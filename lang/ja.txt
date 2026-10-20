@@ -86,6 +86,7 @@ bar.game_over=終局
 bar.no_engine=エンジンなし
 bar.loading=book を読み込み中
 bar.old_engine=book の解析なし（古いエンジン）
+bar.book_name=book の場所を渡せません
 bar.book_off=book を使わない
 bar.opening_hidden=（定石名）
 bar.accuracy=book の精度
@@ -305,6 +306,8 @@ tool.estimate.n=打ち進める回数
 command.label=命令
 command.note=| で区切ると複数。今の局面から行い、終わるまで解析は止まる
 err.engine_path=このファイルの場所は、エンジンに渡せません（空白か、エンジンの読めない文字があり、短い名前もありません）：\n{0}
+err.book_name=この book の場所は、エンジンに渡せません（システムの文字コードで 252 バイトを超えるか、無い文字があり、短い名前もありません。エンジンが別の book を開いてしまうので、主のエンジンを起動しません）：{0}
+err.engine_name=このファイルの場所は、エンジンに渡せません（長すぎるか、システムの文字コードに無い文字があり、短い名前もありません）：{0}
 
 # 棋譜のファイル（base）
 menu.base=棋譜のファイル（base）
@@ -526,6 +529,7 @@ menu.io.script_stop=命令の列を止める
 script.started=命令の列を始めました：{0}（{1} 行）
 script.stopped=命令の列を止めました
 script.error=命令の列を止めました（{0}：{1}）
+script.wait_timeout=待つのをやめました（時間切れ）
 script.cannot_open=命令の列のファイルを開けませんでした：{0}
 script.too_deep=命令の列の中の run は {0} 段までです
 script.unknown=知らない命令です

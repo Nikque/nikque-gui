@@ -105,6 +105,8 @@ int App::run(HINSTANCE inst, int show)
 	CreateDirectoryW(temp_dir_.c_str(), nullptr);
 
 	load_config();
+	// the numbers of the requests from near the end of their range (measuring build only: a test of their turn)
+	if constexpr (measure::kOn) next_id_ = ini_.get_int("measure", "first_id", 0, 0, kMaxRequestId);
 
 	WNDCLASSEXW wc{sizeof wc};
 	wc.style = CS_DBLCLKS;
@@ -769,6 +771,8 @@ void App::update_menu()
 	check(cmd::FixRecord, fixed_on_);
 	enable(cmd::LearnStop, learning_);
 	for (int id = cmd::LearnDeviate; id <= cmd::LearnJobLast; ++id) enable(id, !learning_);
+	// these close the main engine (a learning command takes no input to stop)
+	for (int id : {cmd::ReloadBook, cmd::OpenBook, cmd::EngineNikque, cmd::EngineNewedax, cmd::RestartEngines}) enable(id, !learning_);
 	enable(cmd::LearnContinue, !learning_);
 	enable(cmd::ExportBest, !learning_);
 	enable(cmd::ListFromBook, !learning_ && !task_busy_);

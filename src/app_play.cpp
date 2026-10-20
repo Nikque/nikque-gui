@@ -49,7 +49,12 @@ bool App::start_play_engine()
 		log(lang::f("log.no_exe", {exe.empty() ? engine_dir() : exe}));
 		return false;
 	}
-	const std::wstring args = engine_args() + L" -book-file \"" + temp_dir_ + L"\\nobook-play.dat\" -book-usage off";
+	const auto nb = nobook_args(L"nobook-play.dat");
+	if (!nb) {
+		log(lang::f("err.engine_name", {temp_dir_}));
+		return false;
+	}
+	const std::wstring args = engine_args() + *nb;
 	++s.generation;
 	std::wstring err;
 	s.alive = s.proc.start(exe, args, engine_dir(), hwnd_, WM_ENGINE, engine_tag(3, s.generation), &err);
@@ -83,7 +88,7 @@ bool App::com_turn() const
 void App::com_stop()
 {
 	if (com_thinking_ || com_pondering_) send(3, "stop\n");  // a move given by the stop is not played
-	com_thinking_ = com_pondering_ = false;
+	com_thinking_ = com_pondering_ = com_accept_ = false;
 	com_book_move_ = kNoMove;
 	com_waiting_book_ = false;
 	KillTimer(hwnd_, kTimerCom);
@@ -153,8 +158,12 @@ void App::com_think()
 	} else {
 		out += "level " + std::to_string(com_level_) + "\n";
 	}
-	out += "go\n";
+	// A marker before the "go": the engine plays and tells the move of a search stopped by "stop" as well, and that
+	// line comes before the answer of the marker (the lines of the engine's main loop keep their order).
+	com_marker_id_ = new_id();
+	out += "echo M" + std::to_string(com_marker_id_) + "\ngo\n";
 	com_thinking_ = true;
+	com_accept_ = false;
 	eng_[3].board.reset();
 	send(3, out);
 	invalidate();
@@ -188,10 +197,14 @@ void App::com_played(int sq)
 
 void App::play_line(const std::string &line)
 {
+	if (const int mark = echo_marker(line); mark >= 0) {
+		if (com_thinking_ && mark == com_marker_id_) com_accept_ = true;
+		return;
+	}
 	if (!line.starts_with("Edax plays ")) return;  // the lines of a search to ponder are not shown
 	const int sq = parse_square(line.substr(11, 2));
-	if (!com_thinking_) return;  // a move of a search stopped before
-	com_thinking_ = false;
+	if (!com_thinking_ || !com_accept_) return;  // a move of a search stopped before
+	com_thinking_ = com_accept_ = false;
 	if (key_of(game_.now()) == com_pos_ && com_turn() && sq != kNoMove) com_played(sq);
 }
 
@@ -406,8 +419,11 @@ void App::set_compare(bool on)
 		    GetFileAttributesW(engine_eval(k).c_str()) == INVALID_FILE_ATTRIBUTES) {
 			log(lang::f("log.no_exe", {exe.empty() ? engine_dir(k) : exe}));
 			compare_ = false;
+		} else if (const auto nb = nobook_args(L"nobook-cmp.dat"); !nb) {
+			log(lang::f("err.engine_name", {temp_dir_}));
+			compare_ = false;
 		} else {
-			const std::wstring args = engine_args(k) + L" -book-file \"" + temp_dir_ + L"\\nobook-cmp.dat\" -book-usage off";
+			const std::wstring args = engine_args(k) + *nb;
 			++s.generation;
 			std::wstring err;
 			s.alive = s.proc.start(exe, args, engine_dir(k), hwnd_, WM_ENGINE, engine_tag(4, s.generation), &err);
@@ -458,9 +474,9 @@ void App::compare_request()
 	}
 	out += "setboard " + p.to_board_string() + "\n";
 	// markers around the hint, as for the search engine: lines before the first belong to a search stopped
-	cmp_marker_id_ = next_id_++;
+	cmp_marker_id_ = new_id();
 	out += "echo M" + std::to_string(cmp_marker_id_) + "\nhint 60\n";
-	cmp_end_id_ = next_id_++;
+	cmp_end_id_ = new_id();
 	out += "echo M" + std::to_string(cmp_end_id_) + "\n";
 	cmp_busy_ = true;
 	cmp_accept_ = false;

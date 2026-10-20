@@ -1,0 +1,22 @@
+# A: the book read again (Book menu, "book reload") while the nodes of the tree (and the points of the graph) are
+# asked: they come again (the request of the engine closed was kept, and no other node or point was ever asked)
+log s25 start
+engine newedax
+wait 40
+game free
+book on
+new
+tab tree
+wait 30
+tree open d3
+tree open d3e3
+tree open d3e3f5
+book reload
+wait 30
+screenshot s25-01-reloaded.png
+tab moves
+moves f5d6c3d3c4
+wait 30
+screenshot s25-02-moved.png
+savelog s25-log.txt
+quit

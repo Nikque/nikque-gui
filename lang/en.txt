@@ -86,6 +86,7 @@ bar.game_over=Game over
 bar.no_engine=No engine
 bar.loading=Reading the book
 bar.old_engine=No book analyses (old engine)
+bar.book_name=Book path not usable
 bar.book_off=Book not used
 bar.opening_hidden=(opening)
 bar.accuracy=Book accuracy
@@ -305,6 +306,8 @@ tool.estimate.n=Random games played
 command.label=Command
 command.note=Several with |. Run from this position; the analyses wait until it ends
 err.engine_path=This file's path cannot be given to the engine (it has a space or letters the engine cannot read, and no short name):\n{0}
+err.book_name=This book's path cannot be given to the engine (more than 252 bytes in the system code page or letters not in it, and no short name; the engine would open another book, so the main engine is not started): {0}
+err.engine_name=This file's path cannot be given to the engine (too long or letters not in the system code page, and no short name): {0}
 
 # Files of games (base)
 menu.base=Files of games (base)
@@ -526,6 +529,7 @@ menu.io.script_stop=Stop the command script
 script.started=Command script started: {0} ({1} lines)
 script.stopped=The command script was stopped
 script.error=The command script was stopped ({0}: {1})
+script.wait_timeout=Stopped waiting (the time ran out)
 script.cannot_open=Could not open the command script: {0}
 script.too_deep=run inside a command script goes {0} levels deep at most
 script.unknown=Unknown command

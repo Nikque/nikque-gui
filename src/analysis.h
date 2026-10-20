@@ -141,6 +141,20 @@ std::optional<HintLine> parse_hint_line(std::string_view line);
 // the number n of a marker "echo Mn": the engine answers with a warning line that names "Mn"; -1 otherwise
 int echo_marker(std::string_view line);
 
+// The numbers of the requests to the engines (id=, the echo markers): the book analyses take id= up to 100,000.
+inline constexpr int kMaxRequestId = 99999;
+// the number after `last`, from 1 again after kMaxRequestId, skipping the numbers `in_use` says are taken
+template <class InUse>
+int next_request_id(int last, InUse in_use)
+{
+	int id = last;
+	for (int k = 0; k < kMaxRequestId; ++k) {
+		id = id >= kMaxRequestId || id < 1 ? 1 : id + 1;
+		if (!in_use(id)) return id;
+	}
+	return id;  // every number taken (a few requests are kept at a time: not reached)
+}
+
 // applies an "@move" line of book moveinfo to the position's moves
 void apply_move_line(PosInfo &info, const Fields &f);
 

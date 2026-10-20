@@ -10,6 +10,7 @@
 #include "app.h"
 #include "lang.h"
 #include "measure.h"
+#include "paths.h"
 
 namespace ng {
 
@@ -114,10 +115,51 @@ std::wstring App::engine_args(EngineKind k) const
 {
 	int n = threads_;
 	if (n <= 0) n = static_cast<int>(GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
-	std::wstring a = L"-q -eval-file \"" + engine_eval(k) + L"\" -n-tasks " + std::to_wstring(n) + L" -level " +
-	                 std::to_wstring(level_);
+	const std::wstring eval = engine_eval(k);
+	std::wstring a = L"-q -eval-file \"" + engine_arg_path(eval, kEngineNameMax).value_or(eval) + L"\" -n-tasks " +
+	                 std::to_wstring(n) + L" -level " + std::to_wstring(level_);
 	if (hash_bits_ > 0) a += L" -hash-table-size " + std::to_wstring(hash_bits_);
 	return a;
+}
+
+std::optional<std::wstring> App::nobook_args(const wchar_t *name) const
+{
+	// a name the engine cannot keep would be ignored, and the engine would read its own book (data\book.dat)
+	const auto f = engine_arg_path(temp_dir_ + L"\\" + name, kEngineBookNameMax);
+	if (!f) return std::nullopt;
+	return L" -book-file \"" + *f + L"\" -book-usage off";
+}
+
+int App::new_id()
+{
+	next_id_ = next_request_id(next_id_, [this](int id) {
+		if (requests_.count(id)) return true;
+		for (const int x : {marker_id_, hint_end_id_, cmp_marker_id_, cmp_end_id_, com_marker_id_, learn_end_id_, tool_end_id_,
+		                    eng_[0].ping_id, eng_[1].ping_id, eng_[0].probe_id})
+			if (x == id) return true;
+		return false;
+	});
+	return next_id_;
+}
+
+void App::forget_main_requests()
+{
+	for (auto it = requests_.begin(); it != requests_.end();) it = it->second.engine == 0 ? requests_.erase(it) : std::next(it);
+	book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = findline_id_ = list_book_id_ = 0;
+	missing_ = MissingList{};
+}
+
+std::string App::stop_main_analyses()
+{
+	std::string out;
+	for (int *id : {&book_id_, &count_id_, &levels_id_, &best_id_, &graph_id_, &missing_id_})
+		if (*id) {
+			out += "stop id=" + std::to_string(*id) + "\n";
+			requests_.erase(*id);
+			if (id == &missing_id_) missing_.asked = false;  // asked again
+			*id = 0;
+		}
+	return out;
 }
 
 void App::start_engines()
@@ -135,7 +177,19 @@ void App::start_engines()
 		log(lang::f("log.no_eval", {eval}));
 		return;
 	}
+	if (!engine_arg_path(eval, kEngineNameMax)) {
+		log(lang::f("err.engine_name", {eval}));
+		return;
+	}
 	bool main_ok = true;
+	// a book name the engine does not keep is ignored by it, and its own book (data\book.dat) is read instead
+	const auto book_arg = engine_arg_path(book, kEngineBookNameMax);
+	eng_[0].error.clear();
+	if (!book_arg && !eng_[0].proc.running()) {
+		eng_[0].error = lang::f("err.book_name", {book});
+		log(eng_[0].error);
+		main_ok = false;
+	}
 	if (kind_ == EngineKind::Nikque18) {
 		// nikque.18 cannot read the book form 2 of newedax ("NEDXBOOK")
 		FILE *f = nullptr;
@@ -155,9 +209,15 @@ void App::start_engines()
 		if (s.proc.running()) continue;
 		if (role == 0 && !main_ok) continue;
 		if (role == 1 && !search_engine_) continue;
-		const std::wstring args =
-			role == 0 ? common + L" -book-file \"" + book + L"\""
-			          : common + L" -book-file \"" + temp_dir_ + L"\\nobook.dat\" -book-usage off";
+		std::wstring args = common;
+		if (role == 0) {
+			args += L" -book-file \"" + *book_arg + L"\"";
+		} else if (const auto nb = nobook_args(L"nobook.dat")) {
+			args += *nb;
+		} else {
+			log(lang::f("err.engine_name", {temp_dir_}));
+			continue;
+		}
 		std::wstring err;
 		++s.generation;
 		s.alive = s.proc.start(exe, args, dir, hwnd_, WM_ENGINE, engine_tag(role, s.generation), &err);
@@ -173,7 +233,7 @@ void App::start_engines()
 		if (role == 0) {
 			// first: an engine with the book analyses answers "@cancel id=<n> state=none" at once, before the version;
 			// an engine without them reads a "stop" with nothing to drop yet
-			s.probe_id = next_id_++;
+			s.probe_id = new_id();
 			send(0, "stop id=" + std::to_string(s.probe_id) + "\n");
 		}
 		send(role, "mode 3\n");
@@ -204,7 +264,7 @@ void App::stop_engines()
 	hint_busy_ = hint_accept_ = hint_background_ = false;
 	tool_busy_ = false;
 	findline_id_ = 0;
-	com_thinking_ = com_pondering_ = com_waiting_book_ = false;
+	com_thinking_ = com_pondering_ = com_waiting_book_ = com_accept_ = false;
 	com_book_move_ = kNoMove;
 	cmp_busy_ = cmp_accept_ = false;
 	list_book_id_ = 0;
@@ -212,8 +272,17 @@ void App::stop_engines()
 	DeleteFileW((temp_dir_ + L"\\nobook-tool.dat").c_str());
 }
 
+bool App::refuse_while_learning()
+{
+	if (!learning_) return false;
+	MessageBoxW(hwnd_, lang::t("learn.busy").c_str(), lang::t("app.title").c_str(), MB_ICONINFORMATION);
+	return true;
+}
+
 void App::restart_engines()
 {
+	// (a learning command takes no input to stop: the engine would be closed in the middle of it)
+	if (refuse_while_learning()) return;
 	stop_engines();
 	cache_.clear_book();
 	cache_.clear_search();
@@ -240,7 +309,7 @@ void App::pump_graph()
 			out += "setboard " + p.to_board_string() + "\n";
 			eng_[0].board = key;
 		}
-		graph_id_ = next_id_++;
+		graph_id_ = new_id();
 		out += "book moveinfo id=" + std::to_string(graph_id_) + " " + params +
 		       (umi_ == UmiMode::Off ? " parts=stage\n" : " parts=stage,umi\n");
 		requests_[graph_id_] = {Request::Graph, key, 0};
@@ -305,26 +374,26 @@ void App::request_analysis()
 			};
 			if (!info->book_done && !book_id_) {
 				board();
-				book_id_ = next_id_++;
+				book_id_ = new_id();
 				out += "book moveinfo id=" + std::to_string(book_id_) + " " + params +
 				       (umi_ == UmiMode::Off ? " parts=stage\n" : " parts=stage,umi\n");
 				requests_[book_id_] = {Request::Book, key, 0};
 			}
 			if (count_ && !info->count_done && !count_id_) {
 				board();
-				count_id_ = next_id_++;
+				count_id_ = new_id();
 				out += "book moveinfo id=" + std::to_string(count_id_) + " parts=count\n";
 				requests_[count_id_] = {Request::Count, key, 0};
 			}
 			if (tab_ == Tab::Book && !info->levels_done && !levels_id_) {
 				board();
-				levels_id_ = next_id_++;
+				levels_id_ = new_id();
 				out += "book levels id=" + std::to_string(levels_id_) + "\n";
 				requests_[levels_id_] = {Request::Levels, key, 0};
 			}
 			if (tab_ == Tab::Book && !info->best_done && !best_id_) {
 				board();
-				best_id_ = next_id_++;
+				best_id_ = new_id();
 				out += "book bestlines id=" + std::to_string(best_id_) + "\n";  // loss 0: the best moves only
 				requests_[best_id_] = {Request::Best, key, 0};
 			}
@@ -387,10 +456,10 @@ void App::send_hint(const Position &p, bool background)
 	// "M<n>"), in order with the lines of the hint: the first comes after every line of the search stopped
 	// above, the second when the hint has ended. (An answer of the book analyses comes from another thread
 	// and may come before or after the lines of the hint.)
-	marker_id_ = next_id_++;
+	marker_id_ = new_id();
 	out += "echo M" + std::to_string(marker_id_) + "\n";
 	out += "hint 60\n";
-	hint_end_id_ = next_id_++;
+	hint_end_id_ = new_id();
 	out += "echo M" + std::to_string(hint_end_id_) + "\n";
 	hint_busy_ = true;
 	hint_accept_ = false;
@@ -446,7 +515,7 @@ void App::on_engine(WPARAM tag, bool ended)
 		if (ended && s.alive) {
 			s.alive = false;
 			log(lang::f("log.engine_ended", {lang::t(role == 3 ? "engine.play" : "engine.compare")}));
-			if (role == 3) com_thinking_ = com_pondering_ = false;
+			if (role == 3) com_thinking_ = com_pondering_ = com_accept_ = false;
 			else cmp_busy_ = cmp_accept_ = false;
 		}
 		return;
@@ -689,6 +758,7 @@ namespace ng {
 // Another book for the main engine (the menu, the recent books, a file dropped on the window).
 void App::switch_book(const std::wstring &path)
 {
+	if (refuse_while_learning()) return;
 	if (MessageBoxW(hwnd_, lang::f("ask.open_book", {path}).c_str(), lang::t("app.title").c_str(),
 	                MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
 		return;
@@ -706,13 +776,16 @@ void App::switch_book(const std::wstring &path)
 	save_config();
 	build_menu();
 
-	// only the main engine starts again; the search engine keeps going
+	restart_main_engine();
+}
+
+// The main engine closed and started again (another book, the book read again): its requests go with it.
+void App::restart_main_engine()
+{
 	eng_[0].proc.close();
 	eng_[0].alive = false;
 	eng_[0].board.reset();
-	for (auto it = requests_.begin(); it != requests_.end();) it = it->second.engine == 0 ? requests_.erase(it) : std::next(it);
-	book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = findline_id_ = list_book_id_ = 0;
-	missing_ = MissingList{};
+	forget_main_requests();
 	cache_.clear_book();
 	start_engines();
 	position_changed();
@@ -807,7 +880,7 @@ void App::request_missing(std::string &out, const Position &p)
 		out += "setboard " + p.to_board_string() + "\n";
 		eng_[0].board = key;
 	}
-	missing_id_ = next_id_++;
+	missing_id_ = new_id();
 	out += "book missing id=" + std::to_string(missing_id_) + " sq=" + square_name(sq) + " " + params + " n=500\n";
 	requests_[missing_id_] = {Request::Missing, key, 0};
 }
@@ -838,9 +911,7 @@ void App::watch_engines()
 			s.alive = false;
 			s.board.reset();
 			if (role == 0) {
-				for (auto it = requests_.begin(); it != requests_.end();) it = it->second.engine == 0 ? requests_.erase(it) : std::next(it);
-				book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = findline_id_ = list_book_id_ = 0;
-				missing_ = MissingList{};
+				forget_main_requests();
 			} else {
 				hint_busy_ = hint_accept_ = hint_background_ = false;
 			}
@@ -849,7 +920,7 @@ void App::watch_engines()
 			continue;
 		}
 		if (busy || now - s.ping_sent < std::chrono::seconds(15)) continue;
-		s.ping_id = next_id_++;
+		s.ping_id = new_id();
 		s.ping_sent = now;
 		send(role, "echo M" + std::to_string(s.ping_id) + "\n");
 	}

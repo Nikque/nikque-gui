@@ -171,7 +171,12 @@ bool App::start_tool(const std::string &commands, const std::wstring &label)
 	}
 	EngineSlot &s = eng_[2];
 	s.proc.close(0);
-	const std::wstring args = engine_args() + L" -book-file \"" + temp_dir_ + L"\\nobook-tool.dat\" -book-usage off";
+	const auto nb = nobook_args(L"nobook-tool.dat");
+	if (!nb) {
+		log(lang::f("err.engine_name", {temp_dir_}));
+		return false;
+	}
+	const std::wstring args = engine_args() + *nb;
 	++s.generation;
 	std::wstring err;
 	s.alive = s.proc.start(exe, args, engine_dir(), hwnd_, WM_ENGINE, engine_tag(2, s.generation), &err);
@@ -179,7 +184,7 @@ bool App::start_tool(const std::string &commands, const std::wstring &label)
 		log(lang::f("log.start_failed", {exe, err}));
 		return false;
 	}
-	tool_end_id_ = next_id_++;
+	tool_end_id_ = new_id();
 	std::string out = "mode 3\nsetboard " + game_.now().to_board_string() + "\n" + commands;
 	if (!out.ends_with('\n')) out += '\n';
 	out += "echo M" + std::to_string(tool_end_id_) + "\n";  // answered when the commands have ended

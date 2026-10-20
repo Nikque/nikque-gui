@@ -1,0 +1,16 @@
+# Last stage: the tree with its root as it was set (the position shown, no row clicked), a node opened by its arrow
+# alone ("tree toggle"): its book moves come (the root was not marked open, so the node was never asked and stayed
+# "reading")
+log s28 start
+engine newedax
+wait 40
+game free
+book on
+new
+tab tree
+wait 30
+tree toggle f5
+wait 30
+screenshot s28-01-arrow.png
+savelog s28-log.txt
+quit
