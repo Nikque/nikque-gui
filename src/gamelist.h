@@ -27,6 +27,10 @@ public:
 		return {pool_.data() + games_[i].off, games_[i].len};
 	}
 	void add(const Position &start, std::span<const std::uint8_t> moves);
+	// the moves of game i written over its own: as many moves (an orientation keeps them all), else nothing is
+	// written and false returned. Games of different numbers may be written at the same time (their moves never share
+	// a place).
+	bool set_moves(size_t i, std::span<const std::uint8_t> moves) noexcept;
 	void erase(size_t i);
 	void clear();
 	// room for more games and moves (a file read at once does not grow the buffers again and again)
@@ -42,6 +46,7 @@ private:
 		std::uint8_t len;
 	};
 	std::uint32_t start_id(const Position &p);
+	void pack();  // the moves of the games one after the other in their order, without the unused ones
 	struct StartHash {
 		size_t operator()(const Position &p) const noexcept
 		{
@@ -54,7 +59,7 @@ private:
 	std::vector<std::uint8_t> pool_;
 	std::vector<Position> starts_;
 	std::unordered_map<Position, std::uint32_t, StartHash> start_ids_;
-	size_t unused_ = 0;  // moves of erased games still in the pool
+	size_t unused_ = 0;  // moves of games taken away still in the pool
 };
 
 struct ListReadStats {

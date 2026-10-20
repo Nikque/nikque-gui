@@ -1,6 +1,10 @@
 // Tests of the game list (reading, writing, sorting, joining, cutting, shuffling, orientations, searching),
 // the symmetries, the bitboards and the line found without the book; then timings on a large list.
 // Arguments: the game files of the test books (one game a line).
+#include <windows.h>
+
+#include <psapi.h>
+
 #include <algorithm>
 #include <bit>
 #include <chrono>
@@ -294,6 +298,20 @@ static void test_find_line(int argc, char **argv)
 					q = q.play(m);
 				}
 				CHECK(ok && q == target);
+				// few dead ends kept (they only spare searching them again): a line to the same position is found
+				if (tried <= 12) {
+					const LineSearch few = find_line(Position{}, target, 20'000'000, {}, 1000);
+					CHECK(few.line.has_value() && few.dead <= 1000);
+					Position f;
+					bool fok = few.line.has_value();
+					if (few.line)
+						for (const int m : *few.line) {
+							if (!f.can_play(m)) fok = false;
+							if (!fok) break;
+							f = f.play(m);
+						}
+					CHECK(fok && f == target);
+				}
 			}
 		}
 	}
@@ -331,6 +349,50 @@ static void test_parts()
 		legal &= legal_game(a.start(i), a.moves(i)) && a.moves(i).size() == l.moves(i).size();
 	}
 	CHECK(equal && legal);
+	// The orientations written over the moves of a shuffled list, then sorting, two games of three taken away (the moves
+	// are packed when more than half of them are unused) and one added: still the right games.
+	{
+		GameList sh = l;
+		shuffle_list(sh, 9);
+		const GameList shuffled = sh;  // (the games before the orientation)
+		normalize_list(sh);
+		bool ok = sh.size() == shuffled.size();
+		for (size_t i = 0; i < sh.size() && ok; i += 61) {
+			const auto want = normalized_moves(shuffled.start(i), shuffled.moves(i));
+			const auto got = sh.moves(i);
+			ok = want.size() == got.size() && std::equal(want.begin(), want.end(), got.begin());
+		}
+		CHECK(ok);
+		sort_list(sh);
+		std::vector<std::string> want;
+		for (size_t i = 0; i < sh.size(); ++i)
+			if (i % 3 == 1) want.push_back(list_line(sh.start(i), sh.moves(i)));
+		const size_t bytes = sh.bytes();
+		for (size_t i = sh.size(); i-- > 0;)
+			if (i % 3 != 1) sh.erase(i);
+		CHECK(sh.bytes() < bytes);  // packed
+		const auto extra = random_game(rng, 50);
+		sh.add(Position{}, extra);
+		want.push_back(list_line(Position{}, extra));
+		ok = sh.size() == want.size();
+		for (size_t i = 0; i < sh.size() && ok; ++i) ok = list_line(sh.start(i), sh.moves(i)) == want[i];
+		CHECK(ok);
+		// every game twice, shuffled, then joined: the games kept are the first ones
+		GameList d;
+		for (size_t i = 0; i < 2000; ++i) d.add(l.start(i), l.moves(i));
+		for (size_t i = 0; i < 2000; ++i) d.add(l.start(i), l.moves(i));
+		shuffle_list(d, 4);
+		GameList dc = d;
+		CHECK(unique_list(d) == 2000 && d.size() == 2000);
+		std::set<std::string> seen;
+		std::vector<std::string> firsts;
+		for (size_t i = 0; i < dc.size(); ++i)
+			if (seen.insert(list_line(dc.start(i), dc.moves(i))).second) firsts.push_back(list_line(dc.start(i), dc.moves(i)));
+		ok = firsts.size() == d.size();
+		for (size_t i = 0; i < d.size() && ok; ++i) ok = list_line(d.start(i), d.moves(i)) == firsts[i];
+		CHECK(ok);
+	}
+
 	// the search: every game where the position after 6 moves of game 77 appears, against a plain count
 	const Position target = play_all(l.start(77), l.moves(77), 6);
 	const auto hits = search_list(l, target, false);
@@ -442,6 +504,21 @@ static void timings()
 
 int main(int argc, char **argv)
 {
+	// list_test --findline "<64 squares> <X|O>" [nodes] [dead ends kept]: the line search without the book to that
+	// position, with its time and memory (for measuring the worst cases: positions no line reaches)
+	if (argc >= 3 && std::string(argv[1]) == "--findline") {
+		const auto target = parse_board_text(argv[2]);
+		if (!target) return 2;
+		const long long limit = argc >= 4 ? std::atoll(argv[3]) : 50'000'000;
+		const size_t dead_limit = argc >= 5 ? static_cast<size_t>(std::atoll(argv[4])) : kDeadLimit;
+		const auto t = std::chrono::steady_clock::now();
+		const LineSearch r = find_line(Position{}, *target, limit, {}, dead_limit);
+		PROCESS_MEMORY_COUNTERS pmc{sizeof pmc};
+		K32GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof pmc);
+		std::printf("found %d, nodes %lld, gave up %d, dead %zu, %.0f ms, peak working set %.1f MB\n", r.line.has_value(), r.nodes,
+		            r.gave_up, r.dead, ms_since(t), pmc.PeakWorkingSetSize / 1048576.0);
+		return 0;
+	}
 	// list_test --write <file> <games>: a file of random games, for measuring the GUI with a large list
 	if (argc == 4 && std::string(argv[1]) == "--write") {
 		std::mt19937_64 rng(9);

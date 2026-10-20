@@ -5,6 +5,7 @@
 #include <algorithm>
 
 #include "lang.h"
+#include "measure.h"
 
 namespace ng {
 
@@ -150,6 +151,21 @@ bool App::tree_command(const std::vector<std::string> &w, const std::string &res
 			tree_click(row, true);
 		} else if (what == "go") {
 			tree_go(path);
+		} else if (what == "openall" && measure::kOn) {
+			// (measuring build) the links of every open node whose book answer has come are opened: one level deeper
+			std::vector<std::vector<int>> add;
+			for (const auto &open : tree_open_) {
+				if (!tree_visible(open)) continue;
+				const PosInfo *info = cache_.peek(tree_position(open));
+				if (!info || !info->book_done) continue;
+				for (const MoveEval &m : info->moves)
+					if (m.sq != kPass && m.in_book) {
+						auto c = open;
+						c.push_back(m.sq);
+						add.push_back(std::move(c));
+					}
+			}
+			for (auto &c : add) tree_open_.insert(std::move(c));
 		} else {
 			return false;
 		}

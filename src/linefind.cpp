@@ -60,8 +60,14 @@ struct Searcher {
 	std::stop_token stop;
 	long long nodes = 0;
 	bool gave_up = false;
-	std::unordered_set<Key, KeyHash> dead;  // positions that do not lead to the target
+	std::unordered_set<Key, KeyHash> dead;  // positions that do not lead to the target (up to dead_limit)
+	size_t dead_limit = 0;
 	std::vector<int> line;
+
+	void keep_dead(const Key &key)
+	{
+		if (dead.size() < dead_limit) dead.insert(key);
+	}
 
 	bool dfs(const Position &p)
 	{
@@ -91,7 +97,7 @@ struct Searcher {
 				if (dfs(p.play(kPass))) return true;
 				line.pop_back();
 			}
-			if (!gave_up) dead.insert(key);
+			if (!gave_up) keep_dead(key);
 			return false;
 		}
 		u64 m = all & tocc;
@@ -117,14 +123,14 @@ struct Searcher {
 			line.pop_back();
 			if (gave_up) return false;
 		}
-		dead.insert(key);
+		keep_dead(key);
 		return false;
 	}
 };
 
 }  // namespace
 
-LineSearch find_line(const Position &from, const Position &target, long long node_limit, std::stop_token stop)
+LineSearch find_line(const Position &from, const Position &target, long long node_limit, std::stop_token stop, size_t dead_limit)
 {
 	LineSearch r;
 	Searcher s;
@@ -132,10 +138,12 @@ LineSearch find_line(const Position &from, const Position &target, long long nod
 	s.tocc = target.black | target.white;
 	s.limit = node_limit;
 	s.stop = stop;
+	s.dead_limit = dead_limit;
 	const u64 focc = from.black | from.white;
 	if ((focc & ~s.tocc) == 0 && s.dfs(from)) r.line = s.line;
 	r.nodes = s.nodes;
 	r.gave_up = s.gave_up;
+	r.dead = s.dead.size();
 	return r;
 }
 

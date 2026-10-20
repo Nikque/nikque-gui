@@ -4,12 +4,15 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <ctime>
 #include <optional>
+#include <set>
 #include <span>
 
 #include "app.h"
 #include "lang.h"
+#include "measure.h"
 
 namespace ng {
 
@@ -541,6 +544,24 @@ void draw_kept_tab(App &app, const Theme &th)
 	dc->PopAxisAlignedClip();
 }
 
+// the squares of the open nodes right below the node "path", a bit each (path is the same after)
+std::uint64_t open_below(const std::set<std::vector<int>> &nodes, std::vector<int> &path)
+{
+	std::uint64_t bits = 0;
+	const size_t n = path.size();
+	path.push_back(0);
+	auto below = [&](std::set<std::vector<int>>::const_iterator it) {
+		return it != nodes.end() && it->size() > n && std::equal(path.begin(), path.begin() + n, it->begin());
+	};
+	for (auto it = nodes.lower_bound(path); below(it); it = nodes.lower_bound(path)) {
+		const int sq = (*it)[n];
+		if (it->size() == n + 1 && sq >= 0 && sq < 64) bits |= std::uint64_t{1} << sq;
+		path[n] = sq + 1;  // past the nodes under this one
+	}
+	path.pop_back();
+	return bits;
+}
+
 // The tree of the book lines from the root: the book moves of each open position (links, then the leaf, best
 // first), the value from the side that plays the move, the stage, the umigame numbers and the level.
 void draw_tree_tab(App &app, const Theme &th)
@@ -594,52 +615,75 @@ void draw_tree_tab(App &app, const Theme &th)
 		x = r.right;
 	}
 
-	// the lines of the tree, depth first
+	// the lines of the tree, depth first; a line keeps the line of the move before it, not the moves from the root
+	// (those are made for the rows seen only: a deep tree has many thousand lines)
 	struct Line {
-		std::vector<int> path;
+		int parent = -1;              // the line of the move before (-1: a move from the root)
 		int depth = 0;
-		int side = kBlack;           // the side that plays the move
+		int side = kBlack;            // the side that plays the move
 		const MoveEval *m = nullptr;  // nullptr: the book analysis of the position is awaited / not in the book
 		bool link = false, open = false, none = false;
 	};
 	std::vector<Line> lines;
 	constexpr size_t kMaxLines = 20000;
 	auto value_of = [](const MoveEval &m) { return m.in_book ? m.book_value : m.leaf_value; };
-	auto build = [&](auto &&self, const std::vector<int> &path, const Position &p, int depth) -> void {
+	std::vector<int> path;             // the moves from the root to the position built
+	std::vector<const MoveEval *> ms;  // the moves of the positions on the way from the root, a part for each
+	auto build = [&](auto &&self, const Position &p, int parent, int depth) -> void {
 		if (lines.size() >= kMaxLines || p.game_over()) return;
 		const PosInfo *info = app.cache_.peek(p);
 		if (!info || !info->book_done) {
-			lines.push_back({path, depth, p.side, nullptr});
+			lines.push_back({parent, depth, p.side, nullptr});
 			return;
 		}
-		std::vector<const MoveEval *> ms;
+		const size_t first = ms.size();
 		for (const MoveEval &m : info->moves)
 			if (m.sq != kPass && (m.in_book || m.leaf)) ms.push_back(&m);
-		std::stable_sort(ms.begin(), ms.end(), [&](const MoveEval *a, const MoveEval *b) {
+		const size_t last = ms.size();
+		// the links first, then the best value; equal ones in the order of the analysis
+		std::sort(ms.begin() + first, ms.end(), [&](const MoveEval *a, const MoveEval *b) {
 			if (a->in_book != b->in_book) return a->in_book;
-			return value_of(*a) > value_of(*b);
+			if (value_of(*a) != value_of(*b)) return value_of(*a) > value_of(*b);
+			return a < b;
 		});
-		if (ms.empty() && depth == 0) {
-			Line l{path, depth, p.side, nullptr};
+		if (first == last && depth == 0) {
+			Line l{parent, depth, p.side, nullptr};
 			l.none = true;
 			lines.push_back(l);
 		}
-		for (const MoveEval *m : ms) {
-			if (lines.size() >= kMaxLines) return;
-			Line l{path, depth, p.side, m};
-			l.path.push_back(m->sq);
+		const std::uint64_t open_bits = open_below(app.tree_open_, path);
+		for (size_t k = first; k < last && lines.size() < kMaxLines; ++k) {
+			const MoveEval *m = ms[k];
+			Line l{parent, depth, p.side, m};
 			l.link = m->in_book;
-			l.open = l.link && app.tree_open_.count(l.path);
+			l.open = l.link && (open_bits >> m->sq & 1);
 			lines.push_back(l);
 			if (l.open) {
 				Position q = p.play(m->sq);
 				if (q.must_pass()) q = q.play(kPass);
-				const std::vector<int> child = l.path;
-				self(self, child, q, depth + 1);
+				path.push_back(m->sq);
+				self(self, q, static_cast<int>(lines.size()) - 1, depth + 1);
+				path.pop_back();
 			}
 		}
+		ms.resize(first);
 	};
-	build(build, {}, app.tree_base_.now(), 0);
+	// the moves from the root to the move of a line
+	auto path_of = [&](int i) {
+		std::vector<int> moves;
+		for (; i >= 0; i = lines[i].parent) moves.push_back(lines[i].m->sq);
+		std::reverse(moves.begin(), moves.end());
+		return moves;
+	};
+#ifdef NG_MEASURE
+	LARGE_INTEGER t_build;
+	QueryPerformanceCounter(&t_build);
+#endif
+	build(build, app.tree_base_.now(), -1, 0);
+#ifdef NG_MEASURE
+	measure::trace("TREE rows=" + std::to_string(lines.size()) + " open=" + std::to_string(app.tree_open_.size()) +
+	               " build_ms=" + std::to_string(measure::ms_since(t_build)));
+#endif
 
 	// the position shown, as moves from the root
 	std::vector<int> here;
@@ -663,7 +707,8 @@ void draw_tree_tab(App &app, const Theme &th)
 			continue;
 		}
 		const MoveEval &m = *l.m;
-		if (l.path == here) rounded(gx, row, 4 * L.scale, D2D1_COLOR_F{th.accent.r, th.accent.g, th.accent.b, 0.25f});
+		std::vector<int> moves = path_of(i);
+		if (moves == here) rounded(gx, row, 4 * L.scale, D2D1_COLOR_F{th.accent.r, th.accent.g, th.accent.b, 0.25f});
 		else if (inside_rect(row, app.mouse_)) rounded(gx, row, 4 * L.scale, D2D1_COLOR_F{th.text.r, th.text.g, th.text.b, 0.07f});
 		const D2D1_RECT_F arrow{lx, y, lx + indent, y + rh};
 		if (l.link) gx.draw_text(l.open ? L"\x25BE" : L"\x25B8", fn, arrow, th.text_dim);
@@ -710,7 +755,7 @@ void draw_tree_tab(App &app, const Theme &th)
 				break;
 			}
 		}
-		app.tree_rows_.push_back({l.path, row, arrow, l.link});
+		app.tree_rows_.push_back({std::move(moves), row, arrow, l.link});
 	}
 	dc->PopAxisAlignedClip();
 	if (lines.size() >= kMaxLines)

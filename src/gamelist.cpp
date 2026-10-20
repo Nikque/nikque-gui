@@ -111,16 +111,20 @@ void GameList::add(const Position &start, std::span<const std::uint8_t> moves)
 	pool_.insert(pool_.end(), moves.begin(), moves.begin() + n);
 }
 
+bool GameList::set_moves(size_t i, std::span<const std::uint8_t> moves) noexcept
+{
+	const Entry &g = games_[i];
+	if (moves.size() != g.len) return false;
+	std::copy(moves.begin(), moves.end(), pool_.begin() + g.off);
+	return true;
+}
+
 void GameList::erase(size_t i)
 {
 	if (i >= games_.size()) return;
 	unused_ += games_[i].len;
 	games_.erase(games_.begin() + static_cast<std::ptrdiff_t>(i));
-	if (unused_ > (1u << 16) && unused_ * 2 > pool_.size()) {
-		std::vector<std::uint32_t> all(games_.size());
-		std::iota(all.begin(), all.end(), 0u);
-		reorder(all);
-	}
+	if (unused_ > (1u << 16) && unused_ * 2 > pool_.size()) pack();
 }
 
 void GameList::clear()
@@ -140,6 +144,9 @@ void GameList::reserve(size_t games, size_t moves)
 
 void GameList::reorder(const std::vector<std::uint32_t> &order)
 {
+	// the moves are copied in the new order too: the work after a sort or a shuffle reads the games one after the
+	// other (with the moves left in their places, joining, scattering and cutting a shuffled list of 1,000,000 games
+	// took 3 to 70 times as long)
 	std::vector<Entry> games;
 	std::vector<std::uint8_t> pool;
 	games.reserve(order.size());
@@ -152,6 +159,19 @@ void GameList::reorder(const std::vector<std::uint32_t> &order)
 		pool.insert(pool.end(), pool_.begin() + e.off, pool_.begin() + e.off + e.len);
 	}
 	games_ = std::move(games);
+	pool_ = std::move(pool);
+	unused_ = 0;
+}
+
+void GameList::pack()
+{
+	std::vector<std::uint8_t> pool;
+	pool.reserve(pool_.size() - unused_);
+	for (Entry &g : games_) {
+		const auto off = static_cast<std::uint32_t>(pool.size());
+		pool.insert(pool.end(), pool_.begin() + g.off, pool_.begin() + g.off + g.len);
+		g.off = off;
+	}
 	pool_ = std::move(pool);
 	unused_ = 0;
 }
@@ -414,6 +434,7 @@ void sort_list(GameList &list)
 			std::inplace_merge(items.begin() + cut[p], items.begin() + cut[p + w], items.begin() + cut[std::min(k, p + 2 * w)], less);
 	std::vector<std::uint32_t> order(n);
 	for (size_t i = 0; i < n; ++i) order[i] = items[i].index;
+	std::vector<Item>().swap(items);  // freed before the moves are copied in the new order
 	list.reorder(order);
 }
 
@@ -577,22 +598,15 @@ int drawn_pick(unsigned sym, std::uint64_t r)
 }
 
 
-// The list made again from new moves of every game (`make(i, out)`), in parts; false when stopped (the list
-// stays as it was).
+// The moves of every game made again by `make(i, out)` and written over the old ones, in parts on threads: an
+// orientation keeps every move, so no second list is made. False when stopped (the games done before the stop keep
+// their new moves: the same games, turned).
 template <class Make>
-bool rebuild(GameList &list, std::stop_token stop, Make make)
+bool rewrite(GameList &list, std::stop_token stop, Make make)
 {
 	const size_t n = list.size();
-	const unsigned k = parts_for(n);
-	struct Part {
-		std::vector<std::uint8_t> pool, lens;
-	};
-	std::vector<Part> parts(k);
 	std::atomic<bool> stopped{false};
-	in_parts(n, k, [&](size_t b, size_t e, unsigned part) {
-		Part &pt = parts[part];
-		pt.lens.reserve(e - b);
-		pt.pool.reserve((e - b) * 60);
+	in_parts(n, parts_for(n), [&](size_t b, size_t e, unsigned) {
 		std::vector<std::uint8_t> buf;
 		buf.reserve(64);
 		for (size_t i = b; i < e; ++i) {
@@ -601,25 +615,10 @@ bool rebuild(GameList &list, std::stop_token stop, Make make)
 				return;
 			}
 			make(i, buf);
-			pt.pool.insert(pt.pool.end(), buf.begin(), buf.end());
-			pt.lens.push_back(static_cast<std::uint8_t>(buf.size()));
+			list.set_moves(i, buf);  // (a game of moves that are not legal keeps its moves: not in a list read in)
 		}
 	});
-	if (stopped) return false;
-	size_t total = 0;
-	for (const auto &pt : parts) total += pt.pool.size();
-	GameList out;
-	out.reserve(n, total);
-	size_t i = 0;
-	for (const auto &pt : parts) {
-		size_t off = 0;
-		for (const auto len : pt.lens) {
-			out.add(list.start(i++), std::span<const std::uint8_t>(pt.pool.data() + off, len));
-			off += len;
-		}
-	}
-	list = std::move(out);
-	return true;
+	return !stopped;
 }
 
 }  // namespace
@@ -643,7 +642,7 @@ std::vector<std::uint8_t> scattered_moves(const Position &start, std::span<const
 
 void normalize_list(GameList &list, std::stop_token stop)
 {
-	rebuild(list, stop, [&](size_t i, std::vector<std::uint8_t> &out) {
+	rewrite(list, stop, [&](size_t i, std::vector<std::uint8_t> &out) {
 		reoriented_into(list.start(i), list.moves(i), [](unsigned sym, const Position &, int t) { return normal_pick(sym, t); }, out);
 	});
 }
@@ -651,7 +650,7 @@ void normalize_list(GameList &list, std::stop_token stop)
 void scatter_list(GameList &list, std::uint64_t seed, int sides, std::stop_token stop)
 {
 	// every game draws from its own numbers (the seed and its place): the same list whatever the threads
-	rebuild(list, stop, [&](size_t i, std::vector<std::uint8_t> &out) {
+	rewrite(list, stop, [&](size_t i, std::vector<std::uint8_t> &out) {
 		std::uint64_t r = seed ^ (static_cast<std::uint64_t>(i) * 0xD1B54A32D192ED03ULL);
 		reoriented_into(list.start(i), list.moves(i), [&](unsigned sym, const Position &p, int) {
 			return (sides >> p.side) & 1 ? drawn_pick(sym, splitmix(r)) : 0;

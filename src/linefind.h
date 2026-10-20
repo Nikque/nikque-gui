@@ -15,8 +15,14 @@ struct LineSearch {
 	std::optional<std::vector<int>> line;  // the moves (passes as kPass); empty optional: none found
 	long long nodes = 0;
 	bool gave_up = false;                   // the node limit or a stop came first
+	size_t dead = 0;                        // positions kept as not leading to the target
 };
 
-LineSearch find_line(const Position &from, const Position &target, long long node_limit, std::stop_token stop = {});
+// The positions known not to lead to the target are kept up to `dead_limit` (about 66 bytes each: a search of 50
+// million positions that finds nothing would keep about 15 million of them); the positions met after that are searched
+// again when met again, the line found is the same.
+inline constexpr size_t kDeadLimit = 2'000'000;
+LineSearch find_line(const Position &from, const Position &target, long long node_limit, std::stop_token stop = {},
+                     size_t dead_limit = kDeadLimit);
 
 }  // namespace ng
