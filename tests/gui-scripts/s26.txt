@@ -1,5 +1,5 @@
 # A: the numbers of the requests go past 99,999 and start again from 1 (the engines take id= up to 100,000): the book
-# analyses still come. For the measuring build with [measure] first_id=99950 in config.ini (the default build starts
+# analyses still come. For the measuring build with [measure] first_id=99990 in config.ini (the default build starts
 # from 1 and runs the same lines)
 log s26 start
 engine newedax
