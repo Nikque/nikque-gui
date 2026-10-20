@@ -181,16 +181,112 @@ static void test_recompute()
 	CHECK(info && !info->book_done && !info->find(parse_square("f5"))->in_book);
 }
 
+// With a real engine (app_test --real <engine exe> <book>, not run by ctest): the position changed again and again, so
+// that the book analyses asked are stopped before their end; once the engine is quiet, every number stopped has had
+// the end of its answer (none kept taken for good), and only the requests of the position shown are left.
+static int real_engine(const std::wstring &exe, const std::wstring &book)
+{
+	auto a = make_app();
+	a->show_eval_ = a->use_book_ = a->count_ = true;
+	a->tab_ = Tab::Book;
+	const std::wstring dir = exe.substr(0, exe.find_last_of(L'\\'));
+	EngineSlot &s = a->eng_[0];
+	s.generation = 1;
+	const std::wstring args = L"-q -eval-file \"" + dir + L"\\data\\eval.dat\" -n-tasks 1 -level 2 -book-file \"" + book + L"\"";
+	s.alive = s.proc.start(exe, args, dir, a->hwnd_, WM_ENGINE, engine_tag(0, 1), nullptr);
+	s.loaded = true;
+	CHECK(s.alive);
+	a->send(0, "mode 3\n");
+	auto pump = [&](int ms) {
+		const ULONGLONG end = GetTickCount64() + ms;
+		while (GetTickCount64() < end) {
+			MSG m{};
+			while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a->on_engine(m.wParam, m.lParam != 0);
+			Sleep(1);
+		}
+	};
+	const char *line = "f5d6c3d3c4f4f6f3e6e7d7c5b6";
+	size_t stopped_max = 0;
+	for (int round = 0; round < 30; ++round) {
+		a->game_ = Game{};
+		for (int i = 0; line[i] && line[i + 1]; i += 2) {
+			a->game_.play(parse_square(std::string(line + i, 2)));
+			a->request_analysis();
+			pump(round % 3 == 0 ? 0 : 5);
+			stopped_max = std::max(stopped_max, a->stopped_.size());
+		}
+		a->base_ = round % 2 ? "deviate" : "deviate2";  // other settings: the points of the graph stopped too
+	}
+	a->request_analysis();  // (with the settings of now)
+	// quiet: the answers of the position shown come to their end
+	const ULONGLONG end = GetTickCount64() + 60000;
+	while (GetTickCount64() < end && !(a->book_id_ == 0 && a->count_id_ == 0 && a->levels_id_ == 0 && a->best_id_ == 0 &&
+	                                   a->graph_id_ == 0 && a->stopped_.empty()))
+		pump(50);
+	std::printf("stopped at most %zu at a time; now: stopped %zu, requests %zu (book %d graph %d missing %d)\n", stopped_max,
+	            a->stopped_.size(), a->requests_.size(), a->book_id_, a->graph_id_, a->missing_id_);
+	CHECK(stopped_max > 0);
+	CHECK(a->stopped_.empty());
+	for (const auto &[id, r] : a->requests_) CHECK(id == a->missing_id_);  // the list of missing lines may go on
+	const PosInfo *info = a->cache_.peek(a->game_.now());
+	CHECK(info && info->book_done && info->book_params == a->book_params());
+	return failures ? 1 : 0;
+}
+
+// The lines an engine wrote (app_test --replay <log>, not run by ctest), given again to the app through the engine
+// of the tests: every book analysis of the log comes to its end however its lines were cut.
+static int replay(const std::wstring &file)
+{
+	FILE *f = nullptr;
+	if (_wfopen_s(&f, file.c_str(), L"rb") || !f) return 2;
+	std::string text, line;
+	for (int c; (c = std::fgetc(f)) != EOF;) text += static_cast<char>(c);
+	std::fclose(f);
+	auto a = make_app();
+	start_engine(*a);
+	const PosKey key = key_of(a->game_.now());
+	std::string out;
+	int ends = 0;
+	for (size_t i = 0, e; i < text.size(); i = e + 1) {
+		e = text.find('\n', i);
+		if (e == std::string::npos) e = text.size();
+		line = text.substr(i, e - i);
+		if (!line.empty() && line.back() == '\r') line.pop_back();
+		for (size_t k = 0; (k = line.find("@begin id=", k)) != std::string::npos; ++k) {
+			const int id = std::atoi(line.c_str() + k + 10);
+			a->requests_[id] = {Request::Book, key};
+			++ends;
+		}
+		out += "!" + line + "\n";
+	}
+	feed(*a, out);
+	std::printf("analyses %d: %zu left without their end\n", ends, a->requests_.size());
+	CHECK(a->requests_.empty());
+	return failures ? 1 : 0;
+}
+
 int main(int argc, char **argv)
 {
+	wchar_t exe[MAX_PATH * 4];
+	GetModuleFileNameW(nullptr, exe, MAX_PATH * 4);
+	self = exe;
+	if (argc == 3 && std::string(argv[1]) == "--replay") {
+		lang::load(L".", "ja");
+		const int r = replay(widen(argv[2]));
+		std::printf(r ? "%d failures\n" : "all passed\n", failures);
+		return r;
+	}
+	if (argc == 4 && std::string(argv[1]) == "--real") {
+		lang::load(L".", "ja");
+		const int r = real_engine(widen(argv[2]), widen(argv[3]));
+		std::printf(r ? "%d failures\n" : "all passed\n", failures);
+		return r;
+	}
 	if (argc > 1 && std::string(argv[1]) == "--engine") {
 		for (std::string s; std::getline(std::cin, s);)
 			if (s.starts_with("!")) std::cout << s.substr(1) << std::endl;
 		return 0;
 	}
-	wchar_t exe[MAX_PATH * 4];
-	GetModuleFileNameW(nullptr, exe, MAX_PATH * 4);
-	self = exe;
 	lang::load(argc > 1 ? widen(argv[1]) : std::wstring(L"."), "ja");
 	test_mixed_lines();
 	test_old_settings();
