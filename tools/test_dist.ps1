@@ -1,7 +1,7 @@
 param(
 	[string]$Dist = "",                                   # the distribution folder (default: the newest dist\nikque-gui-*)
 	[string]$Run = "D:\nikque-gui\_test\run-dist",
-	[string[]]$Scripts = @("s1", "s2", "s3", "s4", "s7", "s8", "s9", "s10", "s11", "s14", "s18", "s19", "s20", "s21", "s22", "s5"),
+	[string[]]$Scripts = @("s1", "s2", "s3", "s4", "s7", "s8", "s9", "s10", "s11", "s14", "s18", "s19", "s20", "s21", "s22", "s23", "s5"),
 	[int]$Timeout = 600,
 	[string]$Affinity = "F00000"                          # the logical CPUs of the GUI and its engines (20-23)
 )

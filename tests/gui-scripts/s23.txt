@@ -1,0 +1,22 @@
+# C: a time set during a game counts from the next game: no clock in the bar of the game going on, "new" starts
+# the same kind of game again with the clocks
+log s23 start
+engine newedax
+wait 40
+comlevel 2
+opening search
+clock 0
+game black
+play f5
+waitgame 3
+clock 1
+screenshot s23-01-time-set.png
+new
+waitgame 3
+screenshot s23-02-new.png
+play f5
+waitgame 3
+screenshot s23-03-moved.png
+game free
+savelog s23-log.txt
+quit

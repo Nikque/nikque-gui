@@ -602,6 +602,11 @@ void App::on_command(int id)
 	}
 	switch (id) {
 	case cmd::NewGame:
+		// in a game against the computer: the same kind of game again (the time and the clocks are set again)
+		if (play_mode_ != PlayMode::Free) {
+			set_play_mode(play_mode_, engine_games_left_ + 1);
+			break;
+		}
 		list_index_ = -1;
 		set_game(Game{}, true);
 		break;

@@ -122,12 +122,31 @@ void draw_tabs(App &app, const Theme &th)
 	const Layout &L = app.lay_;
 	IDWriteTextFormat *f = gx.text(L.font, false, DWRITE_TEXT_ALIGNMENT_CENTER);
 	const char *keys[] = {"tab.moves", "tab.book", "tab.record", "tab.list", "tab.kept", "tab.tree"};
+	constexpr int n = static_cast<int>(Tab::Count);
 	app.tab_rects_.clear();
 	float x = L.tabs.left;
 	const float h = L.tabs.bottom - L.tabs.top;
-	for (int i = 0; i < static_cast<int>(Tab::Count); ++i) {
+	// a narrow panel: the padding gets smaller first, then the letters
+	const float gap = 4 * L.scale, room = L.tabs.right - L.tabs.left;
+	float tw[n];
+	auto measure = [&](IDWriteTextFormat *ff) {
+		float sum = 0;
+		for (int i = 0; i < n; ++i) sum += tw[i] = gx.text_width(lang::t(keys[i]), ff);
+		return sum;
+	};
+	float sum = measure(f);
+	float pad = L.font * 1.6f;
+	if (sum + n * pad + (n - 1) * gap > room) {
+		pad = std::max(L.font * 0.5f, (room - sum - (n - 1) * gap) / n);
+		if (sum + n * pad + (n - 1) * gap > room) {
+			f = gx.text(L.font_s, false, DWRITE_TEXT_ALIGNMENT_CENTER);
+			sum = measure(f);
+			pad = std::max(L.font_s * 0.4f, (room - sum - (n - 1) * gap) / n);
+		}
+	}
+	for (int i = 0; i < n; ++i) {
 		const std::wstring &s = lang::t(keys[i]);
-		const float w = gx.text_width(s, f) + L.font * 1.6f;
+		const float w = tw[i] + pad;
 		const D2D1_RECT_F r{x, L.tabs.top, x + w, L.tabs.bottom};
 		const bool on = static_cast<int>(app.tab_) == i;
 		rounded(gx, r, h * th.tab_round, on ? th.accent : th.panel2);
