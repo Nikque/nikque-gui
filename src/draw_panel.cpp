@@ -563,8 +563,11 @@ void draw_tree_tab(App &app, const Theme &th)
 	float x = T.right - total();
 	const float line_right = x;
 	rounded(gx, D2D1::RectF(T.left, T.top, T.right, T.top + rh), 4 * L.scale, th.panel2);
+	// the explanation is cut at the first column (a narrow panel)
+	dc->PushAxisAlignedClip(D2D1::RectF(T.left, T.top, line_right - 4 * L.scale, T.top + rh), D2D1_ANTIALIAS_MODE_ALIASED);
 	gx.draw_text(lang::f("tree.head", {std::to_wstring(app.tree_base_.now().ply() + 1)}), hl,
 	             D2D1::RectF(T.left + 8 * L.scale, T.top, line_right, T.top + rh), th.text_dim);
+	dc->PopAxisAlignedClip();
 	for (auto &c : cols) {
 		const D2D1_RECT_F r{x, T.top, x + c.w, T.top + rh};
 		gx.draw_text(lang::t(c.key), hf, r, th.text_dim);
@@ -649,7 +652,8 @@ void draw_tree_tab(App &app, const Theme &th)
 		const float r = std::round(em * 0.32f);
 		const D2D1_POINT_2F c{arrow.right + r + 2 * L.scale, (y + y + rh) / 2};
 		dc->FillEllipse(D2D1::Ellipse(c, r, r), gx.brush(l.side == kBlack ? th.black_stone : th.white_stone));
-		dc->DrawEllipse(D2D1::Ellipse(c, r, r), gx.brush(l.side == kBlack ? th.black_rim : th.white_rim), 1.0f);
+		// a black disc has the rim of the dim text: it is seen on the dark panel of the standard design too
+		dc->DrawEllipse(D2D1::Ellipse(c, r, r), gx.brush(l.side == kBlack ? th.text_dim : th.white_rim), 1.0f);
 		const D2D1_COLOR_F ink = l.link ? th.text : th.text_dim;
 		std::wstring name = widen(square_name(m.sq));
 		if (!l.link) name += L"  " + lang::t("tree.leaf");

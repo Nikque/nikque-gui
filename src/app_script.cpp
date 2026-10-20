@@ -483,6 +483,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 	}
 	if (c == "go") {
 		com_once_ = true;
+		com_once_pos_ = key_of(game_.now());
 		com_think();
 		wait(ScriptWait::Com);
 		SetTimer(hwnd_, 3, 250, nullptr);

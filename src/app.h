@@ -465,6 +465,7 @@ public:
 	int opening_width_ = 2;          // BookWide: the loss of a book move drawn at most
 	int opening_until_ = 60;         // book moves up to this move (number of discs - 4)
 	int clock_minutes_ = 0;          // time of a side in a game (0: none)
+	bool game_clock_ = false;        // the game was started with a time (a time set later counts from the next game)
 	long long clock_left_ms_[2] = {0, 0};
 	std::chrono::steady_clock::time_point clock_t0_{};
 	int clock_side_ = -1;            // the side whose time runs (-1: none)
@@ -472,6 +473,7 @@ public:
 	bool end_keep_ = true, end_list_ = false;
 	int engine_games_left_ = 0;      // the computer on both sides: more games after this one
 	bool com_once_ = false;          // one move of the computer asked (free play)
+	PosKey com_once_pos_{};          // the position it was asked in (played there only)
 	bool com_thinking_ = false;      // the play engine searches a move
 	bool com_pondering_ = false;
 	PosKey com_pos_{};
@@ -640,6 +642,7 @@ public:
 	void set_game(const Game &g, bool keep_old);
 	void screenshot(const std::wstring &file = {});
 	void save_board_image();
+	std::wstring images_dir() const;
 	void copy_text(const std::wstring &text);
 	std::wstring clipboard_text();
 	int move_number_at(int sq) const;

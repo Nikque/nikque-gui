@@ -313,14 +313,21 @@ void App::import_position()
 
 // ---- images
 
+// the folder of the screenshots (made when missing): [view] screenshot_dir, or screenshots next to the exe
+std::wstring App::images_dir() const
+{
+	const std::string d = ini_.get("view", "screenshot_dir");
+	std::wstring dir = d.empty() ? exe_dir_ + L"\\screenshots"
+	                             : (d.size() > 1 && d[1] == ':' ? widen(d) : exe_dir_ + L"\\" + widen(d));
+	CreateDirectoryW(dir.c_str(), nullptr);
+	return dir;
+}
+
 void App::screenshot(const std::wstring &file)
 {
 	std::wstring path = file;
 	if (path.empty()) {
-		const std::string d = ini_.get("view", "screenshot_dir");
-		std::wstring dir = d.empty() ? exe_dir_ + L"\\screenshots"
-		                             : (d.size() > 1 && d[1] == ':' ? widen(d) : exe_dir_ + L"\\" + widen(d));
-		CreateDirectoryW(dir.c_str(), nullptr);
+		const std::wstring dir = images_dir();
 		path = dir + L"\\" + stamp() + L".png";
 		for (int k = 2; GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES; ++k)
 			path = dir + L"\\" + stamp() + L"-" + std::to_wstring(k) + L".png";
@@ -341,7 +348,7 @@ void App::screenshot(const std::wstring &file)
 void App::save_board_image()
 {
 	const std::wstring flt = lang::t("filter.png") + std::wstring(L" (*.png)\0*.png\0", 16);
-	const std::wstring f = pick_save(flt.c_str(), L"png", L"board-" + stamp() + L".png");
+	const std::wstring f = pick_save(flt.c_str(), L"png", images_dir() + L"\\board-" + stamp() + L".png");
 	if (f.empty()) return;
 	compute_line();
 	prepare_glows();

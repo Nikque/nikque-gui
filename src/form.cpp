@@ -97,7 +97,26 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 
 	const int label_w = px(230), field_w = px(150), note_w = px(360), row = px(30), pad = px(14);
 	const int width = pad * 2 + label_w + field_w + px(10) + note_w;
-	const int height = pad * 2 + row * static_cast<int>(fields.size()) + px(46);
+	// a long note is folded in its column: its row is as high as the folded text
+	std::vector<int> rows;
+	int rows_h = 0;
+	{
+		HDC sdc = GetDC(nullptr);
+		HGDIOBJ old = SelectObject(sdc, font);
+		for (const auto &f : fields) {
+			int r = row;
+			if (f.kind != FormField::Heading && !f.note.empty()) {
+				RECT rc{0, 0, note_w, 0};
+				DrawTextW(sdc, f.note.c_str(), -1, &rc, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+				r = std::max(row, static_cast<int>(rc.bottom) + px(10));
+			}
+			rows.push_back(r);
+			rows_h += r;
+		}
+		SelectObject(sdc, old);
+		ReleaseDC(nullptr, sdc);
+	}
+	const int height = pad * 2 + rows_h + px(46);
 	RECT wr{0, 0, width, height};
 	const DWORD style = WS_POPUP | WS_CAPTION | WS_SYSMENU;
 	AdjustWindowRectExForDpi(&wr, style, FALSE, WS_EX_DLGMODALFRAME, dpi);
@@ -118,7 +137,9 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 	};
 	int cy = pad;
 	HWND first = nullptr;
+	size_t fi = 0;
 	for (auto &f : fields) {
+		const int this_row = rows[fi++];
 		const int lx = pad, fx = pad + label_w, nx = fx + field_w + px(10);
 		const int h = row - px(6);
 		if (f.kind == FormField::Heading) {
@@ -146,8 +167,8 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 			break;
 		}
 		if (!first) first = f.control;
-		if (!f.note.empty()) child(L"STATIC", f.note, SS_LEFT, nx, cy + px(4), note_w, h);
-		cy += row;
+		if (!f.note.empty()) child(L"STATIC", f.note, SS_LEFT | SS_NOPREFIX, nx, cy + px(4), note_w, this_row - px(6));
+		cy += this_row;
 	}
 	const int bw = px(100), bh = px(30);
 	child(L"BUTTON", ok, WS_TABSTOP | BS_DEFPUSHBUTTON, width - pad - bw * 2 - px(10), cy + px(8), bw, bh, kIdOk);

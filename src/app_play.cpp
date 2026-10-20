@@ -67,8 +67,11 @@ bool App::com_turn() const
 {
 	if (editing_) return false;
 	const Position &p = game_.now();
-	if (p.game_over() || game_.cursor() != game_.size()) return false;
-	if (com_once_) return true;
+	if (p.game_over()) return false;
+	// one move asked for: from the position shown, also before the end of the game (the moves after it are cut,
+	// as for a move of the person)
+	if (com_once_ && key_of(p) == com_once_pos_) return true;
+	if (game_.cursor() != game_.size()) return false;
 	switch (play_mode_) {
 	case PlayMode::HumanBlack: return p.side == kWhite;
 	case PlayMode::HumanWhite: return p.side == kBlack;
@@ -139,7 +142,7 @@ void App::com_think()
 		return;
 	}
 	std::string out = "setboard " + p.to_board_string() + "\n";
-	if (clock_minutes_ > 0) {
+	if (game_clock_) {
 		// the time of a move: what is left shared over the moves still to come of this side
 		// (in tenths of a second). The engine's level stays a bound in this mode, so it is raised to 60 first:
 		// "level" sets the play by level again, so "move-time" comes after it.
@@ -216,6 +219,7 @@ void App::set_play_mode(PlayMode m, int games)
 	if (m != PlayMode::Free) {
 		// a new game from the start position (the game before is kept)
 		clock_left_ms_[0] = clock_left_ms_[1] = static_cast<long long>(clock_minutes_) * 60000;
+		game_clock_ = clock_minutes_ > 0;
 		clock_side_ = -1;
 		list_index_ = -1;
 		set_game(Game{}, true);
@@ -238,7 +242,7 @@ void App::clock_switch()
 		clock_left_ms_[clock_side_] -= std::chrono::duration_cast<std::chrono::milliseconds>(now - clock_t0_).count();
 	clock_t0_ = now;
 	const Position &p = game_.now();
-	if (clock_minutes_ <= 0 || play_mode_ == PlayMode::Free || p.game_over()) {
+	if (!game_clock_ || play_mode_ == PlayMode::Free || p.game_over()) {
 		clock_side_ = -1;
 		KillTimer(hwnd_, kTimerClock);
 		return;
@@ -323,6 +327,7 @@ void App::play_command(int id)
 		break;
 	case cmd::PlayEngineMove:
 		com_once_ = true;
+		com_once_pos_ = key_of(game_.now());
 		com_think();
 		break;
 	case cmd::PlayTakeBack:
@@ -508,6 +513,7 @@ bool play_timer(App &app, UINT_PTR id)
 			--app.engine_games_left_;
 			app.game_end_done_ = false;
 			app.clock_left_ms_[0] = app.clock_left_ms_[1] = static_cast<long long>(app.clock_minutes_) * 60000;
+			app.game_clock_ = app.clock_minutes_ > 0;
 			app.clock_side_ = -1;
 			app.set_game(Game{}, false);
 			app.clock_switch();
@@ -525,7 +531,7 @@ std::wstring play_bar_text(const App &app)
 	const char *names[] = {"play.free", "play.human_black", "play.human_white", "play.engines"};
 	std::wstring s = lang::t(names[static_cast<int>(app.play_mode_)]);
 	if (app.com_thinking_ || app.com_book_move_ != kNoMove) s += L" " + lang::t("play.thinking");
-	if (app.clock_minutes_ > 0) {
+	if (app.game_clock_) {
 		long long left[2] = {app.clock_left_ms_[0], app.clock_left_ms_[1]};
 		if (app.clock_side_ >= 0)
 			left[app.clock_side_] -= std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - app.clock_t0_).count();

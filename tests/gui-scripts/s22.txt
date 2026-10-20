@@ -1,0 +1,17 @@
+# C: the computer plays one move from a position before the end of the game (after a step back, as after stopping
+# the computer on both sides with the left arrow): the moves after it are cut, the computer's move is played
+log s22 start
+engine newedax
+wait 40
+game free
+comlevel 4
+opening search
+clock 0
+moves f5d6c3d3c4
+back
+back
+go
+keep
+screenshot s22-01-go.png
+savelog s22-log.txt
+quit
