@@ -2,6 +2,7 @@
 // analyses (book moveinfo). Kept per position, up to a limit.
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <list>
 #include <optional>
@@ -75,6 +76,8 @@ struct PosInfo {
 	const MoveEval *find(int sq) const;
 	void reset_book();
 	void reset_search();
+	// the book parts to be asked with `params`: what was known with other ones goes; true when they changed
+	bool set_book_params(const std::string &params);
 };
 
 struct PosKey {
@@ -100,6 +103,8 @@ public:
 	const PosInfo *peek(const Position &p) const;
 	void clear_book();     // the book changed
 	void clear_search();
+	// room for at least `n` positions (the open nodes of the tree, kept while it is shown): the limit is never lowered
+	void keep_at_least(size_t n) noexcept { limit_ = std::max(limit_, n); }
 	// what is known of a position, for the position turned by a symmetry (the values and the book are the same)
 	void copy_symmetric(const Position &p, int s);
 	size_t size() const noexcept { return map_.size(); }
@@ -140,6 +145,13 @@ std::optional<HintLine> parse_hint_line(std::string_view line);
 
 // the number n of a marker "echo Mn": the engine answers with a warning line that names "Mn"; -1 otherwise
 int echo_marker(std::string_view line);
+
+// The engine writes a line of the book analyses whole, from another thread, while its main thread may write a line in
+// parts (a warning, the result of a command): the analysis line then comes after the first part of that line
+// ("WARNING: @end id=5 ms=0", the rest of the warning on the next line). The analysis lines ("@<word> id=<number>")
+// are taken out where they begin, and each line of the main thread is put together again: its first part waits in
+// `open` for its rest, the next line that is not an analysis line.
+void unmix_lines(std::vector<std::string> &lines, std::string &open);
 
 // The numbers of the requests to the engines (id=, the echo markers): the book analyses take id= up to 100,000.
 inline constexpr int kMaxRequestId = 99999;

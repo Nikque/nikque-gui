@@ -23,15 +23,12 @@ public:
 	bool start(const std::wstring &exe, const std::wstring &args, const std::wstring &dir, HWND notify, UINT msg,
 	           WPARAM tag, std::wstring *error);
 	bool running() const noexcept { return process_ != nullptr; }
-	// whether the process has ended by itself
-	bool exited() const;
 	// writes the text (lines ending with '\n') at once
 	bool send(std::string_view text);
 	// moves the lines read so far into `out` (appended)
 	void take_lines(std::vector<std::string> &out);
 	// "quit", waits up to `wait_ms`, then ends the process if it is still there
 	void close(DWORD wait_ms = 2000);
-	DWORD pid() const noexcept { return pid_; }
 
 private:
 	void read_loop();
@@ -40,7 +37,6 @@ private:
 	HANDLE job_ = nullptr;
 	HANDLE in_write_ = nullptr;
 	HANDLE out_read_ = nullptr;
-	DWORD pid_ = 0;
 	std::thread reader_;
 	std::mutex mutex_;
 	std::vector<std::string> lines_;

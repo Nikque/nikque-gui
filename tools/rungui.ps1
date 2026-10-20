@@ -19,10 +19,24 @@ for ($i = 0; $i -lt 60 -and -not $p; ++$i) {
 	$p = Get-Process nikque-gui -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }
 }
 if (-not $p) { "not started"; exit 1 }
-$peak = 0; $priv = 0  # the peaks the system keeps (0 once the process has ended)
+# the peaks the system keeps, read through the handle after the end (a sample taken while it runs misses the last one)
+Add-Type -TypeDefinition @'
+using System; using System.Runtime.InteropServices;
+public static class NgPeak {
+	[StructLayout(LayoutKind.Sequential)] public struct Counters { public uint cb, PageFaultCount; public UIntPtr PeakWorkingSetSize, WorkingSetSize, QuotaPeakPagedPoolUsage, QuotaPagedPoolUsage, QuotaPeakNonPagedPoolUsage, QuotaNonPagedPoolUsage, PagefileUsage, PeakPagefileUsage; }
+	[DllImport("psapi.dll")] static extern bool GetProcessMemoryInfo(IntPtr process, out Counters c, uint cb);
+	public static double[] Read(IntPtr process) {
+		Counters c;
+		if (!GetProcessMemoryInfo(process, out c, (uint)Marshal.SizeOf(typeof(Counters)))) return new double[] { 0, 0 };
+		return new double[] { c.PeakWorkingSetSize.ToUInt64(), c.PeakPagefileUsage.ToUInt64() };
+	}
+}
+'@
+$handle = $p.Handle  # (kept open: the counters stay readable after the end)
 while (-not $p.HasExited) {
 	Start-Sleep -Milliseconds 500
-	try { $p.Refresh(); $peak = [Math]::Max($peak, $p.PeakWorkingSet64); $priv = [Math]::Max($priv, $p.PeakPagedMemorySize64) } catch {}
 	if (((Get-Date) - $t0).TotalSeconds -gt $Timeout) { "timeout: killed"; $p.Kill(); break }
 }
+$p.WaitForExit()
+$peak, $priv = [NgPeak]::Read($handle)
 "elapsed {0:N1} s, peak working set {1:N1} MB, peak private {2:N1} MB" -f ((Get-Date) - $t0).TotalSeconds, ($peak / 1MB), ($priv / 1MB)

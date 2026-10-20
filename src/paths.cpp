@@ -28,28 +28,29 @@ std::optional<std::string> acp(const std::wstring &w)
 	return to_codepage(w, CP_ACP);
 }
 
-// A name on the command line of an engine is quoted (spaces are allowed); the engine reads it in the code page of
-// the system and keeps a book name of FILENAME_MAX - 8 bytes at most (a longer one is ignored: its own book is
-// opened). Too long a name, or one with letters not in the code page, becomes its short (8.3) form when the drive
-// keeps those; for a file still to be made, the folder's short form and the name.
-std::optional<std::wstring> engine_arg_path(const std::wstring &path, size_t max_bytes)
+// A name on the command line of an engine is quoted (spaces are allowed); the engine reads it in the code page of the
+// system. A name it would not keep (too long, or with letters not in the code page) is given with its folder in the
+// short (8.3) form when the drive keeps those, else in the short form whole: the name of the file stays when it can,
+// since the engine names the files it saves on the way after the book (".store", ".dev2", ...).
+std::optional<std::wstring> engine_arg_path(const std::wstring &path, EngineName what)
 {
-	auto fits = [max_bytes](const std::wstring &w) {
+	auto fits = [what](const std::wstring &w) {
 		const auto a = acp(w);
-		return a && a->size() <= max_bytes;
+		return a && (what == EngineName::Book ? a->size() <= kEngineBookNameMax : w.size() <= kEngineNameMax);
 	};
 	if (fits(path)) return path;
 	wchar_t buf[MAX_PATH * 4];
 	const DWORD size = static_cast<DWORD>(std::size(buf));
-	DWORD n = GetShortPathNameW(path.c_str(), buf, size);
+	if (const size_t slash = path.find_last_of(L"\\/"); slash != std::wstring::npos) {
+		const DWORD n = GetShortPathNameW(path.substr(0, slash).c_str(), buf, size);
+		if (n > 0 && n < size) {
+			const std::wstring w = std::wstring(buf) + path.substr(slash);
+			if (fits(w)) return w;
+		}
+	}
+	const DWORD n = GetShortPathNameW(path.c_str(), buf, size);  // (a file still to be made has none)
 	if (n > 0 && n < size && fits(buf)) return std::wstring(buf);
-	const size_t slash = path.find_last_of(L"\\/");
-	if (slash == std::wstring::npos) return std::nullopt;
-	n = GetShortPathNameW(path.substr(0, slash).c_str(), buf, size);
-	if (n == 0 || n >= size) return std::nullopt;
-	const std::wstring w = std::wstring(buf) + path.substr(slash);
-	if (!fits(w)) return std::nullopt;
-	return w;
+	return std::nullopt;
 }
 
 // A name the engine can open: in the code page of the system and without a space (the engine reads a name up

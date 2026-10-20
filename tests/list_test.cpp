@@ -325,6 +325,30 @@ static void test_find_line(int argc, char **argv)
 }
 
 // a list large enough to be split into parts on threads: the same results as one game at a time
+// Reading stopped: a stop asked before the reading is seen however short the text is, and a stop is seen in a block
+// read in parts on threads whatever the length of its lines (a part of long lines has fewer than 4,096 of them).
+static void test_read_stopped()
+{
+	std::stop_source stop;
+	stop.request_stop();
+	GameList a;
+	CHECK(read_list_text("f5\n", a, stop.get_token()).cancelled);
+	std::mt19937_64 rng(5);
+	const auto g = random_game(rng, 60);
+	const Position start = play_all(Position{}, g, 4);
+	const std::string line = list_line(start, std::span(g).subspan(4)) + "\n";  // the start position written first
+	CHECK(line.size() > 160);
+	std::string text;
+	while (text.size() < (4u << 20)) text += line;
+	GameList b;
+	const ListReadStats st = read_list_text(text, b, stop.get_token());
+	CHECK(st.cancelled);
+	CHECK(b.size() < text.size() / line.size());
+	GameList c;
+	const ListReadStats all = read_list_text(text, c, {});
+	CHECK(!all.cancelled && c.size() == text.size() / line.size());
+}
+
 static void test_parts()
 {
 	std::mt19937_64 rng(21);
@@ -534,6 +558,7 @@ int main(int argc, char **argv)
 	test_search();
 	test_find_line(argc, argv);
 	test_parts();
+	test_read_stopped();
 	timings();
 	if (failures) {
 		std::printf("%d failures\n", failures);

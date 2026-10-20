@@ -14,6 +14,7 @@
 #include <string>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "analysis.h"
@@ -31,6 +32,8 @@ namespace ng {
 inline constexpr UINT WM_ENGINE = WM_APP + 1;
 // the wParam of WM_ENGINE: the role of the engine (3 bits) and the number of its start
 inline WPARAM engine_tag(int role, unsigned generation) { return static_cast<WPARAM>(role) | (static_cast<WPARAM>(generation) << 3); }
+// the commands that set a line on an engine: "setboard <start>", then "play <moves>" when there are moves
+std::string line_commands(const Position &start, const std::string &moves);
 inline constexpr UINT WM_TASK = WM_APP + 2;  // a background job has ended
 inline constexpr UINT WM_SCRIPT = WM_APP + 3;  // the command script goes on (after the work that it waited for)
 
@@ -285,6 +288,8 @@ struct EngineSlot {
 	int probe_id = 0;                  // "stop id=<n>" sent first, not answered yet ("@cancel id=<n>": the book analyses are known)
 	bool old = false;                  // the version came before that answer: an engine without the book analyses
 	std::wstring error;
+	std::string open;                  // the first part of a line cut by an analysis line, waiting for its rest
+	std::wstring book_arg;             // the book name given to the engine (it names its files saved on the way after it)
 };
 
 struct MissingList {
@@ -298,14 +303,15 @@ struct MissingList {
 
 // a request to the main engine, by id
 struct Request {
-	enum Kind { Book, Count, Levels, Marker, Graph, Missing, Best, BestExport, FindLine, ListBook, ListBookAdd } kind;
+	enum Kind { Book, Count, Levels, Graph, Missing, Best, BestExport, FindLine, ListBook, ListBookAdd } kind;
 	PosKey pos;
-	int engine;
+	std::string params;  // the book settings asked with (book_params, Book and Graph)
 };
 
 class App {
 public:
 	int run(HINSTANCE inst, int show);
+	int message(const std::wstring &text, UINT flags);  // a message box with the title of the app (MessageBoxW)
 	LRESULT proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
 	// ---- state (shared by the app_*.cpp files)
@@ -357,6 +363,7 @@ public:
 	int hash_bits_ = 0;        // hash-table-size given to the engines (0: their own)
 	int next_id_ = 0;          // the number of the last request (new_id)
 	std::unordered_map<int, Request> requests_;
+	std::unordered_set<int> stopped_;  // requests stopped whose answer has not ended yet: their numbers stay taken
 	int book_id_ = 0, count_id_ = 0, levels_id_ = 0, best_id_ = 0;   // running on the main engine
 	std::wstring best_file_;   // the file the best lines are written to (book bestlines file=)
 	int graph_id_ = 0;         // the book analysis of another position of the game (for the graph), one at a time
@@ -567,7 +574,6 @@ public:
 	bool refuse_while_learning();  // while the book learns: says so and returns true (the engine is not closed)
 	void on_engine(WPARAM tag, bool ended);
 	void request_analysis();
-	void request_levels();
 	void pump_graph();
 	void pump_search();
 	void request_missing(std::string &out, const Position &p);
@@ -581,6 +587,7 @@ public:
 	std::string learn_options_commands() const;
 	// app_learn.cpp
 	std::wstring book_file() const;
+	std::wstring saved_base() const;  // the book name the engine names its files saved on the way after (".store", ...)
 	void learn_command(int id);
 	void start_learning(const std::string &command);
 	void start_learning_at(const std::string &command, const Position &start, const std::string &moves);
@@ -592,10 +599,14 @@ public:
 	void learning_line(const std::string &line);
 	void learning_ended();
 	void forget_engine_state(int role);  // after "stop": the position and level sent before are unknown
+	void stop_search(int role);  // "stop" to the search engine (1) or the compare engine (4); its lines after are not taken
 	void send_hint(const Position &p, bool background);
 	int new_id();                     // the number of a request (id=, echo markers): 1 .. kMaxRequestId, again from 1
 	void forget_main_requests();      // the main engine closed: its requests and the analyses asked of it go
 	std::string stop_main_analyses(); // the book analyses in progress stop ("stop id=" lines to send), their answers dropped
+	void stop_request(std::string &out, int &id);  // "stop id=<id>" added to `out`, the answer dropped; id becomes 0
+	void board_to(int role, std::string &out, const Position &p);  // "setboard" when the engine has another position
+	std::string moves_to_cursor() const;  // the moves of the game up to the place shown, for "play" (a pass "pa")
 	// the options of an engine without the book (an empty book of its own in the temporary folder); none when the
 	// engine could not open that name
 	std::optional<std::wstring> nobook_args(const wchar_t *name) const;
@@ -605,11 +616,12 @@ public:
 	std::wstring engine_name() const;
 	std::wstring engine_exe() const { return engine_exe(kind_); }  // empty when there is none
 	std::wstring engine_eval() const { return engine_eval(kind_); }
-	std::wstring engine_args() const { return engine_args(kind_); }  // eval file, threads, level, hash
+	// eval file, threads, level, hash; none (said in the log) when the engine could not open the eval file by its name
+	std::optional<std::wstring> engine_args() { return engine_args(kind_); }
 	std::wstring engine_dir(EngineKind k) const;
 	std::wstring engine_exe(EngineKind k) const;
 	std::wstring engine_eval(EngineKind k) const;
-	std::wstring engine_args(EngineKind k) const;
+	std::optional<std::wstring> engine_args(EngineKind k);
 	void send(int role, const std::string &text);
 
 	// ---- app_tools.cpp: the tool engine, the book commands of the menus, the base commands, file dialogs
@@ -712,7 +724,7 @@ public:
 };
 
 // drawing (draw_board.cpp, draw_panel.cpp)
-void draw_board(App &app, const D2D1_RECT_F *only_cell = nullptr);
+void draw_board(App &app);
 void draw_cell(App &app, int sq, double t);
 void draw_bar(App &app);
 void draw_panel(App &app);

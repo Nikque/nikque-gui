@@ -72,7 +72,7 @@ std::uint64_t seed_or_clock(int seed)
 void App::run_task(const std::wstring &label, std::function<std::function<void()>(std::stop_token)> work)
 {
 	if (task_busy_) {
-		MessageBoxW(hwnd_, lang::t("task.busy").c_str(), lang::t("app.title").c_str(), MB_ICONINFORMATION);
+		message(lang::t("task.busy"), MB_ICONINFORMATION);
 		return;
 	}
 	if (task_.joinable()) task_.join();
@@ -347,8 +347,7 @@ void App::list_command(int id)
 		}
 		break;
 	case cmd::ListClear:
-		if (!list_.empty() && MessageBoxW(hwnd_, lang::f("list.ask_clear", {std::to_wstring(list_.size())}).c_str(),
-		                                  t("app.title").c_str(), MB_OKCANCEL | MB_ICONQUESTION) == IDOK) {
+		if (!list_.empty() && message(lang::f("list.ask_clear", {std::to_wstring(list_.size())}), MB_OKCANCEL | MB_ICONQUESTION) == IDOK) {
 			list_.clear();
 			list_index_ = -1;
 			hits_.clear();
@@ -424,8 +423,7 @@ void App::list_from_book()
 	ini_.set("list", "book_n", narrow(f[2].text));
 	bool add = false;
 	if (!list_.empty()) {
-		const int a = MessageBoxW(hwnd_, lang::f("list.book.ask_add", {std::to_wstring(list_.size())}).c_str(), t("app.title").c_str(),
-		                          MB_YESNOCANCEL | MB_ICONQUESTION);
+		const int a = message(lang::f("list.book.ask_add", {std::to_wstring(list_.size())}), MB_YESNOCANCEL | MB_ICONQUESTION);
 		if (a == IDCANCEL) return;
 		add = a == IDYES;
 	}
@@ -439,18 +437,15 @@ bool App::ask_book_lines(int loss, int depth, int n, bool add)
 	DeleteFileW(file.c_str());
 	const auto path = engine_path(file, false);  // the temporary folder
 	if (!path) {
-		MessageBoxW(hwnd_, lang::f("err.engine_path", {file}).c_str(), lang::t("app.title").c_str(), MB_ICONWARNING);
+		message(lang::f("err.engine_path", {file}), MB_ICONWARNING);
 		return false;
 	}
-	std::string moves;
-	for (int i = 0; i < game_.cursor(); ++i) moves += square_name(game_.moves()[i]);
-	std::string out = "setboard " + game_.start().to_board_string() + "\n";
-	if (!moves.empty()) out += "play " + moves + "\n";
+	std::string out = line_commands(game_.start(), moves_to_cursor());
 	eng_[0].board = key_of(game_.now());
 	const int id = new_id();
 	out += "book bestlines id=" + std::to_string(id) + " loss=" + std::to_string(std::clamp(loss, 0, 129)) +
 	       " depth=" + std::to_string(std::clamp(depth, 1, 60)) + " solved=stop which=all file=\"" + *path + "\"\n";
-	requests_[id] = {add ? Request::ListBookAdd : Request::ListBook, key_of(game_.now()), 0};
+	requests_[id] = {add ? Request::ListBookAdd : Request::ListBook, key_of(game_.now())};
 	list_book_limit_ = std::max(1, n);
 	list_book_start_ = game_.start();
 	list_book_id_ = id;
@@ -521,8 +516,7 @@ void App::kept_command(int id)
 		return;
 	}
 	if (id == cmd::KeptClear) {
-		if (!kept_.empty() && MessageBoxW(hwnd_, lang::f("kept.ask_clear", {std::to_wstring(kept_.size())}).c_str(), t("app.title").c_str(),
-		                                  MB_OKCANCEL | MB_ICONQUESTION) == IDOK) {
+		if (!kept_.empty() && message(lang::f("kept.ask_clear", {std::to_wstring(kept_.size())}), MB_OKCANCEL | MB_ICONQUESTION) == IDOK) {
 			kept_.clear();
 			kept_sel_ = -1;
 			save_kept();

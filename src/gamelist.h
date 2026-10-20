@@ -64,7 +64,7 @@ private:
 
 struct ListReadStats {
 	bool opened = false;
-	bool cancelled = false;
+	bool cancelled = false;  // a stop was seen (asked before or while reading): the games read are not all of them
 	size_t lines = 0;   // lines with a game
 	size_t games = 0;   // games added
 	size_t cut = 0;     // games read up to a move that cannot be played

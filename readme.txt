@@ -109,6 +109,7 @@ Ntest の形は「空き 手番の側の石 手番」。
 読む・足す・保存・並べ替え（短い順、同じ長さは手順の順）・同じ棋譜をまとめる・切る・混ぜる（種）・
 向きをそろえる（初手を f5 に、対称な局面でも決まった向きに）・向きを散らす（対称な局面で乱数）・
 消す・何手目から始めるか・book の進行をリストへ。重い処理は裏で行い、「裏の仕事を止める」で止められます。
+向きをそろえる・散らすを途中で止めると、それまでに向きを変えた棋譜は変えたまま残ります（同じ棋譜の別の向き）。
 棋譜検索は、今の局面（向きの違うものも含む）が出る棋譜を探し、行を押すとその局面を開きます。
 
 7. 命令の列
@@ -274,6 +275,8 @@ A text file with one game a line ("f5d6c3...", or "<64 squares> <X|O>;moves" fro
 Open, add, save, sort (shorter first, then by the moves), join the same games, cut, shuffle (seed), one
 orientation (first move f5, also at later symmetric positions), random orientations, remove, the move to
 open at, book lines into the list. Heavy work runs in the background; "Stop the background work" stops it.
+Stopping one orientation or random orientations half way leaves the games turned so far as they are (the same
+games turned another way).
 The search finds the games where this position appears (other orientations too); click a line to open it.
 
 7. Command scripts

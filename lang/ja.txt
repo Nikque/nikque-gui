@@ -199,7 +199,6 @@ learn.ask_stop=学習を止めます。book の命令は途中でやめられな
 learn.stopped=学習を止めました（主のエンジンを起動し直しました）
 learn.nothing_newer=book より新しい途中保存のファイルはありません。
 learn.ask_continue=途中保存のファイル {0}（{1}）を読み込み、最後の命令を同じ局面から続けます：\n\n{2}\n\nよろしいですか。
-learn.space_in_path=ファイルの場所に空白があるので、エンジンに渡せません。空白のない場所に置いてください。
 
 # 設定の窓
 form.ok=OK

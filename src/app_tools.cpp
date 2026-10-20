@@ -106,12 +106,12 @@ std::optional<std::string> App::engine_path_or_say(const std::wstring &path, Fil
 	const std::wstring tmp = temp_dir_ + L"\\f" + std::to_wstring(++temp_files_) + ext;
 	const auto tp = engine_path(tmp, false);
 	if (!tp) {
-		MessageBoxW(hwnd_, lang::f("err.engine_path", {path}).c_str(), lang::t("app.title").c_str(), MB_ICONWARNING);
+		message(lang::f("err.engine_path", {path}), MB_ICONWARNING);
 		return std::nullopt;
 	}
 	if (use != FileUse::Write) {
 		if (!CopyFileW(path.c_str(), tmp.c_str(), FALSE)) {
-			MessageBoxW(hwnd_, lang::f("err.engine_path", {path}).c_str(), lang::t("app.title").c_str(), MB_ICONWARNING);
+			message(lang::f("err.engine_path", {path}), MB_ICONWARNING);
 			return std::nullopt;
 		}
 		log(lang::f("log.file_via_temp", {path}));
@@ -161,7 +161,7 @@ void App::open_log()
 bool App::start_tool(const std::string &commands, const std::wstring &label)
 {
 	if (tool_busy_) {
-		MessageBoxW(hwnd_, lang::t("tool.busy").c_str(), lang::t("app.title").c_str(), MB_ICONINFORMATION);
+		message(lang::t("tool.busy"), MB_ICONINFORMATION);
 		return false;
 	}
 	const std::wstring exe = engine_exe();
@@ -176,7 +176,9 @@ bool App::start_tool(const std::string &commands, const std::wstring &label)
 		log(lang::f("err.engine_name", {temp_dir_}));
 		return false;
 	}
-	const std::wstring args = engine_args() + *nb;
+	const auto common = engine_args();
+	if (!common) return false;
+	const std::wstring args = *common + *nb;
 	++s.generation;
 	std::wstring err;
 	s.alive = s.proc.start(exe, args, engine_dir(), hwnd_, WM_ENGINE, engine_tag(2, s.generation), &err);
@@ -315,11 +317,11 @@ void App::base_command(int id)
 		const std::wstring f = pick_save(flt.c_str(), ext, L"", title);
 		if (f.empty()) return std::nullopt;
 		if (same_file(f, in)) {
-			MessageBoxW(hwnd_, t("base.same_file").c_str(), t("app.title").c_str(), MB_ICONWARNING);
+			message(t("base.same_file"), MB_ICONWARNING);
 			return std::nullopt;
 		}
 		if (file_exists(f) && !DeleteFileW(f.c_str())) {
-			MessageBoxW(hwnd_, lang::f("base.cannot_replace", {f}).c_str(), t("app.title").c_str(), MB_ICONWARNING);
+			message(lang::f("base.cannot_replace", {f}), MB_ICONWARNING);
 			return std::nullopt;
 		}
 		return engine_path_or_say(f, FileUse::Write, 2);
@@ -328,7 +330,7 @@ void App::base_command(int id)
 		return ask_number(hwnd_, title, t("base.empties"), ini_.get_int("tools", "base_empties", 24, 0, 60), 0, 60, t("base.empties.note"));
 	};
 	auto rewrites = [&](const std::wstring &f) {
-		return MessageBoxW(hwnd_, lang::f("base.rewrites", {f}).c_str(), t("app.title").c_str(), MB_OKCANCEL | MB_ICONWARNING) == IDOK;
+		return message(lang::f("base.rewrites", {f}), MB_OKCANCEL | MB_ICONWARNING) == IDOK;
 	};
 	std::string c;
 	std::wstring label;
@@ -432,7 +434,7 @@ bool App::book_job(int id, std::string *command, std::wstring *warning)
 		if (f.empty()) return false;
 		// the engine adds to a file already there (extract): the file confirmed to be replaced goes first
 		if (file_exists(f) && !DeleteFileW(f.c_str())) {
-			MessageBoxW(hwnd_, lang::f("base.cannot_replace", {f}).c_str(), t("app.title").c_str(), MB_ICONWARNING);
+			message(lang::f("base.cannot_replace", {f}), MB_ICONWARNING);
 			return false;
 		}
 		auto p = engine_path_or_say(f, FileUse::Write, 0);

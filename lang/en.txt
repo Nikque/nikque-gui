@@ -199,7 +199,6 @@ learn.ask_stop=Stop learning. A book command cannot be stopped on the way, so th
 learn.stopped=Learning stopped (the main engine was restarted)
 learn.nothing_newer=No file saved on the way is newer than the book.
 learn.ask_continue=Read the file saved on the way {0} ({1}) and go on with the last command from the same position:\n\n{2}\n\nGo on?
-learn.space_in_path=The file's path has a space and cannot be given to the engine. Put the file where the path has no space.
 
 # Setting windows
 form.ok=OK

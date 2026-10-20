@@ -63,7 +63,7 @@ Copy-Engine $Nikque "nikque18" "Edax (C version, nikque)" "https://github.com/Ni
 Copy-Engine $Newedax "newedax" "newedax (C++ version of Edax)" "https://github.com/Nikque/newedax" $NewedaxName
 
 # checks: nothing for tests or measuring, no folder of the build machine in the GUI
-$bad = Get-ChildItem -Recurse $dst | Where-Object { $_.Name -match '^(opening\.ini|book\.dat|kept\.txt|config-test.*|.*\.pdb|.*\.log|measure.*)$' -or $_.FullName -match '\\_test\\' }
+$bad = Get-ChildItem -Recurse $dst | Where-Object { $_.Name -match '^(opening\.ini|book\.dat|kept\.txt|config-test.*|.*\.pdb|.*\.log|measure.*)$' -or $_.FullName.Substring($dst.Length) -match '\\_test\\' }
 if ($bad) { throw "files that must not be in the distribution: $($bad.FullName -join ', ')" }
 $bytes = [System.IO.File]::ReadAllBytes($gui)
 $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)

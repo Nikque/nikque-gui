@@ -37,9 +37,9 @@ add_custom_command(
 	COMMENT "drawing the icon")
 add_custom_target(ng_icon DEPENDS ${NG_ICON})
 
-add_executable(nikque-gui WIN32
+# the GUI without its entry point: the program and the tests of the app (tests/app_test.cpp) are built from it
+add_library(ng_app OBJECT
 	${NG_CORE}
-	src/main.cpp
 	src/app.cpp
 	src/app_input.cpp
 	src/app_engine.cpp
@@ -64,17 +64,23 @@ add_executable(nikque-gui WIN32
 	src/draw_board.cpp
 	src/draw_panel.cpp
 	src/icon_draw.cpp
+)
+target_include_directories(ng_app PUBLIC src)
+target_link_libraries(ng_app PUBLIC d2d1 d3d11 dxgi dxguid dwrite windowscodecs dwmapi shcore comctl32 ole32 shell32 uuid comdlg32)
+target_compile_definitions(ng_app PRIVATE NG_VERSION="${PROJECT_VERSION}")
+if(NG_MEASURE)
+	target_compile_definitions(ng_app PRIVATE NG_MEASURE=1)
+endif()
+
+add_executable(nikque-gui WIN32
+	src/main.cpp
 	res/app.rc
 )
 add_dependencies(nikque-gui ng_icon)
-target_include_directories(nikque-gui PRIVATE src ${CMAKE_BINARY_DIR}/gen)
+target_include_directories(nikque-gui PRIVATE ${CMAKE_BINARY_DIR}/gen)
 set_source_files_properties(res/app.rc PROPERTIES OBJECT_DEPENDS "${NG_ICON};${CMAKE_SOURCE_DIR}/lang/ja.txt;${CMAKE_SOURCE_DIR}/res/app.manifest")
-target_link_libraries(nikque-gui PRIVATE d2d1 d3d11 dxgi dxguid dwrite windowscodecs dwmapi shcore comctl32 ole32 shell32 uuid comdlg32)
+target_link_libraries(nikque-gui PRIVATE ng_app)
 target_link_options(nikque-gui PRIVATE /MANIFEST:NO)
-target_compile_definitions(nikque-gui PRIVATE NG_VERSION="${PROJECT_VERSION}")
-if(NG_MEASURE)
-	target_compile_definitions(nikque-gui PRIVATE NG_MEASURE=1)
-endif()
 # the language files and the readme next to the exe
 add_custom_command(TARGET nikque-gui POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/lang $<TARGET_FILE_DIR:nikque-gui>/lang
@@ -99,3 +105,6 @@ add_test(NAME list COMMAND list_test
 	${CMAKE_SOURCE_DIR}/_test/books/book1.games
 	${CMAKE_SOURCE_DIR}/_test/books/book2.games
 	${CMAKE_SOURCE_DIR}/_test/books/book3.games)
+add_executable(app_test tests/app_test.cpp)
+target_link_libraries(app_test PRIVATE ng_app)
+add_test(NAME app COMMAND app_test ${CMAKE_SOURCE_DIR})

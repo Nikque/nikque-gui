@@ -126,7 +126,7 @@ void App::estimate_line()
 {
 	const Position target = game_.now();
 	if (target.ply() > kEstimateMaxPly) {
-		MessageBoxW(hwnd_, lang::f("estimate.too_late", {std::to_wstring(kEstimateMaxPly)}).c_str(), lang::t("app.title").c_str(), MB_ICONINFORMATION);
+		message(lang::f("estimate.too_late", {std::to_wstring(kEstimateMaxPly)}), MB_ICONINFORMATION);
 		return;
 	}
 	if (target == Position{}) return;
@@ -157,7 +157,7 @@ void App::send_findline()
 	std::string out = "setboard " + Position{}.to_board_string() + "\n";
 	eng_[0].board = key_of(Position{});
 	out += "book findline id=" + std::to_string(findline_id_) + " target=" + t.substr(0, 64) + t.substr(65, 1) + "\n";
-	requests_[findline_id_] = {Request::FindLine, key_of(target), 0};
+	requests_[findline_id_] = {Request::FindLine, key_of(target)};
 	send(0, out);
 	set_status(lang::t("estimate.book"));
 }
@@ -308,7 +308,7 @@ void App::import_position()
 	} else if (take_position_text(s)) {
 		return;
 	}
-	MessageBoxW(hwnd_, t("import.bad").c_str(), t("app.title").c_str(), MB_ICONWARNING);
+	message(t("import.bad"), MB_ICONWARNING);
 }
 
 // ---- images

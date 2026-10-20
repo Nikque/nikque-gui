@@ -131,7 +131,7 @@ int App::run(HINSTANCE inst, int show)
 		if (MonitorFromRect(&r, MONITOR_DEFAULTTONULL)) SetWindowPos(hwnd_, nullptr, x, y, w, h, SWP_NOZORDER);
 	}
 	if (!gfx_.init(hwnd_)) {
-		MessageBoxW(hwnd_, lang::t("err.d2d").c_str(), lang::t("app.title").c_str(), MB_ICONERROR);
+		message(lang::t("err.d2d"), MB_ICONERROR);
 		return 1;
 	}
 	DragAcceptFiles(hwnd_, TRUE);
@@ -1119,6 +1119,11 @@ void App::log(const std::wstring &line)
 	while (log_.size() > 500) log_.pop_front();
 	status_ = line;
 	InvalidateRect(hwnd_, nullptr, FALSE);
+}
+
+int App::message(const std::wstring &text, UINT flags)
+{
+	return MessageBoxW(hwnd_, text.c_str(), lang::t("app.title").c_str(), flags);
 }
 
 void App::set_status(const std::wstring &s)

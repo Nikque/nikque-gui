@@ -48,7 +48,6 @@ private:
 struct ParsedMoves {
 	std::vector<int> moves;   // squares, no passes
 	int read = 0;             // coordinates found in the text
-	int bad_at = -1;          // index (in `moves` order) of the first coordinate that was not legal, or -1
 };
 
 // Finds coordinates (a1..h8, also full-width letters and digits) in any text, ignoring the rest.

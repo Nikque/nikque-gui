@@ -71,15 +71,15 @@ bool App::tree_visible(const std::vector<int> &path) const
 std::optional<Position> App::tree_next_wanted()
 {
 	const std::string params = book_params();
+	// the answers of the open nodes are kept beside the positions of the game (the graph) and a few others: when more
+	// nodes are open than the cache holds, the oldest answers would go and be asked again, round and round
+	cache_.keep_at_least(tree_open_.size() + static_cast<size_t>(game_.size()) + 256);
 	for (const auto &path : tree_open_) {
 		if (!tree_visible(path)) continue;
 		const Position p = tree_position(path);
 		if (p.game_over()) continue;
 		PosInfo &info = cache_.get(p);
-		if (info.book_params != params) {
-			if (info.book_begun || info.book_done || info.count_done || info.levels_done) info.reset_book();
-			info.book_params = params;
-		}
+		info.set_book_params(params);
 		if (!info.book_done) return p;
 	}
 	return std::nullopt;

@@ -47,6 +47,14 @@ void PosInfo::reset_book()
 	best_lines = best_ends = best_incomplete = best_incomplete_ends = -1;
 }
 
+bool PosInfo::set_book_params(const std::string &params)
+{
+	if (book_params == params) return false;
+	if (book_begun || book_done || count_done || levels_done) reset_book();
+	book_params = params;
+	return true;
+}
+
 void PosInfo::reset_search()
 {
 	for (auto &m : moves) {
@@ -312,6 +320,56 @@ int echo_marker(std::string_view line)
 	for (; i < line.size() && line[i] >= '0' && line[i] <= '9'; ++i) n = n * 10 + (line[i] - '0');
 	if (i >= line.size() || line[i] != '"') return -1;
 	return n;
+}
+
+namespace {
+
+// whether the text begins an analysis line: "@<word> id=<number>" and a space or the end
+bool analysis_head(std::string_view s)
+{
+	static constexpr std::string_view kWords[] = {"begin", "move", "level", "line", "end", "cancel", "error"};
+	if (!s.starts_with('@')) return false;
+	s.remove_prefix(1);
+	for (const std::string_view w : kWords) {
+		if (!s.starts_with(w) || !s.substr(w.size()).starts_with(" id=")) continue;
+		std::string_view n = s.substr(w.size() + 4);
+		if (n.starts_with('-')) n.remove_prefix(1);
+		size_t k = 0;
+		while (k < n.size() && n[k] >= '0' && n[k] <= '9') ++k;
+		return k > 0 && (k == n.size() || n[k] == ' ');
+	}
+	return false;
+}
+
+}  // namespace
+
+void unmix_lines(std::vector<std::string> &lines, std::string &open)
+{
+	std::vector<std::string> out;
+	out.reserve(lines.size() + 1);
+	for (std::string &line : lines) {
+		if (analysis_head(line)) {
+			out.push_back(std::move(line));
+			continue;
+		}
+		size_t at = std::string::npos;
+		for (size_t k = line.find('@', 1); k != std::string::npos; k = line.find('@', k + 1))
+			if (analysis_head(std::string_view(line).substr(k))) {
+				at = k;
+				break;
+			}
+		if (at != std::string::npos) {
+			open.append(line, 0, at);
+			out.push_back(line.substr(at));
+			continue;
+		}
+		if (!open.empty()) {
+			line.insert(0, open);
+			open.clear();
+		}
+		out.push_back(std::move(line));
+	}
+	lines = std::move(out);
 }
 
 }  // namespace ng

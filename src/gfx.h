@@ -74,14 +74,11 @@ public:
 	ID2D1Geometry *paw() const { return paw_.Get(); }
 	// ten thin rays from (0, 0) to radius 1
 	ID2D1PathGeometry *rays() const { return rays_.Get(); }
-	ID2D1StrokeStyle *round_join() const { return round_join_.Get(); }
 
 	// draws a frame into a bitmap of the window's size with `draw` and writes the part `crop` of it as a PNG file
 	bool save_png(const std::wstring &path, const D2D1_RECT_U &crop, const std::function<void()> &draw);
 	void clear_shapes();  // after a size change
 	void clear_fonts();   // after the language changed (the font of the screen)
-	size_t glow_count() const noexcept { return glows_.size(); }
-	size_t shape_count() const noexcept { return shapes_.size(); }
 
 private:
 	bool create_device();

@@ -161,6 +161,33 @@ static void test_missing()
 	CHECK(!parse_missing_line(Fields("@end id=2 count=1 shown=1 stage=1 ms=0")));
 }
 
+// lines of the analyses written in the middle of a line of the main thread (lines read from the engines)
+static void test_unmix()
+{
+	std::string open;
+	std::vector<std::string> l = {"WARNING: @end id=1050 ms=0", "echo: \"M1051\" is not on or off; ignored", "@begin id=1051 ply=0"};
+	unmix_lines(l, open);
+	CHECK(l.size() == 3 && l[0] == "@end id=1050 ms=0" && l[1] == "WARNING: echo: \"M1051\" is not on or off; ignored");
+	CHECK(l[2] == "@begin id=1051 ply=0" && open.empty());
+	// cut twice; the rest in the next lines read
+	l = {"{board:-O; moves: [c3:-44]@move id=51 sq=d3 book=1", "<g3:@move id=-7 sq=f5", "@end id=51 ms=0"};
+	unmix_lines(l, open);
+	CHECK(l.size() == 3 && l[0] == "@move id=51 sq=d3 book=1" && l[1] == "@move id=-7 sq=f5" && l[2] == "@end id=51 ms=0");
+	CHECK(open == "{board:-O; moves: [c3:-44]<g3:");
+	l = {"-47>}"};
+	unmix_lines(l, open);
+	CHECK(l.size() == 1 && l[0] == "{board:-O; moves: [c3:-44]<g3:-47>}" && open.empty());
+	// the end of the line written alone: the line is its first part
+	l = {"A@cancel id=3", ""};
+	unmix_lines(l, open);
+	CHECK(l.size() == 2 && l[0] == "@cancel id=3" && l[1] == "A");
+	// an '@' that does not begin an analysis line
+	l = {"16@73%  +00", "a@moves id=1", "a@move id=", "a@move id=3x", "a@end id=4", "@"};
+	unmix_lines(l, open);
+	CHECK(l.size() == 6 && l[0] == "16@73%  +00" && l[1] == "a@moves id=1" && l[2] == "a@move id=" && l[3] == "a@move id=3x");
+	CHECK(l[4] == "@end id=4" && l[5] == "a@" && open.empty());
+}
+
 int main()
 {
 	{
@@ -215,12 +242,19 @@ int main()
 		cache.get(p.play(parse_square("f5")));
 		cache.get(p.play(parse_square("d3")));
 		CHECK(cache.size() == 2 && cache.peek(p) == nullptr);
+		// room for more (the open nodes of the tree), never less
+		cache.keep_at_least(3);
+		cache.keep_at_least(1);
+		cache.get(p);
+		cache.get(p.play(parse_square("c4")));
+		CHECK(cache.size() == 3 && cache.peek(p.play(parse_square("d3"))) != nullptr);
 	}
 	test_backward();
 	test_missing();
 	test_reset_book();
 	test_request_ids();
 	test_param_numbers();
+	test_unmix();
 	if (failures) {
 		std::printf("%d failures\n", failures);
 		return 1;

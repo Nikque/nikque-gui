@@ -20,7 +20,8 @@ struct LineSearch {
 
 // The positions known not to lead to the target are kept up to `dead_limit` (about 66 bytes each: a search of 50
 // million positions that finds nothing would keep about 15 million of them); the positions met after that are searched
-// again when met again, the line found is the same.
+// again when met again. A search that ends before `node_limit` finds the same line; the positions searched again count
+// toward the limit, so a search near it may give up where keeping them all would have found the line.
 inline constexpr size_t kDeadLimit = 2'000'000;
 LineSearch find_line(const Position &from, const Position &target, long long node_limit, std::stop_token stop = {},
                      size_t dead_limit = kDeadLimit);

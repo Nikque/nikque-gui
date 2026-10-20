@@ -42,14 +42,6 @@ std::wstring stage_meaning(const App &app, int k)
 	return lang::f("stage.n", {std::to_wstring(k), widen(app.base_), r});
 }
 
-// a readable color of a stage on the panel
-D2D1_COLOR_F stage_ink(const Theme &th, int k)
-{
-	if (k <= 0) return th.text;
-	if (k == 7) return th.design == Design::Paw ? rgb(0x18181b) : rgb(0xffffff);
-	return th.stage[k].mid;
-}
-
 void stage_dot(Gfx &gx, const Theme &th, int k, D2D1_POINT_2F p, float r)
 {
 	auto *dc = gx.dc();

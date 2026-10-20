@@ -67,14 +67,8 @@ bool EngineProcess::start(const std::wstring &exe, const std::wstring &args, con
 	ResumeThread(pi.hThread);
 	CloseHandle(pi.hThread);
 	process_ = pi.hProcess;
-	pid_ = pi.dwProcessId;
 	reader_ = std::thread([this] { read_loop(); });
 	return true;
-}
-
-bool EngineProcess::exited() const
-{
-	return process_ && WaitForSingleObject(process_, 0) == WAIT_OBJECT_0;
 }
 
 bool EngineProcess::send(std::string_view text)
@@ -169,7 +163,6 @@ void EngineProcess::close(DWORD wait_ms)
 		CloseHandle(job_);
 		job_ = nullptr;
 	}
-	pid_ = 0;
 	partial_.clear();
 	std::lock_guard lock(mutex_);
 	lines_.clear();

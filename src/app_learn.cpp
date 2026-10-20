@@ -73,12 +73,14 @@ std::wstring App::book_file() const
 	return dir + L"\\" + w;
 }
 
+std::wstring App::saved_base() const
+{
+	return eng_[0].book_arg.empty() ? book_file() : eng_[0].book_arg;
+}
+
 void App::learn_command(int id)
 {
-	if (learning_) {
-		MessageBoxW(hwnd_, lang::t("learn.busy").c_str(), lang::t("app.title").c_str(), MB_ICONINFORMATION);
-		return;
-	}
+	if (refuse_while_learning()) return;
 	if (!eng_[0].alive) {
 		set_status(lang::t("learn.no_engine"));
 		return;
@@ -114,8 +116,7 @@ void App::learn_command(int id)
 	}
 	std::wstring ask = lang::f("learn.ask", {widen(c), book_file()});
 	if (!warning.empty()) ask += L"\n\n" + warning;
-	if (MessageBoxW(hwnd_, ask.c_str(), lang::t("app.title").c_str(),
-	                MB_OKCANCEL | (warning.empty() ? MB_ICONQUESTION : MB_ICONWARNING)) != IDOK)
+	if (message(ask, MB_OKCANCEL | (warning.empty() ? MB_ICONQUESTION : MB_ICONWARNING)) != IDOK)
 		return;
 	start_learning(c);
 }
@@ -123,18 +124,14 @@ void App::learn_command(int id)
 // the engine plays the game up to the place shown (the commands start from there; book store keeps the game)
 void App::start_learning(const std::string &command)
 {
-	std::string moves;
-	for (int i = 0; i < game_.cursor(); ++i) moves += square_name(game_.moves()[i]);
-	start_learning_at(command, game_.start(), moves);
+	start_learning_at(command, game_.start(), moves_to_cursor());
 }
 
 // the commands (one or more lines) from the position after `moves` from `start`
 void App::start_learning_at(const std::string &command, const Position &start, const std::string &moves)
 {
 	// the analyses of the main engine stop here (the engine also stops them before a command changing the book)
-	std::string out = stop_main_analyses();
-	out += "setboard " + start.to_board_string() + "\n";
-	if (!moves.empty()) out += "play " + moves + "\n";
+	std::string out = stop_main_analyses() + line_commands(start, moves);
 	eng_[0].board.reset();
 	out += command + "\n";
 	learn_end_id_ = new_id();
@@ -199,11 +196,10 @@ void App::learning_ended()
 void App::stop_learning()
 {
 	if (!learning_) return;
-	const SavedFile saved = newest_saved(book_file());
+	const SavedFile saved = newest_saved(saved_base());
 	const std::wstring when = saved.path.empty() ? lang::t("learn.never_saved")
 	                                             : lang::f("learn.saved_at", {local_time(saved.time), saved.path});
-	if (MessageBoxW(hwnd_, lang::f("learn.ask_stop", {when}).c_str(), lang::t("app.title").c_str(),
-	                MB_OKCANCEL | MB_ICONWARNING) != IDOK)
+	if (message(lang::f("learn.ask_stop", {when}), MB_OKCANCEL | MB_ICONWARNING) != IDOK)
 		return;
 	// a book command takes no input to stop: the engine itself is ended, then started again
 	eng_[0].proc.close(0);
@@ -225,19 +221,17 @@ void App::stop_learning()
 void App::continue_learning()
 {
 	if (learning_ || !eng_[0].alive) return;
-	const std::wstring book = book_file();
-	const SavedFile saved = newest_saved(book);
+	const SavedFile saved = newest_saved(saved_base());
 	std::error_code ec;
-	const auto book_time = std::filesystem::last_write_time(book, ec);
+	const auto book_time = std::filesystem::last_write_time(book_file(), ec);
 	if (saved.path.empty() || (!ec && saved.time <= book_time)) {
-		MessageBoxW(hwnd_, lang::t("learn.nothing_newer").c_str(), lang::t("app.title").c_str(), MB_ICONINFORMATION);
+		message(lang::t("learn.nothing_newer"), MB_ICONINFORMATION);
 		return;
 	}
 	std::string last = ini_.get("learn", "last_command");
 	for (auto &ch : last)
 		if (ch == '|') ch = '\n';
-	if (MessageBoxW(hwnd_, lang::f("learn.ask_continue", {saved.path, local_time(saved.time), widen(last)}).c_str(),
-	                lang::t("app.title").c_str(), MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
+	if (message(lang::f("learn.ask_continue", {saved.path, local_time(saved.time), widen(last)}), MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
 		return;
 	const auto path = engine_path_or_say(saved.path, FileUse::Read, 0);  // the engine reads the name up to a space
 	if (!path) return;
@@ -271,8 +265,7 @@ void App::queue_missing()
 		set_status(lang::t("status.missing_none"));
 		return;
 	}
-	std::string head;
-	for (int i = 0; i < game_.cursor(); ++i) head += square_name(game_.moves()[i]);
+	const std::string head = moves_to_cursor();
 	const std::string command = "book store\nbook " + base_ + " " + std::to_string(loss_x_) + " " + std::to_string(loss_y_);
 	for (const auto &ml : missing_.lines) {
 		LearnJob j;

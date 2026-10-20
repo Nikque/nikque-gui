@@ -426,7 +426,7 @@ void draw_cell(App &app, int sq, double t)
 	}
 }
 
-void draw_board(App &app, const D2D1_RECT_F *)
+void draw_board(App &app)
 {
 	const Theme &th = theme(app.design_);
 	const Layout &L = app.lay_;

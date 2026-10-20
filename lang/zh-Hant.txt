@@ -199,7 +199,6 @@ learn.ask_stop=停止學習。book 命令無法中途停止，因此會停止並
 learn.stopped=已停止學習（已重新啟動主引擎）
 learn.nothing_newer=沒有比 book 更新的中途儲存檔案。
 learn.ask_continue=讀取中途儲存檔案 {0}（{1}），並從同一局面繼續最後的命令：\n\n{2}\n\n確定嗎？
-learn.space_in_path=檔案路徑中有空格，無法傳給引擎。請放到沒有空格的位置。
 
 # 設定視窗
 form.ok=OK

@@ -257,21 +257,18 @@ void App::export_best()
 	// the engine opens the file with the code page of the system
 	const auto name = acp(file);
 	if (!name) {
-		MessageBoxW(hwnd_, t("best.bad_path").c_str(), t("app.title").c_str(), MB_ICONWARNING);
+		message(t("best.bad_path"), MB_ICONWARNING);
 		return;
 	}
 	const std::string &path = *name;
 	best_file_ = file;
 	// the game up to the place shown (the lines start from the start of the game), then the command
-	std::string moves;
-	for (int i = 0; i < game_.cursor(); ++i) moves += square_name(game_.moves()[i]);
-	std::string out = "setboard " + game_.start().to_board_string() + "\n";
-	if (!moves.empty()) out += "play " + moves + "\n";
+	std::string out = line_commands(game_.start(), moves_to_cursor());
 	eng_[0].board = key_of(game_.now());
 	const int id = new_id();
 	out += "book bestlines id=" + std::to_string(id) + " loss=" + std::to_string(loss) + " depth=" +
 	       std::to_string(depth) + " solved=" + solved + " which=" + which + " file=\"" + path + "\"\n";
-	requests_[id] = {Request::BestExport, key_of(game_.now()), 0};
+	requests_[id] = {Request::BestExport, key_of(game_.now())};
 	send(0, out);
 	log(lang::f("best.started", {best_file_}));
 }

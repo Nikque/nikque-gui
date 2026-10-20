@@ -48,18 +48,6 @@ std::uint64_t splitmix(std::uint64_t &s) noexcept
 	return z ^ (z >> 31);
 }
 
-// the legal moves of the side to move, after a forced pass (one computation of the moves in a game)
-u64 moves_after_pass(Position &p) noexcept
-{
-	u64 m = p.moves();
-	if (!m) {
-		const Position q = p.play(kPass);
-		m = q.moves();
-		if (m) p = q;  // the game goes on with the other side (no move at all: the game is over)
-	}
-	return m;
-}
-
 // plays a move of a game known to be legal (a pass first when the side to move cannot play it there)
 void play_known(Position &p, int sq) noexcept
 {
@@ -275,8 +263,12 @@ void take_lines(std::string_view text, GameList &list, ListReadStats &st, std::s
 {
 	Position start;
 	std::vector<std::uint8_t> moves;
-	size_t i = 0;
+	size_t i = 0, n = 0;
 	while (i < text.size()) {
+		if ((n++ & 1023) == 0 && stop.stop_requested()) {  // (first before any line)
+			st.cancelled = true;
+			return;
+		}
 		size_t e = text.find('\n', i);
 		if (e == std::string_view::npos) e = text.size();
 		std::string_view line = text.substr(i, e - i);
@@ -287,10 +279,6 @@ void take_lines(std::string_view text, GameList &list, ListReadStats &st, std::s
 			list.add(start, moves);
 			++st.games;
 			if (cut) ++st.cut;
-			if ((st.lines & 4095) == 0 && stop.stop_requested()) {
-				st.cancelled = true;
-				return;
-			}
 		}
 		i = e + 1;
 	}

@@ -54,7 +54,9 @@ bool App::start_play_engine()
 		log(lang::f("err.engine_name", {temp_dir_}));
 		return false;
 	}
-	const std::wstring args = engine_args() + *nb;
+	const auto common = engine_args();
+	if (!common) return false;
+	const std::wstring args = *common + *nb;
 	++s.generation;
 	std::wstring err;
 	s.alive = s.proc.start(exe, args, engine_dir(), hwnd_, WM_ENGINE, engine_tag(3, s.generation), &err);
@@ -422,8 +424,10 @@ void App::set_compare(bool on)
 		} else if (const auto nb = nobook_args(L"nobook-cmp.dat"); !nb) {
 			log(lang::f("err.engine_name", {temp_dir_}));
 			compare_ = false;
+		} else if (const auto common = engine_args(k); !common) {
+			compare_ = false;
 		} else {
-			const std::wstring args = engine_args(k) + *nb;
+			const std::wstring args = *common + *nb;
 			++s.generation;
 			std::wstring err;
 			s.alive = s.proc.start(exe, args, engine_dir(k), hwnd_, WM_ENGINE, engine_tag(4, s.generation), &err);
@@ -451,11 +455,7 @@ void App::compare_request()
 	const PosKey key = key_of(p);
 	PosInfo &info = cache_.get(p);
 	if (info.cmp_done && info.cmp_level == level_) {
-		if (cmp_busy_ && !(cmp_pos_ == key)) {
-			send(4, "stop\n");
-			forget_engine_state(4);
-			cmp_busy_ = cmp_accept_ = false;
-		}
+		if (cmp_busy_ && !(cmp_pos_ == key)) stop_search(4);
 		return;
 	}
 	if (cmp_busy_ && cmp_pos_ == key && cmp_level_ == level_) return;

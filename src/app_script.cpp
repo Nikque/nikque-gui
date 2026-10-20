@@ -412,7 +412,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		if (command.empty()) return bad("script.bad_word");
 		LearnJob j;
 		j.start = game_.start();
-		for (int i = 0; i < game_.cursor(); ++i) j.moves += square_name(game_.moves()[i]);
+		j.moves = moves_to_cursor();
 		j.command = command;
 		learn_queue_.push_back(std::move(j));
 		update_menu();

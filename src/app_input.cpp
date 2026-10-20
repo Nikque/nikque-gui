@@ -576,7 +576,7 @@ void App::on_command(int id)
 	}
 	if (id == cmd::QueueStart) {
 		if (learn_queue_.empty() || learning_) return;
-		if (MessageBoxW(hwnd_, lang::f("queue.ask", {std::to_wstring(learn_queue_.size()), book_file()}).c_str(), lang::t("app.title").c_str(), MB_OKCANCEL | MB_ICONQUESTION) != IDOK) return;
+		if (message(lang::f("queue.ask", {std::to_wstring(learn_queue_.size()), book_file()}), MB_OKCANCEL | MB_ICONQUESTION) != IDOK) return;
 		queue_running_ = true;
 		next_in_queue();
 		return;
@@ -625,11 +625,9 @@ void App::on_command(int id)
 	case cmd::BookShowStats:
 	case cmd::BookShowPosition: {
 		// read-only commands: the engine answers them beside the analyses
-		std::string c = id == cmd::BookShowInfo ? "book info\n" : id == cmd::BookShowStats ? "book stats\n" : "book show\n";
-		if (id == cmd::BookShowPosition && eng_[0].board != key_of(game_.now())) {
-			c = "setboard " + game_.now().to_board_string() + "\n" + c;
-			eng_[0].board = key_of(game_.now());
-		}
+		std::string c;
+		if (id == cmd::BookShowPosition) board_to(0, c, game_.now());
+		c += id == cmd::BookShowInfo ? "book info\n" : id == cmd::BookShowStats ? "book stats\n" : "book show\n";
 		send(0, c);
 		open_log();
 		break;
@@ -717,16 +715,8 @@ void App::on_command(int id)
 	case cmd::Recompute:
 		// the analyses in progress stop first: the rest of their answers would come to the positions cleared
 		if (!learning_) send(0, stop_main_analyses());
-		if (hint_busy_) {
-			send(1, "stop\n");
-			forget_engine_state(1);
-			hint_busy_ = hint_accept_ = false;
-		}
-		if (cmp_busy_) {
-			send(4, "stop\n");
-			forget_engine_state(4);
-			cmp_busy_ = cmp_accept_ = false;
-		}
+		if (hint_busy_) stop_search(1);
+		if (cmp_busy_) stop_search(4);
 		cache_.clear_search();
 		cache_.clear_book();
 		missing_ = MissingList{};
@@ -790,8 +780,7 @@ void App::on_command(int id)
 	case cmd::EngineNewedax: {
 		const EngineKind k = id == cmd::EngineNewedax ? EngineKind::Newedax : EngineKind::Nikque18;
 		if (k == kind_ || refuse_while_learning()) break;
-		if (MessageBoxW(hwnd_, lang::t("ask.switch_engine").c_str(), lang::t("app.title").c_str(),
-		                MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
+		if (message(lang::t("ask.switch_engine"), MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
 			break;
 		kind_ = k;
 		update_menu();
@@ -852,7 +841,7 @@ void App::on_command(int id)
 	case cmd::TabTree:
 		tab_ = static_cast<Tab>(id - cmd::TabMoves);
 		update_menu();
-		if (tab_ == Tab::Book) request_levels();
+		if (tab_ == Tab::Book) request_analysis();  // the parts of the book tab (levels, best lines, missing)
 		if (tab_ == Tab::Tree) pump_graph();
 		invalidate();
 		break;
@@ -871,7 +860,7 @@ void App::on_command(int id)
 		break;
 	}
 	case cmd::HelpAbout:
-		MessageBoxW(hwnd_, lang::f("help.about", {widen(NG_VERSION)}).c_str(), lang::t("app.title").c_str(), MB_OK);
+		message(lang::f("help.about", {widen(NG_VERSION)}), MB_OK);
 		break;
 	default: break;
 	}

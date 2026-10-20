@@ -124,7 +124,7 @@ static void test_arg_path(const std::filesystem::path &base)
 		std::printf("%ls: the letters are not in the code page of the system\n", base.c_str());
 	} else {
 		CHECK(a->size() > 252);
-		const auto p = engine_arg_path(s, 252);
+		const auto p = engine_arg_path(s, EngineName::Book);
 		if (!p) {
 			std::printf("%ls: no short names on this drive (the GUI says so and does not start the engine)\n", base.c_str());
 		} else {
@@ -140,15 +140,38 @@ static void test_arg_path(const std::filesystem::path &base)
 			std::printf("%ls: %ls\n", base.c_str(), p->c_str());
 		}
 		// a file still to be made (the empty book of an engine without the book): the short form of its folder
-		const auto q = engine_arg_path((dir / L"nobook.dat").wstring(), 252);
+		const auto q = engine_arg_path((dir / L"nobook.dat").wstring(), EngineName::Book);
 		if (q) {
 			const auto b = acp(*q);
 			CHECK(b && b->size() <= 252);
 		}
 	}
+	// The other files (the eval file) are opened with the functions of the code page, which take MAX_PATH - 1 letters
+	// whatever their bytes: such a name stays as it is.
+	{
+		const fs::path eval = dir / L"eval.dat";
+		std::filesystem::copy_file(file, eval, fs::copy_options::overwrite_existing, ec);
+		const std::wstring e = eval.wstring();
+		const auto b = acp(e);
+		if (b) {
+			CHECK(b->size() > 259 && e.size() <= 259);
+			FILE *f = std::fopen(b->c_str(), "rb");  // the way the engine opens it
+			CHECK(f);
+			if (f) std::fclose(f);
+			const auto p = engine_arg_path(e, EngineName::File);
+			CHECK(p && *p == e);
+		}
+	}
+	// A book named by its short form makes the engine save its files on the way (".store", ".dev2", ...) with that
+	// short name: the folder alone is shortened when that is enough, so the book keeps its own name.
+	{
+		const fs::path book = dir / L"long book name.dat";
+		std::filesystem::copy_file(file, book, fs::copy_options::overwrite_existing, ec);
+		if (const auto p = engine_arg_path(book.wstring(), EngineName::Book)) CHECK(p->ends_with(L"\\long book name.dat"));
+	}
 	// a name short enough stays as it is, spaces too
 	const std::wstring plain = (base / L"a b" / L"book.dat").wstring();
-	const auto same = engine_arg_path(plain, 252);
+	const auto same = engine_arg_path(plain, EngineName::Book);
 	CHECK(same && *same == plain);
 	fs::remove_all(base / L"ng arg test", ec);
 }
