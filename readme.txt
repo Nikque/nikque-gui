@@ -37,6 +37,7 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・newedax）は G
   エンジンが data\book.dat に初めの局面だけの小さな book を作ります（後でお持ちの book で置き換えて
   かまいません）。
 - 画面の言葉は「設定」→「言葉」で選びます（日本語・English・简体中文・繁體中文）。
+- 詳しい説明は manual\ja\README.md（ユーザーマニュアル）にあります。
 
 3. 画面
 -------
@@ -204,6 +205,7 @@ The GUI is under the MIT License. The engines (Edax nikque, newedax) are GPL and
   The engine reads the book (the GUI never reads the file). Without a book the engine makes a small new book
   (the initial position only) in data\book.dat; replace it with your book later.
 - The language is chosen in Settings → Language.
+- The user manual is manual\en\README.md.
 
 3. The screen
 -------------

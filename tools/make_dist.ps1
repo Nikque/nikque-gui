@@ -6,7 +6,7 @@ param(
 	[string]$Out = "D:\nikque-gui\dist"
 )
 # Makes the distribution of nikque GUI: a folder nikque-gui-<version> and its ZIP in $Out.
-#   nikque-gui.exe, config.ini (res\default-config.ini), readme.txt, LICENSE.txt, lang\*.txt
+#   nikque-gui.exe, config.ini (res\default-config.ini), readme.txt, LICENSE.txt, lang\*.txt, manual\ (ja, en, images)
 #   engines\nikque18 and engines\newedax: wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe (exe=auto chooses among them),
 #   data\eval.dat, LICENSE.txt (GPL v3 of the engine) and SOURCE.txt (where the source is).
 # The GUI is taken from build\Release (build.cmd): the measuring build (NG_MEASURE) is refused.
@@ -34,6 +34,7 @@ Copy-Item (Join-Path $root "readme.txt") $dst
 Copy-Item (Join-Path $root "LICENSE.txt") $dst
 Copy-Item (Join-Path $root "res\default-config.ini") (Join-Path $dst "config.ini")
 Copy-Item (Join-Path $root "lang\*.txt") (Join-Path $dst "lang")
+Copy-Item -Recurse (Join-Path $root "manual") $dst
 
 function Copy-Engine([string]$tree, [string]$folder, [string]$title, [string]$repo, [string]$tag) {
 	$e = Join-Path $dst "engines\$folder"
