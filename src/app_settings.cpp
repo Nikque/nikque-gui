@@ -9,6 +9,7 @@
 #include "app.h"
 #include "form.h"
 #include "lang.h"
+#include "paths.h"
 
 namespace ng {
 
@@ -254,14 +255,12 @@ void App::export_best()
 	of.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
 	if (!GetSaveFileNameW(&of)) return;
 	// the engine opens the file with the code page of the system
-	BOOL lost = FALSE;
-	const int n = WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, file, -1, nullptr, 0, nullptr, &lost);
-	std::string path(n > 0 ? n - 1 : 0, '\0');
-	if (n > 0) WideCharToMultiByte(CP_ACP, WC_NO_BEST_FIT_CHARS, file, -1, path.data(), n, nullptr, &lost);
-	if (n <= 0 || lost) {
+	const auto name = acp(file);
+	if (!name) {
 		MessageBoxW(hwnd_, t("best.bad_path").c_str(), t("app.title").c_str(), MB_ICONWARNING);
 		return;
 	}
+	const std::string &path = *name;
 	best_file_ = file;
 	// the game up to the place shown (the lines start from the start of the game), then the command
 	std::string moves;

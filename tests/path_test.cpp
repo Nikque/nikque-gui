@@ -78,6 +78,27 @@ static void test_codepage()
 	CHECK(!to_codepage(L"\x65E5\x672C.txt", 1252));
 }
 
+// WideCharToMultiByte as its documentation tells for UTF-8 (the code page of the system when Windows is set to use
+// UTF-8): the flags of the other code pages make it fail (some versions of Windows take them)
+static int __stdcall documented_convert(unsigned cp, unsigned long flags, const wchar_t *w, int wn, char *s, int sn,
+                                        const char *def, int *used)
+{
+	if (cp == CP_UTF8 && ((flags & ~static_cast<unsigned long>(WC_ERR_INVALID_CHARS)) || def || used)) {
+		SetLastError(ERROR_INVALID_PARAMETER);
+		return 0;
+	}
+	return WideCharToMultiByte(cp, flags, w, wn, s, sn, def, used);
+}
+
+// a name in UTF-8: every letter is taken, a broken one (half of a pair) is not
+static void test_codepage_utf8()
+{
+	const auto u = to_codepage(L"C:\\\x65E5\x672C \x2460\\\xD83D\xDE00.txt", CP_UTF8, documented_convert);
+	CHECK(u && *u == "C:\\\xE6\x97\xA5\xE6\x9C\xAC \xE2\x91\xA0\\\xF0\x9F\x98\x80.txt");
+	CHECK(!to_codepage(L"C:\\\xD83D.txt", CP_UTF8, documented_convert));
+	CHECK(!to_codepage(L"C:\\\xD83D.txt", CP_UTF8));
+}
+
 // A name for the command line of an engine: spaces are allowed (it is quoted); a name longer than the engine keeps
 // (252 bytes in the code page of the system) becomes its short form when the drive keeps short names, else none.
 static void test_arg_path(const std::filesystem::path &base)
@@ -135,6 +156,7 @@ static void test_arg_path(const std::filesystem::path &base)
 int main(int argc, char **argv)
 {
 	test_codepage();
+	test_codepage_utf8();
 	try_in(std::filesystem::temp_directory_path());
 	test_arg_path(std::filesystem::temp_directory_path());
 	for (int i = 1; i < argc; ++i) {

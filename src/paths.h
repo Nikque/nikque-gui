@@ -7,8 +7,10 @@
 
 namespace ng {
 
-// the text in a code page (nothing when a letter is not there)
-std::optional<std::string> to_codepage(const std::wstring &w, unsigned code_page);
+// WideCharToMultiByte, or a stand-in for the tests
+using WideToMulti = int(__stdcall *)(unsigned, unsigned long, const wchar_t *, int, char *, int, const char *, int *);
+// the text in a code page (nothing when a letter is not there); `convert`: nullptr for WideCharToMultiByte
+std::optional<std::string> to_codepage(const std::wstring &w, unsigned code_page, WideToMulti convert = nullptr);
 // the name in the code page of the system (nothing when a letter is not there)
 std::optional<std::string> acp(const std::wstring &w);
 // the name to give the engine; `exists`: the file is there (else only its folder); nothing when there is none

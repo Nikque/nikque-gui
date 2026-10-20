@@ -6,14 +6,20 @@
 
 namespace ng {
 
-std::optional<std::string> to_codepage(const std::wstring &w, unsigned code_page)
+std::optional<std::string> to_codepage(const std::wstring &w, unsigned code_page, WideToMulti convert)
 {
+	if (!convert) convert = WideCharToMultiByte;
+	// UTF-8 (the code page of the system too when Windows is set to use it) takes every letter, and takes neither the
+	// flag of the best fit nor the place that tells a lost letter (the call may fail with them): only a broken letter
+	// (half of a pair) is refused
+	const bool utf8 = (code_page == CP_ACP ? GetACP() : code_page) == CP_UTF8;
+	const unsigned long flags = utf8 ? WC_ERR_INVALID_CHARS : WC_NO_BEST_FIT_CHARS;
 	BOOL lost = FALSE;
-	const int n = WideCharToMultiByte(code_page, WC_NO_BEST_FIT_CHARS, w.c_str(), -1, nullptr, 0, nullptr, &lost);
+	BOOL *const tell = utf8 ? nullptr : &lost;
+	const int n = convert(code_page, flags, w.c_str(), -1, nullptr, 0, nullptr, tell);
 	if (n <= 0 || lost) return std::nullopt;
 	std::string s(static_cast<size_t>(n - 1), '\0');
-	WideCharToMultiByte(code_page, WC_NO_BEST_FIT_CHARS, w.c_str(), -1, s.data(), n, nullptr, &lost);
-	if (lost) return std::nullopt;
+	if (convert(code_page, flags, w.c_str(), -1, s.data(), n, nullptr, tell) <= 0 || lost) return std::nullopt;
 	return s;
 }
 
