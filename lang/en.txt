@@ -307,6 +307,7 @@ command.note=Several with |. Run from this position; the analyses wait until it 
 err.engine_path=This file's path cannot be given to the engine (it has a space or letters the engine cannot read, and no short name):\n{0}
 err.book_name=This book's path cannot be given to the engine (the book's file name has letters not in the system code page, or the path is more than 252 bytes even with the folder's short name; the engine would open another book, so the main engine is not started. Rename the file or put it in a shorter place): {0}
 err.engine_name=This file's path cannot be given to the engine (too long or letters not in the system code page, and no short name): {0}
+err.command_letters=The command has letters the engine cannot read (not in the system code page). It was not sent
 
 # Files of games (base)
 menu.base=Files of games (base)

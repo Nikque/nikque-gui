@@ -7,6 +7,7 @@
 
 #include "app.h"
 #include "lang.h"
+#include "paths.h"
 
 namespace ng {
 
@@ -400,6 +401,29 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		}
 		return bad("script.bad_word");
 	}
+	// the command for the engine in its code page; file names in "..." (also with spaces) are given to it as it can
+	// open them: a file there is read (rewritten by base correct and complete), a file not there is written
+	auto for_engine = [&](const std::string &cmd, int role, std::string *out) -> const char * {
+		const bool rewrites = cmd.starts_with("base correct") || cmd.starts_with("base complete");
+		std::string r;
+		size_t i = 0;
+		for (size_t a; (a = cmd.find('"', i)) != std::string::npos;) {
+			const size_t b = cmd.find('"', a + 1);
+			if (b == std::string::npos) return "script.bad_file";
+			const auto text = engine_command(std::string_view(cmd).substr(i, a - i));
+			if (!text) return "err.command_letters";
+			const std::wstring f = path(cmd.substr(a + 1, b - a - 1));
+			const bool there = GetFileAttributesW(f.c_str()) != INVALID_FILE_ATTRIBUTES;
+			const auto p = engine_path_or_say(f, there ? (rewrites ? FileUse::Rewrite : FileUse::Read) : FileUse::Write, role);
+			if (!p) return "script.bad_file";
+			r += *text + *p;
+			i = b + 1;
+		}
+		const auto text = engine_command(std::string_view(cmd).substr(i));
+		if (!text) return "err.command_letters";
+		*out = r + *text;
+		return nullptr;
+	};
 	if (c == "learn") {
 		if (a1 == "start") {
 			if (learn_queue_.empty() || learning_) return true;
@@ -408,37 +432,23 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 			wait(ScriptWait::Learn);
 			return true;
 		}
-		const std::string command = rest_after(line, 1);
-		if (command.empty()) return bad("script.bad_word");
+		// the command as it is, in the code page of the engine (names in "..." are not changed: the job runs later)
 		LearnJob j;
+		const auto command = engine_command(rest_after(line, 1));
+		if (!command) return bad("err.command_letters");
+		if (command->empty()) return bad("script.bad_word");
+		j.command = *command;
 		j.start = game_.start();
 		j.moves = moves_to_cursor();
-		j.command = command;
 		learn_queue_.push_back(std::move(j));
 		update_menu();
 		return true;
 	}
-	// file names in "..." (also with spaces) are given to the engine as it can open them: a file there is read
-	// (rewritten by base correct and complete), a file not there is written
-	auto with_files = [&](std::string cmd, int role, std::string *out) {
-		const bool rewrites = cmd.starts_with("base correct") || cmd.starts_with("base complete");
-		for (size_t a; (a = cmd.find('"')) != std::string::npos;) {
-			const size_t b = cmd.find('"', a + 1);
-			if (b == std::string::npos) return false;
-			const std::wstring f = path(cmd.substr(a + 1, b - a - 1));
-			const bool there = GetFileAttributesW(f.c_str()) != INVALID_FILE_ATTRIBUTES;
-			const auto p = engine_path_or_say(f, there ? (rewrites ? FileUse::Rewrite : FileUse::Read) : FileUse::Write, role);
-			if (!p) return false;
-			cmd = cmd.substr(0, a) + *p + cmd.substr(b + 1);
-		}
-		*out = cmd;
-		return true;
-	};
 	if (c == "edax") {
 		if (!eng_[0].alive) return bad("learn.no_engine");
 		if (learning_) return bad("learn.busy");
 		std::string cmd;
-		if (!with_files(rest_after(line, 1), 0, &cmd)) return bad("script.bad_file");
+		if (const char *e = for_engine(rest_after(line, 1), 0, &cmd)) return bad(e);
 		start_learning(cmd);
 		wait(ScriptWait::Learn);
 		return true;
@@ -446,7 +456,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 	if (c == "tool") {
 		if (tool_busy_) return bad("tool.busy");
 		std::string cmd;
-		if (!with_files(rest_after(line, 1), 2, &cmd)) return bad("script.bad_file");
+		if (const char *e = for_engine(rest_after(line, 1), 2, &cmd)) return bad(e);
 		if (!start_tool(cmd, widen(rest_after(line, 1)))) return bad("tool.busy");
 		wait(ScriptWait::Tool);
 		return true;

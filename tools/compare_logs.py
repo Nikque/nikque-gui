@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 SUBS = [
-    (re.compile(r'D:\\nikque-gui\\_test\\(run-[^\\]+|engines)'), 'RUN'),
+    (re.compile(r'D:\\nikque-gui\\_test\\(?:[^\\]+\\)?(run-[^\\]+|engines)'), 'RUN'),
     (re.compile(r'RUN\\engines'), 'RUN'),
     (re.compile(r'wEdax-[\w.-]+\.exe'), 'ENGINE.exe'),
     (re.compile(r'\d+(\.\d+)? ?(秒|s|ms|ミリ秒)\b'), 'T'),

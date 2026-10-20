@@ -1,0 +1,12 @@
+# Japanese letters in the commands for the engines (read in the code page of the system): a folder with Japanese
+# letters on D:, its names quoted and not, and in the learning queue. The files are made there, under their names.
+log s29 start
+engine nikque18
+wait 40
+edax book save "D:\nikque-gui\_test\run-b1\日本語\quoted.dat"
+learn book save D:\nikque-gui\_test\run-b1\日本語\queued.dat
+learn start
+edax book save D:\nikque-gui\_test\run-b1\日本語\unquoted.dat
+tool base convert D:\nikque-gui\_test\run-b1\日本語\games.txt D:\nikque-gui\_test\run-b1\日本語\games.sgf
+savelog s29-log.txt
+quit

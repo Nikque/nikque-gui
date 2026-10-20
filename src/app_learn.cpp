@@ -143,7 +143,7 @@ void App::start_learning_at(const std::string &command, const Position &start, c
 		if (ch == '\n') ch = '/';  // several commands on one line
 	learn_progress_.clear();
 	learn_t0_ = std::chrono::steady_clock::now();
-	std::string one_line = command;  // a line of config.ini: the lines joined by '|'
+	std::string one_line = narrow(engine_text(command));  // a line of config.ini (UTF-8): the lines joined by '|'
 	for (auto &ch : one_line)
 		if (ch == '\n') ch = '|';
 	ini_.set("learn", "last_command", one_line);
@@ -229,16 +229,21 @@ void App::continue_learning()
 		message(lang::t("learn.nothing_newer"), MB_ICONINFORMATION);
 		return;
 	}
-	std::string last = ini_.get("learn", "last_command");
-	for (auto &ch : last)
+	std::string kept = ini_.get("learn", "last_command");
+	for (auto &ch : kept)
 		if (ch == '|') ch = '\n';
-	if (message(lang::f("learn.ask_continue", {saved.path, local_time(saved.time), engine_text(last)}), MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
+	const auto last = engine_command(kept);
+	if (!last) {
+		message(lang::t("err.command_letters"), MB_ICONWARNING);
+		return;
+	}
+	if (message(lang::f("learn.ask_continue", {saved.path, local_time(saved.time), widen(kept)}), MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
 		return;
 	const auto path = engine_path_or_say(saved.path, FileUse::Read, 0);  // the engine reads the name up to a space
 	if (!path) return;
 	send(0, "book load " + *path + "\n");
 	cache_.clear_book();
-	if (last.empty()) {
+	if (last->empty()) {
 		request_analysis();
 		return;
 	}
@@ -251,7 +256,7 @@ void App::continue_learning()
 		game_.go_to(game_.size());
 		orient_ = 0;  // the game as it was learned from
 	}
-	start_learning(last);
+	start_learning(*last);
 }
 
 }  // namespace ng

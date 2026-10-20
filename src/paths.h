@@ -18,6 +18,9 @@ unsigned engine_code_page();
 std::optional<std::string> acp(const std::wstring &w);
 // text of an engine (its lines, and the commands made for it) to show: read in the code page of the engines
 std::wstring engine_text(std::string_view s);
+// UTF-8 text (a command of a script, typed, or kept in config.ini) for an engine: in the code page of the engines
+// (nothing when a letter is not there)
+std::optional<std::string> engine_command(std::string_view utf8);
 // the name to give the engine; `exists`: the file is there (else only its folder); nothing when there is none
 std::optional<std::string> engine_path(const std::wstring &path, bool exists);
 // What the engines keep of a name given on their command line: a book name of FILENAME_MAX - 8 bytes at most (a

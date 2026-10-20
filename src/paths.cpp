@@ -54,6 +54,16 @@ std::wstring engine_text(std::string_view s)
 	return w;
 }
 
+std::optional<std::string> engine_command(std::string_view utf8)
+{
+	if (utf8.empty()) return std::string();
+	const int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8.data(), static_cast<int>(utf8.size()), nullptr, 0);
+	if (n <= 0) return std::nullopt;
+	std::wstring w(static_cast<size_t>(n), L'\0');
+	MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8.data(), static_cast<int>(utf8.size()), w.data(), n);
+	return acp(w);
+}
+
 // A name on the command line of an engine is quoted (spaces are allowed); the engine reads it in the code page of the
 // system. A name it would not keep (too long, or with letters not in the code page) is given with its folder in the
 // short (8.3) form when the drive keeps those. The other files may also be given in the short form whole; a book may

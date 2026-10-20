@@ -515,7 +515,12 @@ bool App::book_job(int id, std::string *command, std::wstring *warning)
 		ini_.set("tools", "last_command", c);
 		for (auto &ch : c)
 			if (ch == '|') ch = '\n';  // several commands
-		*command = c;
+		const auto e = engine_command(c);  // (typed in UTF-8)
+		if (!e) {
+			message(t("err.command_letters"), MB_ICONWARNING);
+			return false;
+		}
+		*command = *e;
 		return true;
 	}
 	default: return false;

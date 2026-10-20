@@ -75,6 +75,7 @@ struct PosInfo {
 	MoveEval *find(int sq);
 	const MoveEval *find(int sq) const;
 	void reset_book();
+	void reset_book_params();  // only what comes of the book settings (a book changed: reset_book)
 	void reset_search();
 	// the book parts to be asked with `params`: what was known with other ones goes; true when they changed
 	bool set_book_params(const std::string &params);
@@ -148,9 +149,9 @@ int echo_marker(std::string_view line);
 
 // The engine writes a line of the book analyses whole, from another thread, while its main thread may write a line in
 // parts (a warning, the result of a command): the analysis line then comes after the first part of that line
-// ("WARNING: @end id=5 ms=0", the rest of the warning on the next line). The analysis lines ("@<word> id=<number>")
-// are taken out where they begin, and each line of the main thread is put together again: its first part waits in
-// `open` for its rest, the next line that is not an analysis line.
+// ("WARNING: @end id=5 ms=0", the rest of the warning on the next line). The analysis lines ("@<word> id=<number>",
+// then only words "key=value" up to the end of the line) are taken out where they begin, and each line of the main
+// thread is put together again: its first part waits in `open` for its rest, the next line that is not an analysis line.
 void unmix_lines(std::vector<std::string> &lines, std::string &open);
 
 // The numbers of the requests to the engines (id=, the echo markers): the book analyses take id= up to 100,000.

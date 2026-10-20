@@ -47,10 +47,27 @@ void PosInfo::reset_book()
 	best_lines = best_ends = best_incomplete = best_incomplete_ends = -1;
 }
 
+void PosInfo::reset_book_params()
+{
+	// the parts of the answer of book moveinfo that come of the settings (the stages and their base, the umigame
+	// numbers); the values of the book, the counts, the levels and the best lines stay
+	for (auto &m : moves) {
+		m.book_row = false;
+		m.stage = -1;
+		m.missing = -1;
+		m.has_link = false;
+		m.link = 0;
+		m.umi_known = m.umi_none = false;
+		m.umi_exact = true;
+		m.umi_black = m.umi_white = -1;
+	}
+	book_begun = book_done = false;
+}
+
 bool PosInfo::set_book_params(const std::string &params)
 {
 	if (book_params == params) return false;
-	if (book_begun || book_done || count_done || levels_done) reset_book();
+	reset_book_params();
 	book_params = params;
 	return true;
 }
@@ -341,6 +358,21 @@ bool analysis_head(std::string_view s)
 	return false;
 }
 
+// whether the rest of a line from an '@' is an analysis line: its head, then only words "key=value" (no '"': an
+// analysis line quoted in another line, as in a warning, is not one)
+bool analysis_rest(std::string_view s)
+{
+	if (!analysis_head(s)) return false;
+	for (size_t i = s.find(' '); i != std::string_view::npos;) {
+		const size_t e = s.find(' ', i + 1);
+		const std::string_view word = s.substr(i + 1, e == std::string_view::npos ? std::string_view::npos : e - i - 1);
+		if (!word.empty() && (word.find('=') == std::string_view::npos || word.find('"') != std::string_view::npos))
+			return false;
+		i = e;
+	}
+	return true;
+}
+
 }  // namespace
 
 void unmix_lines(std::vector<std::string> &lines, std::string &open)
@@ -354,7 +386,7 @@ void unmix_lines(std::vector<std::string> &lines, std::string &open)
 		}
 		size_t at = std::string::npos;
 		for (size_t k = line.find('@', 1); k != std::string::npos; k = line.find('@', k + 1))
-			if (analysis_head(std::string_view(line).substr(k))) {
+			if (analysis_rest(std::string_view(line).substr(k))) {
 				at = k;
 				break;
 			}

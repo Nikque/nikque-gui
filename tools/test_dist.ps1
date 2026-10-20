@@ -1,7 +1,7 @@
 param(
 	[string]$Dist = "",                                   # the distribution folder (default: the newest dist\nikque-gui-*)
 	[string]$Run = "D:\nikque-gui\_test\run-dist",
-	[string[]]$Scripts = @("s1", "s2", "s3", "s4", "s7", "s8", "s9", "s10", "s11", "s14", "s18", "s19", "s20", "s21", "s22", "s23", "s24", "s25", "s28", "s5"),
+	[string[]]$Scripts = @("s1", "s2", "s3", "s4", "s7", "s8", "s9", "s10", "s11", "s14", "s18", "s19", "s20", "s21", "s22", "s23", "s24", "s25", "s28", "s5", "s29"),
 	[int]$Timeout = 600,
 	[string]$Affinity = "F00000"                          # the logical CPUs of the GUI and its engines (20-23)
 )
@@ -19,6 +19,9 @@ foreach ($f in "games.txt", "games-c.txt", "games-short.txt", "p.obf", "big1m.tx
 $sp = Join-Path $Run "空白 の dir"
 New-Item -ItemType Directory -Force $sp | Out-Null
 foreach ($f in "g a.txt", "g c.txt", "g short.txt", "p q.obf") { Copy-Item -LiteralPath (Join-Path $b1 "空白 の dir\$f") $sp }
+$jp = Join-Path $Run "日本語"
+New-Item -ItemType Directory -Force $jp | Out-Null
+Copy-Item (Join-Path $b1 "games.txt") $jp
 
 # the test settings: those of tests\gui-scripts\config.ini, the engines of the distribution (dir empty, exe=auto)
 $books = Join-Path $root "_test\books"

@@ -9,6 +9,7 @@
 
 #include "app.h"
 #include "lang.h"
+#include "paths.h"
 
 using namespace ng;
 
@@ -101,6 +102,64 @@ static void test_mixed_lines()
 	feed(*a, "!mail@begin id=x\n!a @move id=3x b\n");
 	CHECK(logged(*a, L"mail@begin id=x"));
 	CHECK(logged(*a, L"a @move id=3x b"));
+
+	// nor an analysis line quoted in a warning (its words are not all "key=value")
+	a->book_id_ = 53;
+	a->requests_[53] = {Request::Book, key};
+	a->cache_.get(a->game_.now()).book_done = false;
+	feed(*a, "!WARNING: echo: \"@end id=53 ms=0\" is not on or off; ignored\n");
+	CHECK(a->book_id_ == 53 && a->requests_.count(53));
+	CHECK(logged(*a, L"WARNING: echo: \"@end id=53 ms=0\" is not on or off; ignored"));
+}
+
+// The book settings changed while the counts and the levels are coming: what came of them stays (they do not
+// depend on the settings), and they come to their end.
+static void test_settings_keep_counts()
+{
+	auto a = make_app();
+	start_engine(*a);
+	a->show_eval_ = a->use_book_ = a->count_ = true;
+	a->tab_ = Tab::Book;
+	a->request_analysis();
+	const int count = a->count_id_, levels = a->levels_id_;
+	CHECK(count && levels);
+	const std::string c = std::to_string(count), l = std::to_string(levels);
+	feed(*a, "!@begin id=" + c + " ply=0 turn=black moves=4 book=1\n!@move id=" + c + " sq=d3 part=count positions=123\n!@level id=" + l +
+	             " level=4 count=409494\n");
+	a->base_ = "deviate2";
+	a->request_analysis();
+	CHECK(a->count_id_ == count && a->levels_id_ == levels);
+	feed(*a, "!@end id=" + c + " ms=1\n!@end id=" + l + " positions=409494 ms=1\n");
+	const PosInfo *info = a->cache_.peek(a->game_.now());
+	CHECK(info && info->count_done && info->find(parse_square("d3"))->positions == 123);
+	CHECK(info && info->levels_done && info->levels.size() == 1 && info->levels_positions == 409494);
+	CHECK(info && !info->book_done && info->book_params == a->book_params());  // the values of the book: asked again
+}
+
+// The commands of a script and those typed are UTF-8; the engine reads them in the code page of the system. The last
+// learning command is kept in config.ini as UTF-8.
+static void test_command_letters()
+{
+	auto a = make_app();
+	start_engine(*a);
+	const std::wstring dir = L"D:\\ng-test\\\u65e5\u672c\u8a9e\\";  // (letters of code page 932)
+	const auto queued = acp(L"book save " + dir + L"queued.dat"), sent = acp(L"book save " + dir + L"sent.dat");
+	std::wstring err;
+	CHECK(a->script_command("learn book save " + narrow(dir) + "queued.dat", 1, &err));
+	CHECK(!a->learn_queue_.empty() && queued && a->learn_queue_.back().command == *queued);
+	CHECK(a->script_command("edax book save " + narrow(dir) + "sent.dat", 1, &err));
+	CHECK(a->learning_ && sent && a->learn_cmd_ == *sent);
+	CHECK(a->ini_.get("learn", "last_command") == narrow(L"book save " + dir + L"sent.dat"));
+	a->learning_ = false;
+	// a name in "..." (given as the engine can open it) and other letters: each in the code page once
+	const auto mixed = acp(L"echo 日本語 " + dir + L"q.dat");
+	CHECK(a->script_command("edax echo " + narrow(L"日本語 \"" + dir + L"q.dat\""), 1, &err));
+	CHECK(mixed && a->learn_cmd_ == *mixed);
+	a->learning_ = false;
+	// a letter the engine cannot read: the command is not given
+	a->learn_queue_.clear();
+	CHECK(!a->script_command("learn book save D:\\\xF0\x9F\x90\xBE.dat", 1, &err));  // (U+1F43E)
+	CHECK(a->learn_queue_.empty());
 }
 
 // An answer of a background analysis asked with other book settings is not taken for the settings of now.
@@ -290,6 +349,8 @@ int main(int argc, char **argv)
 	lang::load(argc > 1 ? widen(argv[1]) : std::wstring(L"."), "ja");
 	test_mixed_lines();
 	test_old_settings();
+	test_settings_keep_counts();
+	test_command_letters();
 	test_stopped_numbers();
 	test_engine_ended();
 	test_recompute();

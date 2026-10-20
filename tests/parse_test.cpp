@@ -186,6 +186,11 @@ static void test_unmix()
 	unmix_lines(l, open);
 	CHECK(l.size() == 6 && l[0] == "16@73%  +00" && l[1] == "a@moves id=1" && l[2] == "a@move id=" && l[3] == "a@move id=3x");
 	CHECK(l[4] == "@end id=4" && l[5] == "a@" && open.empty());
+	// an analysis line quoted in another line (its words are not all "key=value"), then a real one after it
+	l = {"WARNING: echo: \"@end id=51 ms=0\" is not on or off; ignored", "WARNING: echo: \"@end id=52\" is not on@end id=53 ms=1"};
+	unmix_lines(l, open);
+	CHECK(l.size() == 2 && l[0] == "WARNING: echo: \"@end id=51 ms=0\" is not on or off; ignored" && l[1] == "@end id=53 ms=1");
+	CHECK(open == "WARNING: echo: \"@end id=52\" is not on");
 }
 
 int main()
