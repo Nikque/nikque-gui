@@ -207,7 +207,7 @@ void App::tool_line(const std::string &line)
 		return;
 	}
 	if (line.starts_with("New book")) return;  // the empty book the tool engine makes for itself
-	log(lang::t("engine.tool") + L": " + widen(line));
+	log(lang::t("engine.tool") + L": " + engine_text(line));
 }
 
 void App::tool_ended(bool stopped)
@@ -254,7 +254,7 @@ void App::tool_command(int id)
 		if (!n) return;
 		ini_.set_int("tools", "bench", *n);
 		c = "bench " + std::to_string(*n);
-		label = widen(c);
+		label = engine_text(c);
 		break;
 	}
 	case cmd::ToolCount: {
@@ -273,7 +273,7 @@ void App::tool_command(int id)
 		ini_.set_int("tools", "count_kind", f[0].choice);
 		ini_.set("tools", "count_depth", narrow(f[1].text));
 		c = std::string("count ") + (f[0].choice == 1 ? "positions " : f[0].choice == 2 ? "shapes " : "games ") + narrow(f[1].text);
-		label = widen(c);
+		label = engine_text(c);
 		break;
 	}
 	case cmd::ToolPerft: {
@@ -281,7 +281,7 @@ void App::tool_command(int id)
 		if (!n) return;
 		ini_.set_int("tools", "perft", *n);
 		c = "perft " + std::to_string(*n);
-		label = widen(c);
+		label = engine_text(c);
 		break;
 	}
 	case cmd::ToolEstimate: {
@@ -289,7 +289,7 @@ void App::tool_command(int id)
 		if (!n) return;
 		ini_.set_int("tools", "estimate", *n);
 		c = "estimate " + std::to_string(*n);
-		label = widen(c);
+		label = engine_text(c);
 		break;
 	}
 	default: return;
@@ -343,7 +343,7 @@ void App::base_command(int id)
 		auto out = out_file(title, in->first, kGames, "filter.games", L"txt");
 		if (!out) return;
 		c = std::string(id == cmd::BaseConvert ? "base convert " : "base unique ") + in->second + " " + *out;
-		label = widen(c);
+		label = engine_text(c);
 		break;
 	}
 	case cmd::BaseCompare: {
@@ -352,7 +352,7 @@ void App::base_command(int id)
 		auto b = in_file(t("menu.base.compare"));
 		if (!b) return;
 		c = "base compare " + a->second + " " + b->second;
-		label = widen(c);
+		label = engine_text(c);
 		break;
 	}
 	case cmd::BaseCheck:
@@ -365,14 +365,14 @@ void App::base_command(int id)
 		ini_.set_int("tools", "base_empties", *n);
 		if (id == cmd::BaseCorrect && !rewrites(in->first)) return;
 		c = std::string(id == cmd::BaseCheck ? "base check " : "base correct ") + in->second + " " + std::to_string(*n);
-		label = widen(c);
+		label = engine_text(c);
 		break;
 	}
 	case cmd::BaseComplete: {
 		auto in = in_file(t("menu.base.complete"), true);
 		if (!in || !rewrites(in->first)) return;
 		c = "base complete " + in->second;
-		label = widen(c);
+		label = engine_text(c);
 		break;
 	}
 	case cmd::BaseProblem:
@@ -387,7 +387,7 @@ void App::base_command(int id)
 		                                  : out_file(title, in->first, L"*.fen;*.txt", "filter.fen", L"fen");
 		if (!out) return;
 		c = std::string(id == cmd::BaseProblem ? "base problem " : "base tofen ") + in->second + " " + std::to_string(*n) + " " + *out;
-		label = widen(c);
+		label = engine_text(c);
 		break;
 	}
 	default: return;

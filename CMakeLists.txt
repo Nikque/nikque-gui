@@ -95,7 +95,7 @@ add_test(NAME rules COMMAND rules_test
 add_executable(parse_test tests/parse_test.cpp src/analysis.cpp ${NG_CORE})
 target_include_directories(parse_test PRIVATE src)
 add_test(NAME parse COMMAND parse_test)
-add_executable(path_test tests/path_test.cpp src/paths.cpp)
+add_executable(path_test tests/path_test.cpp src/paths.cpp res/app.manifest)  # the manifest of the GUI: its code page is UTF-8
 add_test(NAME path COMMAND path_test ${CMAKE_SOURCE_DIR}/_test)
 add_executable(lang_test tests/lang_test.cpp)
 add_test(NAME lang COMMAND lang_test ${CMAKE_SOURCE_DIR}/lang)

@@ -544,7 +544,7 @@ void App::on_engine(WPARAM tag, bool ended)
 				measure::engine_answer(0);
 			}
 			if (f.kind() == "error") {
-				log(lang::t("engine.main") + L": " + widen(line));
+				log(lang::t("engine.main") + L": " + engine_text(line));
 				continue;
 			}
 			const bool last = f.kind() == "end" || f.kind() == "cancel";  // the last line of an answer
@@ -618,7 +618,7 @@ void App::on_engine(WPARAM tag, bool ended)
 			} else if (f.kind() == "level") {
 				info.levels.emplace_back(static_cast<int>(f.num("level").value_or(0)), f.num("count").value_or(0));
 			} else if (last) {
-				if (done && f.num("error").value_or(0)) log(lang::f("log.analysis_error", {widen(line)}));
+				if (done && f.num("error").value_or(0)) log(lang::f("log.analysis_error", {engine_text(line)}));
 				if (req.kind == Request::Book) {
 					info.book_done = done;
 					if (book_id_ == id) book_id_ = 0;
@@ -731,7 +731,7 @@ void App::on_engine(WPARAM tag, bool ended)
 		}
 		// other lines of the engines go to the log (not the prompts and the search lines)
 		if (line[0] == '<' || parse_hint_line(line)) continue;
-		log(lang::t(role ? "engine.search" : "engine.main") + L": " + widen(line));
+		log(lang::t(role ? "engine.search" : "engine.main") + L": " + engine_text(line));
 	}
 	if (ended && s.alive) {
 		s.alive = false;

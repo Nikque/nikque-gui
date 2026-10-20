@@ -8,6 +8,7 @@
 
 #include "app.h"
 #include "lang.h"
+#include "paths.h"
 
 namespace ng {
 
@@ -114,7 +115,7 @@ void App::learn_command(int id)
 		if (!book_job(id, &c, &warning)) return;
 		break;
 	}
-	std::wstring ask = lang::f("learn.ask", {widen(c), book_file()});
+	std::wstring ask = lang::f("learn.ask", {engine_text(c), book_file()});
 	if (!warning.empty()) ask += L"\n\n" + warning;
 	if (message(ask, MB_OKCANCEL | (warning.empty() ? MB_ICONQUESTION : MB_ICONWARNING)) != IDOK)
 		return;
@@ -148,7 +149,7 @@ void App::start_learning_at(const std::string &command, const Position &start, c
 	ini_.set("learn", "last_command", one_line);
 	ini_.set("learn", "last_start", start.to_board_string());
 	ini_.set("learn", "last_moves", moves);
-	log(lang::f("learn.started", {widen(command)}));
+	log(lang::f("learn.started", {engine_text(command)}));
 	send(0, out);
 	update_menu();
 	invalidate();
@@ -160,15 +161,15 @@ void App::learning_line(const std::string &line)
 	// under the board; only the lines with a result ("...finished: ...", "Fixing book...0 done", "...1 positions
 	// added", warnings and errors; not "...402270 (0 error found)", which is progress) go to the log as well
 	if (line.starts_with("Book ") || line.find("...") != std::string::npos) {
-		learn_progress_ = widen(line);
+		learn_progress_ = engine_text(line);
 		const bool result = line.find("finished") != std::string::npos || line.ends_with("done") ||
 		                    line.find("done (") != std::string::npos || line.find("added") != std::string::npos ||
 		                    line.starts_with("WARNING") || line.find("ERROR") != std::string::npos;
-		if (result) log(widen(line));
+		if (result) log(engine_text(line));
 		else invalidate();
 		return;
 	}
-	log(lang::t("engine.main") + L": " + widen(line));
+	log(lang::t("engine.main") + L": " + engine_text(line));
 }
 
 void App::learning_ended()
@@ -176,7 +177,7 @@ void App::learning_ended()
 	const auto s = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - learn_t0_).count();
 	learning_ = false;
 	learn_end_id_ = 0;
-	log(lang::f("learn.ended", {widen(learn_cmd_), std::to_wstring(s / 60), std::to_wstring(s % 60)}));
+	log(lang::f("learn.ended", {engine_text(learn_cmd_), std::to_wstring(s / 60), std::to_wstring(s % 60)}));
 	finish_moves(0);
 	learn_progress_.clear();
 	// the book has changed: its analyses again
@@ -231,7 +232,7 @@ void App::continue_learning()
 	std::string last = ini_.get("learn", "last_command");
 	for (auto &ch : last)
 		if (ch == '|') ch = '\n';
-	if (message(lang::f("learn.ask_continue", {saved.path, local_time(saved.time), widen(last)}), MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
+	if (message(lang::f("learn.ask_continue", {saved.path, local_time(saved.time), engine_text(last)}), MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
 		return;
 	const auto path = engine_path_or_say(saved.path, FileUse::Read, 0);  // the engine reads the name up to a space
 	if (!path) return;

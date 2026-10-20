@@ -6,19 +6,6 @@ $ini = Join-Path $Dir "config.ini"
 $text = Get-Content -Raw -Encoding UTF8 $ini
 $text = [regex]::Replace($text, "(?m)^startup=.*$", "startup=$Script")
 [System.IO.File]::WriteAllText($ini, $text, (New-Object System.Text.UTF8Encoding($false)))
-$exe = Join-Path $Dir "nikque-gui.exe"
-$t0 = Get-Date
-# started from a hidden cmd of its own: a "cmd /c start" here would hand the GUI the pipe of this output when the
-# output is taken by the caller, and the caller would wait for the GUI to end
-$aff = if ($Affinity) { "/affinity $Affinity " } else { "" }
-Start-Process -FilePath cmd.exe -ArgumentList "/c start `"`" /min $aff`"$exe`"" -WindowStyle Hidden
-# a file written a moment ago may start late (it is scanned first): up to 30 seconds
-$p = $null
-for ($i = 0; $i -lt 60 -and -not $p; ++$i) {
-	Start-Sleep -Milliseconds 500
-	$p = Get-Process nikque-gui -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe }
-}
-if (-not $p) { "not started"; exit 1 }
 # the peaks the system keeps, read through the handle after the end (a sample taken while it runs misses the last one)
 Add-Type -TypeDefinition @'
 using System; using System.Runtime.InteropServices;
@@ -32,7 +19,20 @@ public static class NgPeak {
 	}
 }
 '@
-$handle = $p.Handle  # (kept open: the counters stay readable after the end)
+$exe = Join-Path $Dir "nikque-gui.exe"
+$t0 = Get-Date
+# started from a hidden cmd of its own: a "cmd /c start" here would hand the GUI the pipe of this output when the
+# output is taken by the caller, and the caller would wait for the GUI to end
+$aff = if ($Affinity) { "/affinity $Affinity " } else { "" }
+Start-Process -FilePath cmd.exe -ArgumentList "/c start `"`" /min $aff`"$exe`"" -WindowStyle Hidden
+# a file written a moment ago may start late (it is scanned first): up to 30 seconds
+$p = $null; $handle = $null
+for ($i = 0; $i -lt 300 -and -not $handle; ++$i) {
+	Start-Sleep -Milliseconds 100
+	$p = Get-Process nikque-gui -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe } | Select-Object -First 1
+	if ($p) { try { $handle = $p.Handle } catch { $p = $null } }  # (kept open: the counters stay readable after the end)
+}
+if (-not $handle) { "not started"; exit 1 }
 while (-not $p.HasExited) {
 	Start-Sleep -Milliseconds 500
 	if (((Get-Date) - $t0).TotalSeconds -gt $Timeout) { "timeout: killed"; $p.Kill(); break }

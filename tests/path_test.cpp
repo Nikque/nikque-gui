@@ -20,6 +20,20 @@ static int failures = 0;
 		}                                                                     \
 	} while (0)
 
+// opens a name as the engine does: its bytes read in the code page of the system (the engine has no manifest of UTF-8;
+// this program has the one of the GUI)
+static FILE *engine_fopen(const std::string &name, const wchar_t *mode)
+{
+	const unsigned cp = engine_code_page();
+	const int n = MultiByteToWideChar(cp, 0, name.c_str(), -1, nullptr, 0);
+	if (n <= 0) return nullptr;
+	std::wstring w(static_cast<size_t>(n - 1), L'\0');
+	MultiByteToWideChar(cp, 0, name.c_str(), -1, w.data(), n);
+	FILE *f = nullptr;
+	_wfopen_s(&f, w.c_str(), mode);
+	return f;
+}
+
 static void try_in(const std::filesystem::path &base)
 {
 	namespace fs = std::filesystem;
@@ -46,7 +60,7 @@ static void try_in(const std::filesystem::path &base)
 		std::printf("%ls: no short names on this drive (the GUI refuses such names)\n", base.c_str());
 	} else {
 		CHECK(p->find(' ') == std::string::npos);
-		FILE *f = std::fopen(p->c_str(), "rb");  // the way the engine opens it
+		FILE *f = engine_fopen(*p, L"rb");  // the way the engine opens it
 		CHECK(f);
 		if (f) {
 			CHECK(std::fgetc(f) == 'x');
@@ -58,7 +72,7 @@ static void try_in(const std::filesystem::path &base)
 	const auto q = engine_path((dir / L"new.txt").wstring(), false);
 	if (q) {
 		CHECK(q->find(' ') == std::string::npos);
-		FILE *f = std::fopen(q->c_str(), "wb");
+		FILE *f = engine_fopen(*q, L"wb");
 		CHECK(f);
 		if (f) std::fclose(f);
 		CHECK(fs::exists(dir / L"new.txt"));
@@ -155,7 +169,7 @@ static void test_arg_path(const std::filesystem::path &base)
 		const auto b = acp(e);
 		if (b) {
 			CHECK(b->size() > 259 && e.size() <= 259);
-			FILE *f = std::fopen(b->c_str(), "rb");  // the way the engine opens it
+			FILE *f = engine_fopen(*b, L"rb");  // the way the engine opens it
 			CHECK(f);
 			if (f) std::fclose(f);
 			const auto p = engine_arg_path(e, EngineName::File);
@@ -169,6 +183,14 @@ static void test_arg_path(const std::filesystem::path &base)
 		std::filesystem::copy_file(file, book, fs::copy_options::overwrite_existing, ec);
 		if (const auto p = engine_arg_path(book.wstring(), EngineName::Book)) CHECK(p->ends_with(L"\\long book name.dat"));
 	}
+	// The engine saves a book by writing another file and renaming it to the name it was given: a book given by the
+	// short form of its own name would come back under that short name, and the name the GUI keeps would be gone. A
+	// book whose own name cannot be given (a letter not in the code page) is not given at all.
+	{
+		const fs::path book = dir / L"book\xD55C.dat";  // a Hangul letter
+		std::filesystem::copy_file(file, book, fs::copy_options::overwrite_existing, ec);
+		CHECK(!engine_arg_path(book.wstring(), EngineName::Book));
+	}
 	// a name short enough stays as it is, spaces too
 	const std::wstring plain = (base / L"a b" / L"book.dat").wstring();
 	const auto same = engine_arg_path(plain, EngineName::Book);
@@ -178,6 +200,9 @@ static void test_arg_path(const std::filesystem::path &base)
 
 int main(int argc, char **argv)
 {
+	// run as the GUI: its manifest makes CP_ACP UTF-8, while the engines read names in the code page of the system
+	CHECK(GetACP() == CP_UTF8);
+	std::printf("code page of the engines: %u\n", engine_code_page());
 	test_codepage();
 	test_codepage_utf8();
 	try_in(std::filesystem::temp_directory_path());

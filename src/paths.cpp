@@ -23,15 +23,42 @@ std::optional<std::string> to_codepage(const std::wstring &w, unsigned code_page
 	return s;
 }
 
+unsigned engine_code_page()
+{
+	// the code page of the system (Nls\CodePage\ACP); CP_ACP of this program is UTF-8 (its manifest)
+	static const unsigned cp = [] {
+		wchar_t value[16] = L"";
+		DWORD size = sizeof value;
+		if (RegGetValueW(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Nls\\CodePage", L"ACP", RRF_RT_REG_SZ,
+		                 nullptr, value, &size) == ERROR_SUCCESS) {
+			const unsigned v = static_cast<unsigned>(wcstoul(value, nullptr, 10));
+			if (v && IsValidCodePage(v)) return v;
+		}
+		return static_cast<unsigned>(GetACP());
+	}();
+	return cp;
+}
+
 std::optional<std::string> acp(const std::wstring &w)
 {
-	return to_codepage(w, CP_ACP);
+	return to_codepage(w, engine_code_page());
+}
+
+std::wstring engine_text(std::string_view s)
+{
+	const unsigned cp = engine_code_page();
+	const int n = MultiByteToWideChar(cp, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
+	if (n <= 0) return std::wstring(s.begin(), s.end());
+	std::wstring w(static_cast<size_t>(n), L'\0');
+	MultiByteToWideChar(cp, 0, s.data(), static_cast<int>(s.size()), w.data(), n);
+	return w;
 }
 
 // A name on the command line of an engine is quoted (spaces are allowed); the engine reads it in the code page of the
 // system. A name it would not keep (too long, or with letters not in the code page) is given with its folder in the
-// short (8.3) form when the drive keeps those, else in the short form whole: the name of the file stays when it can,
-// since the engine names the files it saves on the way after the book (".store", ".dev2", ...).
+// short (8.3) form when the drive keeps those. The other files may also be given in the short form whole; a book may
+// not: the engine saves a book by writing another file and renaming it to the name it was given (the book would come
+// back under its short name), and names the files it saves on the way after that name (".store", ".dev2", ...).
 std::optional<std::wstring> engine_arg_path(const std::wstring &path, EngineName what)
 {
 	auto fits = [what](const std::wstring &w) {
@@ -48,6 +75,7 @@ std::optional<std::wstring> engine_arg_path(const std::wstring &path, EngineName
 			if (fits(w)) return w;
 		}
 	}
+	if (what == EngineName::Book) return std::nullopt;
 	const DWORD n = GetShortPathNameW(path.c_str(), buf, size);  // (a file still to be made has none)
 	if (n > 0 && n < size && fits(buf)) return std::wstring(buf);
 	return std::nullopt;
