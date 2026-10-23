@@ -23,17 +23,18 @@ $jp = Join-Path $Run "日本語"
 New-Item -ItemType Directory -Force $jp | Out-Null
 Copy-Item (Join-Path $b1 "games.txt") $jp
 
-# the test settings: those of tests\gui-scripts\config.ini, the engines of the distribution (dir empty, exe=auto)
+# the test settings: those of tests\gui-scripts\config.ini, the engines of the distribution (dir empty, exe=auto;
+# the section of the C version is still [nikque18] there, as in a config.ini of 0.2.0, which the GUI reads as [nikque])
 $books = Join-Path $root "_test\books"
 $copy = Join-Path $Run "book-copy.dat"
 $cfg = (Get-Content -Raw -Encoding UTF8 (Join-Path $root "tests\gui-scripts\config.ini")) -split "`r?`n"
 $sec = ""
 $cfg = foreach ($l in $cfg) {
 	if ($l -match '^\[(.+)\]$') { $sec = $Matches[1] }
-	if ($sec -in "nikque", "newedax") {
+	if ($sec -in "nikque", "nikque18", "newedax") {
 		if ($l -match '^dir=') { "dir="; continue }
 		if ($l -match '^exe=') { "exe=auto"; continue }
-		if ($l -match '^book=') { if ($sec -eq "nikque") { "book=$copy" } else { "book=$books\book2.dat" }; continue }
+		if ($l -match '^book=') { if ($sec -ne "newedax") { "book=$copy" } else { "book=$books\book2.dat" }; continue }
 	}
 	if ($l -eq "[list]") { "[play]"; "end_list=1"; "" }
 	$l
