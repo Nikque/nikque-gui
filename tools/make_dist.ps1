@@ -1,8 +1,8 @@
 param(
 	[Parameter(Mandatory)] [string]$Nikque,    # a worktree of the C version (Edax nikque) whose bin\ holds the release build
 	[Parameter(Mandatory)] [string]$Newedax,   # a worktree of newedax whose bin\ holds the release build
-	[string]$NikqueName = "v4.5.5-nikque.19",
-	[string]$NewedaxName = "v4.5.5-newedax.4",
+	[string]$NikqueName = "v4.5.5-nikque.20",
+	[string]$NewedaxName = "v4.5.5-newedax.5",
 	[string]$Out = "D:\nikque-gui\dist"
 )
 # Makes the distribution of nikque GUI: a folder nikque-gui-<version> and its ZIP in $Out.

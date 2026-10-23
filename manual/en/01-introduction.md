@@ -9,7 +9,7 @@
 - **Book analyses**: the lines to the leaves missing for the next stage, umigame numbers (the number of line ends to learn to know every line after the move), the positions by level, the number of best lines and their output, a tree of the book lines.
 - **Book learning**: the learning commands (deviate, enhance, fill and others) from the position shown. A learning run can be stopped and continued from the file saved on the way.
 - **Games**: a person against the computer, or the computer on both sides; time of a game, opening moves drawn from the book.
-- **Games**: game lists (a million games can be handled), search of the games with a position, kept lines, setting up a position, finding the moves that lead to a position.
+- **Games**: game lists (a million games can be handled), search of the games with a position, bookmarks (chosen from pictures of their positions), setting up a position, finding the moves that lead to a position.
 - **Tools**: the engine tools (solve, bench, perft and others), the files of games (base).
 - **Command scripts**: operations written in a text file and run in turn.
 

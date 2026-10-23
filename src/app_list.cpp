@@ -112,6 +112,20 @@ void App::cancel_task()
 	if (task_busy_) task_.request_stop();
 }
 
+// "Stop the background work": the job on the list, the book analyses of the main engine (the precision stages, the
+// points of the graph, the counts) and the searches of the search engine stop; nothing starts again before the
+// position changes (or the analysis is asked again).
+void App::stop_background()
+{
+	cancel_task();
+	background_paused_ = true;
+	if (!learning_) send(0, stop_main_analyses());
+	if (hint_busy_) stop_search(1);
+	log(lang::t("task.stopped_all"));
+	update_menu();
+	invalidate();
+}
+
 // ---- the game list
 
 void App::list_load(const std::wstring &file, bool add)
@@ -497,12 +511,14 @@ void App::keep_now(bool quiet)
 	k.moves = game_.moves();
 	k.cursor = game_.cursor();
 	k.time = static_cast<long long>(std::time(nullptr));
-	if (!kept_.empty() && kept_.back().start == k.start && kept_.back().moves == k.moves) {
-		kept_.back().cursor = k.cursor;  // the same line again: only the place
+	// the same line again: kept once (kept by itself: its place follows; a bookmark asked at another place: a new one)
+	if (!kept_.empty() && kept_.back().start == k.start && kept_.back().moves == k.moves && (quiet || kept_.back().cursor == k.cursor)) {
+		kept_.back().cursor = k.cursor;
 	} else {
 		kept_.push_back(std::move(k));
 	}
 	kept_sel_ = static_cast<int>(kept_.size()) - 1;
+	kept_scroll_ = static_cast<int>(kept_.size());  // the row shows the newest (the drawing keeps it in its range)
 	save_kept();
 	if (!quiet) log(lang::f("kept.added", {std::to_wstring(kept_.size())}));
 	invalidate();
@@ -556,6 +572,21 @@ void App::kept_command(int id)
 	}
 	update_menu();
 	invalidate();
+}
+
+// the menu of a bookmark: the right button on its picture
+void App::bookmark_menu(int x, int y)
+{
+	HMENU m = CreatePopupMenu();
+	AppendMenuW(m, MF_STRING, cmd::KeptShow, lang::t("menu.kept.show").c_str());
+	AppendMenuW(m, MF_STRING, cmd::KeptCompare, lang::t("menu.kept.compare").c_str());
+	AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
+	AppendMenuW(m, MF_STRING, cmd::KeptDelete, lang::t("menu.kept.delete").c_str());
+	POINT pt{x, y};
+	ClientToScreen(hwnd_, &pt);
+	const int id = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd_, nullptr);
+	DestroyMenu(m);
+	if (id) on_command(id);
 }
 
 // kept.txt next to the exe: "seconds <TAB> start board (empty: the usual start) <TAB> moves <TAB> place"

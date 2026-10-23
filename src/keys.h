@@ -38,6 +38,7 @@ enum class Action : int {
 	ListReload,
 	Keep,
 	EditBoard,
+	ToggleDesign,
 	Count
 };
 

@@ -98,6 +98,14 @@ void App::open_range_settings()
 		x.choice = base_ == "deviate2" ? 1 : base_ == "deviate3" ? 2 : 0;
 		f.push_back(std::move(x));
 	}
+	{
+		FormField x;
+		x.kind = FormField::Check;
+		x.label = t("range.precision");
+		x.checked = precision_;
+		x.note = t("range.precision.note");
+		f.push_back(std::move(x));
+	}
 	const auto pairs = split_stages(stages_);
 	const size_t first_stage = f.size();
 	for (int k = 0; k < 5; ++k) {
@@ -122,7 +130,15 @@ void App::open_range_settings()
 	number("range.hi", umi_hi_, -64, 64);
 	number("range.depth", umi_depth_, 1, 60, "range.depth.note");
 	heading("range.h.search");
-	number("range.level", level_, 1, 60);
+	{
+		FormField x;
+		x.kind = FormField::Slider;
+		x.label = t("range.level");
+		x.text = std::to_wstring(level_);
+		x.lo = 0;
+		x.hi = 60;
+		f.push_back(std::move(x));
+	}
 	number("range.threads", threads_, 0, 1024, "range.threads.note");
 	number("range.hash", hash_bits_, 0, 30, "range.hash.note");
 
@@ -134,6 +150,7 @@ void App::open_range_settings()
 	++i;  // heading
 	const int b = f[i++].choice;
 	base_ = b == 1 ? "deviate2" : b == 2 ? "deviate3" : "deviate";
+	precision_ = f[i++].checked;
 	std::string st;
 	bool stages_ok = true;
 	for (size_t k = first_stage; k < first_stage + 5; ++k) {
@@ -165,6 +182,25 @@ void App::open_range_settings()
 		restart_engines();  // the threads are given when an engine starts
 		return;
 	}
+	request_analysis();
+	invalidate();
+}
+
+// the level of the evaluation: a slider of the levels of Edax (0 to 60)
+void App::choose_level()
+{
+	using lang::t;
+	std::vector<FormField> f(1);
+	f[0].kind = FormField::Slider;
+	f[0].label = t("range.level");
+	f[0].text = std::to_wstring(level_);
+	f[0].lo = 0;
+	f[0].hi = 60;
+	f[0].note = t("level.note");
+	if (!run_form(hwnd_, t("level.window"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return;
+	level_ = std::stoi(f[0].text);
+	save_config();
+	update_menu();
 	request_analysis();
 	invalidate();
 }

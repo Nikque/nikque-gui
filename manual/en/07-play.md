@@ -1,6 +1,6 @@
 # 7. Games
 
-[Contents](README.md) · Previous: [6. Learning](06-learning.md) · Next: [8. Games, lists and kept lines](08-games.md)
+[Contents](README.md) · Previous: [6. Learning](06-learning.md) · Next: [8. Games, lists and bookmarks](08-games.md)
 
 The computer thinks on a "play engine" without the book, so the analysis of the board (values, accuracy of the book) goes on during a game. Press H to hide the values.
 

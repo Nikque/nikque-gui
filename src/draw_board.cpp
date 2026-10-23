@@ -111,7 +111,7 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 	}
 
 	float scale = 1;
-	if (fx && k == 6) scale = 1 + 0.035f * wave(t, 1.6);
+	if (fx && k == 6) scale = 1 + 0.018f * wave(t, 1.6);
 	if (fx && k == 7 && !top_weak) scale = 1 + (top_strong ? 0.05f : 0.025f) * wave(t, 1.2);
 	const D2D1_MATRIX_3X2_F M = D2D1::Matrix3x2F::Translation(-(s.bounds.left + w / 2), -(s.bounds.top + h / 2)) *
 	                            D2D1::Matrix3x2F::Scale(scale, scale) * D2D1::Matrix3x2F::Translation(cx, cy);
@@ -120,12 +120,13 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 	if (fx) {
 		GlowSpec gs[2];
 		const int n = glow_specs(th, k, L.cell, gs);
-		const float base[8] = {0, 0, 0, 0.55f, 0.7f, 0.8f, 0.85f, 0.4f};
-		const float amp[8] = {0, 0, 0, 0.3f, 0.3f, 0.2f, 0.15f, 0.25f};
+		// stage 6 keeps its light below the top stage, and the gold of its number readable
+		const float base[8] = {0, 0, 0, 0.55f, 0.7f, 0.8f, 0.62f, 0.4f};
+		const float amp[8] = {0, 0, 0, 0.3f, 0.3f, 0.2f, 0.12f, 0.25f};
 		for (int i = 0; i < n; ++i) {
 			const Glow *g = gx.glow(text, em, gs[i].color, gs[i].radius);
 			if (!g) continue;
-			float op = i == 0 ? base[k] + amp[k] * wave(t, 2.6 - 0.2 * k) : 0.75f;
+			float op = i == 0 ? base[k] + amp[k] * wave(t, 2.6 - 0.2 * k) : k == 6 ? 0.5f : 0.75f;
 			if (k == 7 && !top_strong) op *= top_weak ? 0.55f : 0.75f;
 			if (top_strong && i == 0) {
 				// a short flash every few seconds
@@ -179,7 +180,7 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 			const float bx = s.bounds.left - w * 0.6f + ph * w * 2.2f, bw = w * (rb ? 0.4f : 0.22f);
 			g->SetStartPoint({bx - bw, s.bounds.top});
 			g->SetEndPoint({bx + bw, s.bounds.bottom});
-			g->SetOpacity(shine);
+			g->SetOpacity(shine * (k == 6 ? (rb ? 0.55f : 0.7f) : 1.0f));  // (stage 6: its gold stays)
 			gx.fill_shape(s, g);
 		}
 	}
@@ -229,7 +230,7 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 			const float x = rc.left + c * (0.14f + 0.144f * i) + std::sin(static_cast<float>(t) * 2 + i) * c * 0.02f;
 			const float y = rc.bottom - c * 0.08f - p * c * 0.8f;
 			const float r = c * 0.022f;
-			const float a = std::sin(p * static_cast<float>(std::numbers::pi));
+			const float a = std::sin(p * static_cast<float>(std::numbers::pi)) * (k == 6 ? 0.65f : 1.0f);
 			dc->FillEllipse(D2D1::Ellipse({x, y}, r, r), gx.brush(D2D1_COLOR_F{col.r, col.g, col.b, a}));
 			if (th.particle_edge.a > 0)
 				dc->DrawEllipse(D2D1::Ellipse({x, y}, r, r), gx.brush(D2D1_COLOR_F{th.particle_edge.r, th.particle_edge.g,

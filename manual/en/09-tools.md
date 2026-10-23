@@ -1,6 +1,6 @@
 # 9. Tools and files of games
 
-[Contents](README.md) · Previous: [8. Games, lists and kept lines](08-games.md) · Next: [10. Command scripts](10-scripts.md)
+[Contents](README.md) · Previous: [8. Games, lists and bookmarks](08-games.md) · Next: [10. Command scripts](10-scripts.md)
 
 ## Tool engine
 

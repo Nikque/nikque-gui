@@ -116,7 +116,7 @@ void draw_tabs(App &app, const Theme &th)
 	Gfx &gx = app.gfx_;
 	const Layout &L = app.lay_;
 	IDWriteTextFormat *f = gx.text(L.font, false, DWRITE_TEXT_ALIGNMENT_CENTER);
-	const char *keys[] = {"tab.moves", "tab.book", "tab.record", "tab.list", "tab.kept", "tab.tree"};
+	const char *keys[] = {"tab.moves", "tab.book", "tab.record", "tab.list", "tab.tree"};
 	constexpr int n = static_cast<int>(Tab::Count);
 	app.tab_rects_.clear();
 	float x = L.tabs.left;
@@ -298,6 +298,8 @@ void draw_moves_table(App &app, const Theme &th)
 					if (stage >= 3) s += L" " + lang::f("table.done", {stage_range(app, stage)});
 					if (m.has_link) s += L" ※";
 					gx.draw_text(s, fs, D2D1::RectF(r.left + 2 * rr + 8 * L.scale, r.top, r.right, r.bottom), th.text);
+				} else if (!app.precision_ && app.use_book_ && m.in_book) {
+					gx.draw_text(L"\x2014", f, r, th.text_dim);  // (not computed: the setting)
 				} else if (app.use_book_ && app.eng_[0].alive && !info->book_done) {
 					gx.draw_text(L"…", f, r, th.text_dim);
 				}
@@ -496,44 +498,77 @@ void draw_list_tab(App &app, const Theme &th)
 	dc->PopAxisAlignedClip();
 }
 
-void draw_kept_tab(App &app, const Theme &th)
+// a small picture of a position: the board, its lines and the discs
+void draw_thumbnail(Gfx &gx, const Theme &th, const Position &p, const D2D1_RECT_F &r, float scale)
+{
+	auto *dc = gx.dc();
+	const float s = r.right - r.left, c = s / 8;
+	dc->FillRectangle(r, gx.brush(th.board));
+	auto *grid = gx.brush(th.grid);
+	for (int k = 1; k < 8; ++k) {
+		dc->DrawLine({r.left + k * c, r.top}, {r.left + k * c, r.bottom}, grid, std::max(1.0f, 0.5f * scale));
+		dc->DrawLine({r.left, r.top + k * c}, {r.right, r.top + k * c}, grid, std::max(1.0f, 0.5f * scale));
+	}
+	const float rr = c * 0.42f;
+	for (int sq = 0; sq < 64; ++sq) {
+		const bool black = (p.black >> sq) & 1, white = (p.white >> sq) & 1;
+		if (!black && !white) continue;
+		const D2D1_ELLIPSE e = D2D1::Ellipse({r.left + (sq & 7) * c + c / 2, r.top + (sq >> 3) * c + c / 2}, rr, rr);
+		dc->FillEllipse(e, gx.brush(black ? th.black_stone : th.white_stone));
+		dc->DrawEllipse(e, gx.brush(black ? th.black_rim : th.white_rim), black ? 0.6f * scale : std::max(0.6f * scale, th.white_rim_px * 0.5f * scale));
+	}
+}
+
+// The bookmarks (kept lines), right above the graph: a small picture of the position of each, the oldest first. A
+// click shows one, the right button opens its menu; the wheel slides the row.
+void draw_bookmarks(App &app, const Theme &th)
 {
 	Gfx &gx = app.gfx_;
 	auto *dc = gx.dc();
 	const Layout &L = app.lay_;
-	const D2D1_RECT_F T = L.table;
-	IDWriteTextFormat *f = gx.text(L.font, false);
-	IDWriteTextFormat *fm = gx.text(L.font, false, DWRITE_TEXT_ALIGNMENT_LEADING, Face::Number);
-	const float rh = L.row;
-	float y = T.top;
+	const D2D1_RECT_F B = L.bookmarks;
 	app.kept_rects_.clear();
-	gx.draw_text(lang::f("kept.head", {std::to_wstring(app.kept_.size()), app.keys_.describe(Action::Keep)}), f,
-	             D2D1::RectF(T.left + 4, y, T.right, y + rh), app.kept_.empty() ? th.text_dim : th.text);
-	y += rh;
+	if (!app.bookmarks_shown_ || B.bottom - B.top < 8) return;
+	IDWriteTextFormat *f = gx.text(L.font_s, false);
 	const int count = static_cast<int>(app.kept_.size());
-	const int fit = std::max(1, static_cast<int>((T.bottom - y) / rh));
+	if (count == 0) {
+		gx.draw_text(lang::f("kept.empty", {app.keys_.describe(Action::Keep)}), f, D2D1::RectF(B.left + 4 * L.scale, B.top, B.right, B.bottom),
+		             th.text_dim);
+		return;
+	}
+	const float pad = std::round(3 * L.scale), gap = std::round(6 * L.scale);
+	const float size = std::floor(B.bottom - B.top - 2 * pad);
+	const int fit = std::max(1, static_cast<int>((B.right - B.left + gap) / (size + gap)));
 	app.kept_scroll_ = std::clamp(app.kept_scroll_, 0, std::max(0, count - fit));
-	dc->PushAxisAlignedClip(D2D1::RectF(T.left, y, T.right, T.bottom), D2D1_ANTIALIAS_MODE_ALIASED);
-	// the newest first
-	for (int k = app.kept_scroll_; k < count && y < T.bottom; ++k, y += rh) {
-		const int i = count - 1 - k;
+	IDWriteTextFormat *fn = gx.text(std::round(L.font_s * 0.9f), true, DWRITE_TEXT_ALIGNMENT_CENTER, Face::Number);
+	dc->PushAxisAlignedClip(B, D2D1_ANTIALIAS_MODE_ALIASED);
+	float x = B.left + pad;
+	for (int i = app.kept_scroll_; i < count && x < B.right; ++i, x += size + gap) {
 		const App::Kept &e = app.kept_[static_cast<size_t>(i)];
-		const D2D1_RECT_F r{T.left, y, T.right, y + rh};
-		if (i == app.kept_sel_) rounded(gx, r, 4 * L.scale, D2D1_COLOR_F{th.accent.r, th.accent.g, th.accent.b, 0.25f});
-		else if (inside_rect(r, app.mouse_)) rounded(gx, r, 4 * L.scale, D2D1_COLOR_F{th.text.r, th.text.g, th.text.b, 0.07f});
-		const std::time_t tt = static_cast<std::time_t>(e.time);
-		std::tm tm{};
-		localtime_s(&tm, &tt);
-		wchar_t when[32];
-		wcsftime(when, 32, L"%m/%d %H:%M", &tm);
-		std::vector<std::uint8_t> mv;
+		Game g;
+		g.reset(e.start);
 		for (const int m : e.moves)
-			if (m != kPass) mv.push_back(static_cast<std::uint8_t>(m));
-		std::wstring s = std::to_wstring(i + 1) + L". " + when + L"  " + moves_text(mv, 20) + L"  (" + std::to_wstring(mv.size()) + L")";
-		gx.draw_text(s, fm, D2D1::RectF(r.left + 8 * L.scale, r.top, r.right, r.bottom), th.text);
+			if (m != kPass) g.play(m);
+		g.go_to(e.cursor);
+		const D2D1_RECT_F r{x, B.top + pad, x + size, B.top + pad + size};
+		draw_thumbnail(gx, th, g.now(), r, L.scale);
+		// its number on a small label at the upper left
+		const std::wstring num = std::to_wstring(i + 1);
+		const float lw = std::max(size * 0.32f, gx.text_width(num, fn) + 6 * L.scale), lh = std::round(L.font_s * 1.15f);
+		const D2D1_RECT_F lr{r.left, r.top, r.left + lw, r.top + lh};
+		rounded(gx, lr, 3 * L.scale, D2D1_COLOR_F{th.panel.r, th.panel.g, th.panel.b, 0.85f});
+		gx.draw_text(num, fn, lr, th.text);
+		const bool on = i == app.kept_sel_, hover = i == app.kept_hover_;
+		if (on || hover) {
+			const float w = (on ? 2.5f : 1.5f) * L.scale;
+			dc->DrawRectangle(D2D1::RectF(r.left + w / 2, r.top + w / 2, r.right - w / 2, r.bottom - w / 2), gx.brush(on ? th.accent : th.text_dim), w);
+		}
 		app.kept_rects_.emplace_back(i, r);
 	}
 	dc->PopAxisAlignedClip();
+	// more pictures than the row holds: small arrows at the ends
+	if (app.kept_scroll_ > 0) gx.draw_text(L"\x2039", f, D2D1::RectF(B.left - 2, B.top, B.left + 10 * L.scale, B.bottom), th.text);
+	if (app.kept_scroll_ + fit < count) gx.draw_text(L"\x203a", f, D2D1::RectF(B.right - 8 * L.scale, B.top, B.right + 2, B.bottom), th.text);
 }
 
 // the squares of the open nodes right below the node "path", a bit each (path is the same after)
@@ -826,10 +861,10 @@ void draw_panel(App &app)
 	case Tab::Moves: draw_moves_table(app, th); break;
 	case Tab::Book: draw_book_tab(app, th); break;
 	case Tab::List: draw_list_tab(app, th); break;
-	case Tab::Kept: draw_kept_tab(app, th); break;
 	case Tab::Tree: draw_tree_tab(app, th); break;
 	default: draw_record_tab(app, th); break;
 	}
+	draw_bookmarks(app, th);
 	const float cy = (L.splitter.top + L.splitter.bottom) / 2;
 	gx.dc()->DrawLine({L.splitter.left + 40 * L.scale, cy}, {L.splitter.right - 40 * L.scale, cy}, gx.brush(th.line),
 	                  2.0f * L.scale);
@@ -858,7 +893,8 @@ void draw_bar(App &app)
 		                lang::t(p.side == kBlack ? "bar.black" : "bar.white") + L"  " +
 		                lang::f("bar.discs", {std::to_wstring(b), std::to_wstring(w)}));
 	std::wstring eng = app.engine_name();
-	if (!app.eng_[0].version.empty()) eng += L" " + app.eng_[0].version;
+	// the number of the version only (the day and the time the engine was built would read as a clock)
+	if (!app.eng_[0].version.empty()) eng += L" " + app.eng_[0].version.substr(0, app.eng_[0].version.find(L' '));
 	eng += L"  Lv" + std::to_wstring(app.level_);
 	if (!app.eng_[0].alive && !app.eng_[0].error.empty()) eng += L"  " + lang::t("bar.book_name");
 	else if (!app.eng_[0].alive && !app.eng_[1].alive) eng += L"  " + lang::t("bar.no_engine");
@@ -884,11 +920,17 @@ void draw_bar(App &app)
 		dc->DrawLine({x, L.bar.top + L.row * 0.25f}, {x, L.bar.bottom - L.row * 0.25f}, gx.brush(th.line), 1.0f);
 		x += 12 * L.scale;
 	}
-	// the legend of the book's accuracy: weak -> strong
+	// the legend of the book's accuracy: weak -> strong (or that it is not computed)
 	const std::wstring &title = lang::t("bar.accuracy"), &weak = lang::t("bar.weak"), &strong = lang::t("bar.strong");
 	const float r = std::round(L.font * 0.36f), step = r * 2.6f;
 	const float need = gx.text_width(title, f) + gx.text_width(weak, f) + gx.text_width(strong, f) + 8 * step + 40 * L.scale;
-	if (x + need <= L.bar.right) {
+	if (!app.precision_) {
+		for (auto &lr : app.legend_rects_) lr = {};
+		const std::wstring &off = lang::t("bar.precision_off");
+		const float tw = gx.text_width(off, f);
+		if (x + tw + 20 * L.scale <= L.bar.right)
+			gx.draw_text(off, f, D2D1::RectF(L.bar.right - tw - 12 * L.scale, L.bar.top, L.bar.right, L.bar.bottom), th.text_dim, false);
+	} else if (x + need <= L.bar.right) {
 		float lx = L.bar.right - need;
 		const float cy = (L.bar.top + L.bar.bottom) / 2;
 		const float tw = gx.text_width(title, f);

@@ -54,7 +54,21 @@ Book → Book maintenance and output:
 | Merge another book | `book merge` |
 | Keep only this position and after | `book subtree` |
 | Keep only lines where one side plays best | `book prune` |
+| Remove what deviate3 X Y cannot reach, to make the book lighter | `book reduce` (below) |
 | Write to / read back from a text file | `book export` / `book import` |
 | Write the best lines as games | `book extract` |
 
-After a command that changes the book (subtree, prune, import, new…), the book file may be overwritten when the engine is closed; the confirmation window says so. Copy the book first.
+After a command that changes the book (subtree, prune, reduce, import, new…), the book file may be overwritten when the engine is closed; the confirmation window says so. Copy the book first.
+
+## Making the book lighter (book reduce)
+
+Book → Book maintenance and output → Remove what deviate3 X Y cannot reach, to make the book lighter (book reduce)…. Only the positions that `book deviate3 X Y` reaches from a position are kept; the others are removed, and the book gets smaller (an engine feature since v4.5.5-nikque.20 and newedax.5).
+
+1. In the window, choose the largest loss of a move X (0 to 129), the largest sum of losses Y (0 to 254) and where from (the initial position, or the position shown). X and Y start at the range values. Usually choose the initial position; from the position shown, the positions from the initial position up to it are removed too.
+2. The GUI first has the engine count (`book reducecount`, which does not change the book) and shows the numbers of positions kept and removed.
+3. OK runs `book reduce X Y` as a learning command. At its end, the log gives the numbers of positions kept and removed.
+
+- What is kept: the position and the positions reached from it by moves that lose at most X discs each, with at most Y discs lost in all (the range that `book deviate3 X Y` walks when it looks for the positions to expand). The values of the positions kept do not change.
+- The book is saved to its file when the engine is closed. To keep the original book, copy the file first, or save with Save as… and then read the original again with Read again.
+- An older engine (nikque.19, newedax.4 and before) does not know the command: the GUI says so and does nothing.
+- In a script: `book reduce X Y` (from the position shown: `book reduce X Y here`), without the question ([10. Command scripts](10-scripts.md)).

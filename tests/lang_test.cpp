@@ -1,5 +1,6 @@
 // The language files: every file has the keys of ja.txt (no more, no fewer, none twice), and every value has the
-// same places to fill ({0}, {1}, ...) as the Japanese one. Argument: the lang folder.
+// same places to fill ({0}, {1}, ...) as the Japanese one; the Japanese has none of a few odd words. Argument: the
+// lang folder.
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
@@ -63,6 +64,14 @@ int main(int argc, char **argv)
 	if (argc < 2) return 1;
 	const std::string dir = argv[1];
 	const auto ja = load(dir + "/ja.txt");
+	// words that read oddly on the screen of a program (the plain words of the software are used instead)
+	for (const char *odd : {"\xE4\xBB\x95\xE4\xBA\x8B" /* 仕事 */, "\xE4\xB8\xBB\xE3\x81\xAE\xE3\x82\xA8\xE3\x83\xB3\xE3\x82\xB8\xE3\x83\xB3" /* 主のエンジン */,
+	                        "\xE5\x91\xBD\xE4\xBB\xA4\xE3\x81\xAE\xE5\x88\x97" /* 命令の列 */, "\xE5\x86\x99\xE3\x81\x99" /* 写す */})
+		for (const auto &[k, v] : ja)
+			if (v.find(odd) != std::string::npos) {
+				std::printf("FAIL ja: %s has an odd word\n", k.c_str());
+				++failures;
+			}
 	for (const char *code : {"en", "zh-Hans", "zh-Hant"}) {
 		const auto o = load(dir + "/" + code + ".txt");
 		for (const auto &[k, v] : ja) {

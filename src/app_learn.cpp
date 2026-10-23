@@ -4,9 +4,12 @@
 
 #include <commdlg.h>
 
+#include <algorithm>
+#include <cstdio>
 #include <filesystem>
 
 #include "app.h"
+#include "form.h"
 #include "lang.h"
 #include "paths.h"
 
@@ -101,6 +104,7 @@ void App::learn_command(int id)
 	case cmd::LearnStore: c = "book store"; break;
 	case cmd::LearnNegamax: c = "book negamax"; break;
 	case cmd::LearnFix: c = "book fix"; break;
+	case cmd::LearnReduce: reduce_command(); return;
 	case cmd::LearnAdd:
 	case cmd::LearnLearn:
 	case cmd::LearnCheck: {
@@ -157,6 +161,17 @@ void App::start_learning_at(const std::string &command, const Position &start, c
 
 void App::learning_line(const std::string &line)
 {
+	// the result of book reduce: "Book reduce 2 4: 19 positions kept, 25184 removed"
+	{
+		int x = 0, y = 0;
+		long long kept = 0, removed = 0;
+		if (line.starts_with("Book reduce ") &&
+		    sscanf_s(line.c_str(), "Book reduce %d %d: %lld positions kept, %lld removed", &x, &y, &kept, &removed) == 4) {
+			learn_progress_.clear();
+			log(lang::f("reduce.done", {lang::number(kept), lang::number(removed), std::to_wstring(x), std::to_wstring(y)}));
+			return;
+		}
+	}
 	// the progress ("Book deviate2...11/26 done: ...", "Book deviate 34 todo", one or more lines a round) is shown
 	// under the board; only the lines with a result ("...finished: ...", "Fixing book...0 done", "...1 positions
 	// added", warnings and errors; not "...402270 (0 error found)", which is progress) go to the log as well
@@ -262,6 +277,114 @@ void App::continue_learning()
 }  // namespace ng
 
 namespace ng {
+
+// book reduce: the window of the menu
+void App::reduce_command()
+{
+	using lang::t;
+	std::vector<FormField> f(3);
+	f[0].kind = FormField::Number;
+	f[0].label = t("reduce.x");
+	f[0].text = std::to_wstring(std::clamp(loss_x_, 0, 129));
+	f[0].lo = 0;
+	f[0].hi = 129;
+	f[0].note = t("reduce.x.note");
+	f[1].kind = FormField::Number;
+	f[1].label = t("reduce.y");
+	f[1].text = std::to_wstring(std::clamp(loss_y_, 0, 254));
+	f[1].lo = 0;
+	f[1].hi = 254;
+	f[1].note = t("reduce.y.note");
+	f[2].kind = FormField::Choice;
+	f[2].label = t("reduce.from");
+	f[2].choices = {t("reduce.from.initial"), t("reduce.from.here")};
+	f[2].choice = 0;
+	f[2].note = t("reduce.from.note");
+	if (!run_form(hwnd_, t("reduce.window"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return;
+	reduce_book(std::stoi(f[0].text), std::stoi(f[1].text), f[2].choice == 0, true);
+}
+
+bool App::reduce_book(int x, int y, bool initial, bool ask)
+{
+	if (learning_) {
+		if (ask) message(lang::t("learn.busy"), MB_ICONINFORMATION);
+		return false;
+	}
+	if (!eng_[0].alive) {
+		set_status(lang::t("learn.no_engine"));
+		return false;
+	}
+	if (reduce_.state != ReduceJob::None || x < 0 || x > 129 || y < 0 || y > 254) return false;
+	reduce_ = ReduceJob{};
+	reduce_.x = x;
+	reduce_.y = y;
+	reduce_.initial = initial;
+	reduce_.ask = ask;
+	reduce_.start = initial ? Position{} : game_.start();
+	reduce_.moves = initial ? std::string() : moves_to_cursor();
+	const Position p = initial ? Position{} : game_.now();
+	std::string out;
+	board_to(0, out, p);
+	reduce_.id = new_id();
+	out += "book reducecount id=" + std::to_string(reduce_.id) + " x=" + std::to_string(x) + " y=" + std::to_string(y) + "\n";
+	requests_[reduce_.id] = {Request::ReduceCount, key_of(p)};
+	reduce_.state = ReduceJob::Counting;
+	log(lang::f("reduce.counting", {lang::t(initial ? "reduce.at.initial" : "reduce.at.here"), std::to_wstring(x), std::to_wstring(y)}));
+	send(0, out);
+	update_menu();
+	return true;
+}
+
+void App::reduce_answer(const Fields &f, bool done)
+{
+	reduce_.id = 0;
+	if (!done || f.num("error").value_or(0)) reduce_.state = ReduceJob::Stopped;
+	else if (f.num("notinbook").value_or(0)) reduce_.state = ReduceJob::NotInBook;
+	else if (f.num("deep").value_or(0)) reduce_.state = ReduceJob::Deep;
+	else reduce_.state = ReduceJob::Counted;
+	reduce_.kept = f.num("kept").value_or(0);
+	reduce_.removed = f.num("removed").value_or(0);
+	reduce_.positions = f.num("positions").value_or(0);
+	PostMessageW(hwnd_, WM_REDUCE, 0, 0);  // (a message box is not shown while the lines of the engine are read)
+}
+
+void App::reduce_counted()
+{
+	using lang::t;
+	const ReduceJob r = reduce_;
+	if (r.state == ReduceJob::None || r.state == ReduceJob::Counting) return;
+	reduce_.state = ReduceJob::None;
+	update_menu();
+	auto say = [&](const std::wstring &text) {
+		log(text);
+		if (r.ask) message(text, MB_ICONINFORMATION);
+		schedule_script();
+	};
+	const std::wstring from = t(r.initial ? "reduce.at.initial" : "reduce.at.here");
+	switch (r.state) {
+	case ReduceJob::Unknown: say(t("reduce.unknown")); return;
+	case ReduceJob::NotInBook: say(lang::f("reduce.notinbook", {from})); return;
+	case ReduceJob::Deep: say(lang::f("reduce.deep", {from})); return;
+	case ReduceJob::Stopped: log(t("reduce.stopped")); schedule_script(); return;
+	default: break;
+	}
+	const std::wstring xs = std::to_wstring(r.x), ys = std::to_wstring(r.y);
+	if (r.removed <= 0) {
+		say(lang::f("reduce.nothing", {from, xs, ys, lang::number(r.positions)}));
+		return;
+	}
+	if (r.ask) {
+		const std::wstring text = lang::f("reduce.ask", {from, xs, ys, lang::number(r.kept), lang::number(r.removed),
+		                                                 lang::number(r.positions), book_file()}) +
+		                          L"\n\n" + t("warn.book_replaced");
+		if (message(text, MB_OKCANCEL | MB_ICONWARNING) != IDOK) return;
+	}
+	if (learning_ || !eng_[0].alive) {
+		schedule_script();
+		return;
+	}
+	start_learning_at("book reduce " + std::to_string(r.x) + " " + std::to_string(r.y), r.start, r.moves);
+}
 
 // Every missing line of the book tab becomes a job: play up to its position, book store, then the command of
 // the stage base with X and Y.

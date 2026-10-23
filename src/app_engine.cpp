@@ -76,7 +76,11 @@ std::string App::book_params() const
 	else if (umi_ == UmiMode::Range) s += " umi=range lo=" + std::to_string(umi_lo_) + " hi=" + std::to_string(umi_hi_);
 	else s += " umi=off";
 	if (umi_depth_ != 60 && umi_ != UmiMode::Off) s += " depth=" + std::to_string(umi_depth_);
-	return s;
+	// the parts of book moveinfo: the precision stages can be left out (the values of the book come anyway)
+	std::string parts;
+	if (precision_) parts = "stage";
+	if (umi_ != UmiMode::Off) parts += parts.empty() ? "umi" : ",umi";
+	return s + " parts=" + parts;
 }
 
 void App::send(int role, const std::string &text)
@@ -152,6 +156,11 @@ void App::forget_main_requests()
 	stopped_.clear();
 	book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = findline_id_ = list_book_id_ = 0;
 	missing_ = MissingList{};
+	if (reduce_.id) {  // the count of book reduce goes with them
+		reduce_.id = 0;
+		reduce_.state = ReduceJob::Stopped;
+		if (hwnd_) PostMessageW(hwnd_, WM_REDUCE, 0, 0);
+	}
 }
 
 std::string line_commands(const Position &start, const std::string &moves)
@@ -320,15 +329,14 @@ void App::restart_engines()
 // while the position shown has nothing waiting, so that it is never kept waiting by them.
 void App::pump_graph()
 {
-	if (!eng_[0].alive || learning_ || !use_book_ || !show_eval_ || graph_id_ || book_id_) return;
+	if (!eng_[0].alive || learning_ || !use_book_ || !show_eval_ || graph_id_ || book_id_ || background_paused_) return;
 	const std::string params = book_params();
 	auto ask = [&](const Position &p) {
 		const PosKey key = key_of(p);
 		std::string out;
 		board_to(0, out, p);
 		graph_id_ = new_id();
-		out += "book moveinfo id=" + std::to_string(graph_id_) + " " + params +
-		       (umi_ == UmiMode::Off ? " parts=stage\n" : " parts=stage,umi\n");
+		out += "book moveinfo id=" + std::to_string(graph_id_) + " " + params + "\n";
 		requests_[graph_id_] = {Request::Graph, key, params};
 		send(0, out);
 	};
@@ -368,9 +376,17 @@ void App::request_analysis()
 		const std::string params = book_params();
 		const bool params_changed = info && info->set_book_params(params);
 		cancel(book_id_, book_on && same(book_id_) && !params_changed);
-		// a point of the graph asked with other book settings is of no use any more
+		// a point of the graph asked with other book settings is of no use any more; the position shown goes first:
+		// a point of the graph for it becomes its request, one for another position waits while it is not known (the
+		// analyses of the engine are done one after the other)
 		const auto graph = requests_.find(graph_id_);
-		cancel(graph_id_, graph != requests_.end() && graph->second.params == params);
+		const bool graph_ok = graph != requests_.end() && graph->second.params == params;
+		if (graph_ok && info && !info->book_done && !book_id_ && graph->second.pos == key) {
+			graph->second.kind = Request::Book;
+			book_id_ = graph_id_;
+			graph_id_ = 0;
+		}
+		cancel(graph_id_, graph_ok && !(info && !info->book_done));
 		cancel(count_id_, book_on && count_ && same(count_id_));
 		cancel(levels_id_, book_on && tab_ == Tab::Book && same(levels_id_));
 		cancel(best_id_, book_on && tab_ == Tab::Book && same(best_id_));
@@ -379,8 +395,7 @@ void App::request_analysis()
 			if (!info->book_done && !book_id_) {
 				board();
 				book_id_ = new_id();
-				out += "book moveinfo id=" + std::to_string(book_id_) + " " + params +
-				       (umi_ == UmiMode::Off ? " parts=stage\n" : " parts=stage,umi\n");
+				out += "book moveinfo id=" + std::to_string(book_id_) + " " + params + "\n";
 				requests_[book_id_] = {Request::Book, key, params};
 			}
 			if (count_ && !info->count_done && !count_id_) {
@@ -413,7 +428,7 @@ void App::request_analysis()
 		const bool need = info && !(info->search_done && info->search_level == level_);
 		if (!need) {
 			// a search of another position is stopped, unless it is the background work on the game
-			const bool keep = hint_background_ && backward_ && show_eval_;
+			const bool keep = hint_background_ && (backward_ || forward_) && show_eval_ && !background_paused_;
 			if (hint_busy_ && !keep) {
 				if constexpr (measure::kOn) measure::trace("STOP shown=" + p.to_board_string());
 				stop_search(1);
@@ -478,13 +493,14 @@ void App::send_hint(const Position &p, bool background)
 	send(1, out);
 }
 
-// The positions of the game, from the end backward, are searched while the search engine has nothing else to
-// do: their values go back to the moves before them (backward analysis) and fill the graph.
+// The positions of the game are searched while the search engine has nothing else to do, from the end backward
+// (their values go back to the moves before them: backward analysis) or from the start forward; they fill the graph.
 void App::pump_search()
 {
-	if (!eng_[1].alive || hint_busy_ || !backward_ || !show_eval_) return;
-	for (int i = game_.size(); i >= 0; --i) {
-		const Position &p = game_.at(i);
+	if (!eng_[1].alive || hint_busy_ || !(backward_ || forward_) || !show_eval_ || background_paused_) return;
+	const int n = game_.size();
+	for (int k = 0; k <= n; ++k) {
+		const Position &p = game_.at(forward_ ? k : n - k);
 		if (p.game_over() || p.must_pass()) continue;
 		const PosInfo *info = cache_.peek(p);
 		if (info && info->search_done && info->search_level == level_) continue;
@@ -558,6 +574,13 @@ void App::on_engine(WPARAM tag, bool ended)
 			if (req.kind == Request::FindLine) {
 				if (last) requests_.erase(it);  // first: the answer may change the requests
 				findline_answer(f, last);
+				continue;
+			}
+			if (req.kind == Request::ReduceCount) {
+				if (last) {
+					requests_.erase(it);
+					reduce_answer(f, done);
+				}
 				continue;
 			}
 			if (req.kind == Request::Missing) {
@@ -727,6 +750,14 @@ void App::on_engine(WPARAM tag, bool ended)
 			const std::string end = "@end id=" + std::to_string(findline_id_) + " count=0 unknown=1";
 			requests_.erase(findline_id_);
 			findline_answer(Fields(end), true);
+			continue;
+		}
+		// an engine without "book reducecount" (and without book reduce): nothing is done
+		if (role == 0 && reduce_.id && line.starts_with("WARNING") && line.find("reducecount") != std::string::npos) {
+			requests_.erase(reduce_.id);
+			reduce_.id = 0;
+			reduce_.state = ReduceJob::Unknown;
+			PostMessageW(hwnd_, WM_REDUCE, 0, 0);
 			continue;
 		}
 		// other lines of the engines go to the log (not the prompts and the search lines)

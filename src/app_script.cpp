@@ -116,6 +116,7 @@ bool App::script_condition() const
 	case ScriptWait::BookLines: return list_book_id_ != 0 || task_busy_;
 	case ScriptWait::Game: return play_mode_ != PlayMode::Free && !(game_end_done_ && engine_games_left_ == 0);
 	case ScriptWait::Com: return com_thinking_ || com_book_move_ != kNoMove || com_waiting_book_;
+	case ScriptWait::Reduce: return reduce_.state != ReduceJob::None || learning_;
 	case ScriptWait::Analysis: {
 		const Position &p = game_.now();
 		if (!show_eval_ || p.game_over()) return false;
@@ -223,6 +224,17 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 			on_command(cmd::ReloadBook);
 			return true;
 		}
+		if (a1 == "reduce") {  // book reduce X Y [here]: counted, then done without asking
+			const auto x = w.size() > 2 ? number(w[2]) : std::nullopt, y = w.size() > 3 ? number(w[3]) : std::nullopt;
+			if (!x || !y || *x < 0 || *x > 129 || *y < 0 || *y > 254) return bad("script.bad_number");
+			const bool here = w.size() > 4 && lower(w[4]) == "here";
+			if (w.size() > 4 && !here) return bad("script.bad_word");
+			if (!eng_[0].alive) return bad("learn.no_engine");
+			if (learning_) return bad("learn.busy");
+			if (!reduce_book(*x, *y, !here, false)) return bad("learn.busy");
+			wait(ScriptWait::Reduce);
+			return true;
+		}
 		bool v = use_book_;
 		if (!on_off(&v)) return bad("script.on_off");
 		if (v != use_book_) on_command(cmd::UseBook);
@@ -242,7 +254,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 	}
 	if (c == "level") {
 		auto n = number(a1);
-		if (!n || *n < 1 || *n > 60) return bad("script.bad_number");
+		if (!n || *n < 0 || *n > 60) return bad("script.bad_number");
 		level_ = *n;
 		update_menu();
 		request_analysis();
@@ -265,9 +277,35 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		}
 		return true;
 	}
+	if (c == "pv" || c == "precision" || c == "bookmarks") {
+		bool *flag = c == "pv" ? &pv_on_board_ : c == "precision" ? &precision_ : &bookmarks_shown_;
+		bool v = *flag;
+		if (!on_off(&v)) return bad("script.on_off");
+		if (v != *flag) on_command(c == "pv" ? cmd::PvOnBoard : c == "precision" ? cmd::PrecisionOn : cmd::BookmarksShow);
+		return true;
+	}
+	if (c == "analysis") {
+		if (a1 == "backward") on_command(cmd::Backward);
+		else if (a1 == "forward") on_command(cmd::Forward);
+		else if (a1 == "off") on_command(cmd::BackgroundOff);
+		else return bad("script.bad_word");
+		return true;
+	}
+	if (c == "stop") {
+		on_command(cmd::TaskCancel);
+		return true;
+	}
+	if (c == "bookmark") {
+		auto n = number(a1);
+		if (!n || *n < 1 || *n > static_cast<int>(kept_.size())) return bad("script.bad_number");
+		kept_sel_ = *n - 1;
+		on_command(cmd::KeptShow);
+		return true;
+	}
 	if (c == "design") {
 		if (a1 == "standard") on_command(cmd::DesignStandard);
 		else if (a1 == "paw") on_command(cmd::DesignPaw);
+		else if (a1 == "toggle") on_command(cmd::DesignToggle);
 		else return bad("script.bad_word");
 		return true;
 	}
@@ -279,8 +317,8 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		return true;
 	}
 	if (c == "tab") {
-		const char *names[] = {"moves", "book", "record", "list", "kept", "tree"};
-		for (int k = 0; k < 6; ++k)
+		const char *names[] = {"moves", "book", "record", "list", "tree"};
+		for (int k = 0; k < 5; ++k)
 			if (a1 == names[k]) {
 				on_command(cmd::TabMoves + k);
 				return true;

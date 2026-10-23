@@ -36,6 +36,7 @@ inline WPARAM engine_tag(int role, unsigned generation) { return static_cast<WPA
 std::string line_commands(const Position &start, const std::string &moves);
 inline constexpr UINT WM_TASK = WM_APP + 2;  // a background job has ended
 inline constexpr UINT WM_SCRIPT = WM_APP + 3;  // the command script goes on (after the work that it waited for)
+inline constexpr UINT WM_REDUCE = WM_APP + 4;  // the count of book reduce has come (asked after the lines of the engine are read)
 
 // menu commands
 namespace cmd {
@@ -63,12 +64,15 @@ enum : int {
 	ShowEval = 1100,
 	Recompute,
 	Backward,
+	Forward,
+	BackgroundOff,
+	PrecisionOn,
+	LevelChoose,
 	UmiBest,
 	UmiLoss,
 	UmiOff,
 	CountOn,
 	CompareOn = 1120,
-	Level0 = 1150,  // + index into kLevels
 	UseBook = 1200,
 	ReloadBook,
 	BaseDeviate,
@@ -101,6 +105,7 @@ enum : int {
 	LearnMerge,
 	LearnSubtree,
 	LearnPrune,
+	LearnReduce,
 	LearnExport,
 	LearnImport,
 	LearnExtract,
@@ -172,11 +177,13 @@ enum : int {
 	TabBook,
 	TabRecord,
 	TabList,
-	TabKept,
 	TabTree,
 	MoveNumbers,
 	RotateNext,
 	SaveLog,
+	DesignToggle,
+	PvOnBoard,
+	BookmarksShow,
 	Rotate0 = 1640,  // + symmetry 0..7
 	CellInfoNone = 1650,
 	CellInfoPositions,
@@ -218,12 +225,11 @@ enum : int {
 	KeptClear,
 };
 }
-inline constexpr int kLevels[] = {1, 5, 10, 15, 18, 21, 24, 27, 30, 35, 40, 60};
 
 enum class Effects : int { On = 0, Subdued = 1, Off = 2 };
 // how much of its effects the top stage (7) shows
 enum class TopEffect : int { Strong = 0, Normal = 1, Weak = 2 };
-enum class Tab : int { Moves = 0, Book = 1, Record = 2, List = 3, Kept = 4, Tree = 5, Count };
+enum class Tab : int { Moves = 0, Book = 1, Record = 2, List = 3, Tree = 4, Count };
 // the small number at the lower left of a move's square
 enum class CellInfo : int { None = 0, Positions, Level, Stage, Umi };
 enum class EngineKind : int { Nikque18 = 0, Newedax = 1 };
@@ -242,7 +248,7 @@ struct Layout {
 	int cell = 40, line = 1, frame = 2;
 	int bx = 0, by = 0, board_px = 0;  // top left of the frame, size with the frame
 	bool panel_below = false;
-	D2D1_RECT_F tabs{}, range{}, table{}, splitter{}, graph{}, panel_split{};
+	D2D1_RECT_F tabs{}, range{}, table{}, bookmarks{}, splitter{}, graph{}, panel_split{};
 	struct Field {
 		D2D1_RECT_F box{}, track{};
 	} fx, fy;
@@ -303,7 +309,7 @@ struct MissingList {
 
 // a request to the main engine, by id
 struct Request {
-	enum Kind { Book, Count, Levels, Graph, Missing, Best, BestExport, FindLine, ListBook, ListBookAdd } kind;
+	enum Kind { Book, Count, Levels, Graph, Missing, Best, BestExport, FindLine, ListBook, ListBookAdd, ReduceCount } kind;
 	PosKey pos;
 	std::string params;  // the book settings asked with (book_params, Book and Graph)
 };
@@ -352,6 +358,11 @@ public:
 	EngineKind kind_ = EngineKind::Nikque18;
 	bool search_engine_ = true;
 	bool backward_ = true;     // backward analysis of the game (and searching its positions in the background)
+	bool forward_ = false;     // the positions of the game searched in the background from the start (no values going back)
+	bool precision_ = true;    // the precision stages of the book (book moveinfo parts=stage)
+	bool pv_on_board_ = false; // the expected line of the move under the mouse drawn on the board
+	bool background_paused_ = false;  // "stop the background work": nothing starts again before the position changes
+	bool bookmarks_shown_ = true;     // the row of the pictures of the bookmarks (kept lines) above the graph
 
 	// engines: [0] main (reads the book), [1] search only (no book), [2] tools (started for one job, no book),
 	// [3] play (the moves of the computer in a game, no book), [4] compare (the other engine, search only)
@@ -389,6 +400,19 @@ public:
 	};
 	std::deque<LearnJob> learn_queue_;
 	bool queue_running_ = false;
+	// book reduce: the positions kept and removed are counted first (book reducecount), then the command runs as a
+	// learning command from the same position
+	struct ReduceJob {
+		enum State { None, Counting, Counted, Unknown, NotInBook, Deep, Stopped } state = None;
+		int id = 0;                // the count asked of the main engine
+		int x = 2, y = 4;
+		bool initial = true;       // from the initial position (else from the position shown)
+		bool ask = true;           // asked in a message box before the book changes (not in a script)
+		Position start{};          // the command runs after `moves` from `start`
+		std::string moves;
+		long long kept = 0, removed = 0, positions = 0;
+	};
+	ReduceJob reduce_;
 	// search engine: the hint in progress
 	int marker_id_ = 0;
 	bool hint_busy_ = false, hint_accept_ = false;
@@ -431,7 +455,8 @@ public:
 	};
 	std::vector<Kept> kept_;
 	int kept_sel_ = -1;
-	int kept_scroll_ = 0;
+	int kept_scroll_ = 0;      // the first bookmark shown in their row
+	int kept_hover_ = -1;      // the bookmark under the mouse
 	std::vector<std::pair<int, D2D1_RECT_F>> kept_rects_;
 
 	// the tree of the book lines from a position (the root): the game up to the root, and the nodes open, each
@@ -461,7 +486,7 @@ public:
 		std::string text;
 	};
 	std::deque<ScriptLine> script_;
-	enum class ScriptWait { None, Task, Learn, Tool, Analysis, FindLine, BookLines, Game, Com } script_wait_ = ScriptWait::None;
+	enum class ScriptWait { None, Task, Learn, Tool, Analysis, FindLine, BookLines, Game, Com, Reduce } script_wait_ = ScriptWait::None;
 	std::chrono::steady_clock::time_point script_until_{};
 	std::wstring script_dir_;
 
@@ -564,6 +589,9 @@ public:
 	bool paste_text(const std::string &utf8);  // moves, a board or bitboards; false when none
 	void commit_edit();
 	void set_loss(int x, int y);
+	void choose_level();     // the window of the level of the evaluation (a slider, 0 to 60)
+	void stop_background();  // the background work stops (the list job, the book analyses, the search of the game)
+	void bookmark_menu(int x, int y);  // the menu of a bookmark (right click on its picture)
 	std::vector<const MoveEval *> sorted_moves(const PosInfo &info) const;
 
 	// ---- app_engine.cpp
@@ -593,6 +621,11 @@ public:
 	void start_learning_at(const std::string &command, const Position &start, const std::string &moves);
 	void queue_missing();
 	void next_in_queue();
+	void reduce_command();  // the menu: the window of X, Y and the position, then reduce_book
+	// book reduce X Y from the initial position or the position shown: the count is asked first (false: not asked)
+	bool reduce_book(int x, int y, bool initial, bool ask);
+	void reduce_counted();  // the count has come (WM_REDUCE): asked, then the command runs
+	void reduce_answer(const Fields &f, bool done);  // the last line of the answer of the count
 	void watch_engines();
 	void stop_learning();
 	void continue_learning();

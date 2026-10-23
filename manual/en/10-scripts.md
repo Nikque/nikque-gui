@@ -5,7 +5,7 @@
 A UTF-8 text file with one command a line, run with Input/Output → Run a command script…; Stop the command script stops it. The script run at the start is set in `[script] startup=` of `config.ini`.
 
 - Lines starting with `#` are notes.
-- A command that starts work (`list load`, `search`, `learn start`, `edax`, `tool`, `estimate`, `wait`…) waits for its end before the next line. A `wait` or `waitgame` that ends by its time says so in the log.
+- A command that starts work (`list load`, `search`, `learn start`, `edax`, `tool`, `estimate`, `wait`, `book reduce`…) waits for its end before the next line. A `wait` or `waitgame` that ends by its time says so in the log.
 - Relative names are from the folder of the script.
 - A wrong line is written to the log and the script stops.
 - `run` runs another script (4 levels at most).
@@ -19,16 +19,21 @@ A UTF-8 text file with one command a line, run with Input/Output → Run a comma
 | `play <move>` | plays from the position shown |
 | `new` / `goto <n\|end>` / `back [n]` / `forward [n]` | from the start, to move n, back, forward |
 | `book on\|off` / `eval on\|off` / `numbers on\|off` | use the book, values, move numbers |
-| `level <n>` / `umi best\|loss\|off` | search level, umigame numbers |
+| `level <0-60>` / `umi best\|loss\|off` | search level, umigame numbers |
+| `precision on\|off` | compute the book accuracy or not |
+| `analysis backward\|forward\|off` | the order of the search of the game in the background (backward analysis, forward analysis, none) |
+| `stop` | stops the background work |
+| `pv on\|off` | the expected line of the move under the mouse on the board, or not |
 | `book reload` | reads the book again (restarts the main engine) |
+| `book reduce <X> <Y> [here]` | makes the book lighter (from the initial position; `here`: from the position shown); counted, then done without asking |
 | `engine nikque18\|newedax` | kind of engine |
-| `design standard\|paw` / `effects on\|subdued\|off` | design, effects |
-| `tab moves\|book\|record\|list\|kept\|tree` | tab |
+| `design standard\|paw\|toggle` / `effects on\|subdued\|off` | design (`toggle` switches it), effects |
+| `tab moves\|book\|record\|list\|tree` | tab |
 | `rotate <0-7>` / `cellinfo none\|positions\|level\|stage\|umi` | board orientation, number on the squares |
 | `lang ja\|en\|zh-Hans\|zh-Hant` | language |
 | `wait [s]` | waits for the analysis of the position shown (30 s at most by default) |
 | `estimate` | finds the moves of the position on the board |
-| `keep` | keeps this line |
+| `keep` / `bookmark <n>` / `bookmarks on\|off` | bookmark the position now, go to bookmark n, show the row of bookmarks or not |
 | `screenshot [file]` / `savelog <file>` | the screen as a PNG, the log to a file |
 | `list load\|add\|save <file>` | open, add, save the game list |
 | `list sort\|unique\|normalize\|delete\|next\|prev\|addgame\|clear` | game list operations |

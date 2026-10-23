@@ -2,7 +2,11 @@
 // program started again with "--engine": it writes back the lines it reads that begin with '!' (without the '!').
 #include <windows.h>
 
+#include <wrl/client.h>
+
+#include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -66,6 +70,86 @@ static bool logged(const App &a, const std::wstring &text)
 	for (const auto &l : a.log_)
 		if (l.find(text) != std::wstring::npos) return true;
 	return false;
+}
+
+// the messages the app posts to itself (after the lines of an engine are read), as the window would take them
+static void pump_app(App &a)
+{
+	MSG m{};
+	while (PeekMessageW(&m, a.hwnd_, WM_APP + 2, WM_APP + 63, PM_REMOVE)) a.proc(a.hwnd_, m.message, m.wParam, m.lParam);
+}
+
+// the search engine (role 1): this program too
+static void start_search_engine(App &a)
+{
+	EngineSlot &s = a.eng_[1];
+	s.generation = 1;
+	s.alive = s.proc.start(self, L"--engine", a.temp_dir_, a.hwnd_, WM_ENGINE, engine_tag(1, 1), nullptr);
+	s.loaded = true;
+	CHECK(s.alive);
+}
+
+// the only request asked of the main engine (0 if none or more)
+static int only_request(const App &a)
+{
+	return a.requests_.size() == 1 ? a.requests_.begin()->first : 0;
+}
+
+// "book reduce X Y" of a script: the positions kept and removed are counted first (book reducecount, from the initial
+// position), then the book command runs from the initial position; its result line gives the numbers in the log.
+static void test_reduce_script()
+{
+	auto a = make_app();
+	start_engine(*a);
+	a->game_.play(parse_square("f5"));
+	std::wstring err;
+	CHECK(a->script_command("book reduce 2 4", 1, &err));
+	const int id = only_request(*a);
+	CHECK(id != 0);
+	feed(*a, "!@end id=" + std::to_string(id) + " kept=6 removed=1541 positions=1547 ms=0\n");
+	pump_app(*a);
+	CHECK(a->learning_ && a->learn_cmd_ == "book reduce 2 4");
+	CHECK(a->ini_.get("learn", "last_start") == Position{}.to_board_string() && a->ini_.get("learn", "last_moves").empty());
+	feed(*a, "!Book reduce 2 4: walk...\rBook reduce 2 4: 6 positions kept, 1541 removed\n!echo: \"M" +
+	             std::to_string(a->learn_end_id_) + "\" is not on or off; ignored\n");
+	CHECK(!a->learning_);
+	CHECK(logged(*a, lang::f("reduce.done", {L"6", L"1,541", L"2", L"4"})));
+	CHECK(a->game_.cursor() == 1);  // the game shown stays
+
+	// from the position shown ("here")
+	CHECK(a->script_command("book reduce 1 3 here", 1, &err));
+	const int here = only_request(*a);
+	CHECK(here != 0);
+	feed(*a, "!@end id=" + std::to_string(here) + " kept=2 removed=4 positions=6 ms=0\n");
+	pump_app(*a);
+	CHECK(a->learning_ && a->learn_cmd_ == "book reduce 1 3" && a->ini_.get("learn", "last_moves") == "f5");
+	a->learning_ = false;
+}
+
+// An engine without book reduce (v4.5.5-nikque.19, newedax.4) answers the count with a warning: nothing is done, and
+// the log says which engines have it. A position out of the book is not reduced either.
+static void test_reduce_unknown()
+{
+	auto a = make_app();
+	start_engine(*a);
+	std::wstring err;
+	CHECK(a->script_command("book reduce 2 4", 1, &err));
+	const int id = only_request(*a);
+	CHECK(id != 0);
+	feed(*a, "!\n!WARNING: Unknown book command: \"book reducecount id=" + std::to_string(id) + " x=2 y=4\"\n");
+	pump_app(*a);
+	CHECK(!a->learning_);
+	CHECK(a->requests_.empty());
+	CHECK(logged(*a, L"nikque.20"));
+	CHECK(!a->script_waiting());
+
+	CHECK(a->script_command("book reduce 2 4 here", 1, &err));
+	const int out = only_request(*a);
+	feed(*a, "!@end id=" + std::to_string(out) + " kept=6 removed=0 positions=6 notinbook=1 ms=0\n");
+	pump_app(*a);
+	CHECK(!a->learning_ && a->requests_.empty());
+	CHECK(!a->script_command("book reduce 2", 1, &err));
+	CHECK(!a->script_command("book reduce 2 255", 1, &err));
 }
 
 // A line of the book analyses is written whole by another thread of the engine, while a line of the main thread
@@ -240,6 +324,168 @@ static void test_recompute()
 	CHECK(info && !info->book_done && !info->find(parse_square("f5"))->in_book);
 }
 
+// The expected line of the move under the mouse is drawn on the board only when it is set so (off at first).
+static void test_pv_on_board()
+{
+	auto a = make_app();
+	a->show_eval_ = true;
+	MoveEval *m = a->cache_.get(a->game_.now()).find(parse_square("f5"));
+	m->searched = true;
+	m->depth = 10;
+	m->pv = {parse_square("f5"), parse_square("d6"), parse_square("c3")};
+	a->hover_sq_ = parse_square("f5");
+	CHECK(a->cell_view(parse_square("d6")).pv_num == 0);
+	std::wstring err;
+	CHECK(a->script_command("pv on", 1, &err));
+	CHECK(a->cell_view(parse_square("d6")).pv_num == 1 && a->cell_view(parse_square("c3")).pv_num == 2);
+	CHECK(a->script_command("pv off", 1, &err));
+	CHECK(a->cell_view(parse_square("d6")).pv_num == 0);
+}
+
+// The precision stages can be left out (heavy books): book moveinfo is asked without them, a book move shows its
+// value without the level of the search; with them again, the position is asked again.
+static void test_precision_off()
+{
+	auto a = make_app();
+	start_engine(*a);
+	a->show_eval_ = a->use_book_ = true;
+	a->count_ = false;
+	std::wstring err;
+	CHECK(a->script_command("precision off", 1, &err));
+	a->request_analysis();
+	const int off = a->book_id_;
+	CHECK(off != 0 && a->requests_.count(off) && a->requests_[off].params.find("parts=umi") != std::string::npos &&
+	      a->requests_[off].params.find("parts=stage") == std::string::npos);
+	MoveEval *m = a->cache_.get(a->game_.now()).find(parse_square("f5"));
+	m->searched = true;
+	m->depth = 12;
+	feed(*a, "!@begin id=" + std::to_string(off) + " ply=0 turn=black moves=4 book=1\n!@move id=" + std::to_string(off) +
+	             " sq=f5 book=1 value=3 level=4 lines=10\n!@end id=" + std::to_string(off) + " ms=0\n");
+	const CellView v = a->cell_view(parse_square("f5"));
+	CHECK(v.has_value && v.value == 3 && v.stage == 0 && v.level == 0);
+	CHECK(a->script_command("precision on", 1, &err));
+	a->request_analysis();
+	CHECK(a->book_id_ != 0 && a->book_id_ != off && a->requests_[a->book_id_].params.find("parts=stage") != std::string::npos);
+}
+
+// The position shown goes first: a point of the graph being computed for another position of the game is stopped
+// while the position shown is not known (asked again later); one for the position shown becomes its request.
+static void test_graph_yields()
+{
+	auto a = make_app();
+	start_engine(*a);
+	a->show_eval_ = a->use_book_ = true;
+	a->count_ = false;
+	for (const char *mv : {"f5", "d6", "c3", "d3"}) a->game_.play(parse_square(mv));
+	a->game_.go_to(0);
+	a->request_analysis();
+	const int first = a->book_id_;
+	CHECK(first != 0);
+	feed(*a, "!@begin id=" + std::to_string(first) + " ply=0 turn=black moves=4 book=1\n!@end id=" + std::to_string(first) + " ms=0\n");
+	const int graph = a->graph_id_;  // a point of the graph, asked after the position shown
+	CHECK(graph != 0 && a->requests_.count(graph) && a->requests_[graph].kind == Request::Graph);
+	const PosKey graph_pos = graph ? a->requests_[graph].pos : PosKey{};
+	a->game_.go_to(3);
+	a->request_analysis();
+	CHECK(a->graph_id_ != graph && a->stopped_.count(graph) && a->book_id_ != 0);
+	// the point of the graph asked for the position shown is the answer of the position
+	feed(*a, "!@cancel id=" + std::to_string(graph) + "\n");
+	a->game_.go_to(0);
+	a->request_analysis();
+	a->pump_graph();
+	const int g2 = a->graph_id_;
+	CHECK(g2 != 0);
+	for (int i = 0; g2 && i <= a->game_.size(); ++i)
+		if (key_of(a->game_.at(i)) == a->requests_[g2].pos) a->game_.go_to(i);
+	a->request_analysis();
+	CHECK(a->book_id_ == g2 && a->graph_id_ == 0 && a->requests_[g2].kind == Request::Book);
+	(void) graph_pos;
+}
+
+// Every level of Edax (0 to 60) can be chosen.
+static void test_levels()
+{
+	auto a = make_app();
+	std::wstring err;
+	CHECK(a->script_command("level 0", 1, &err) && a->level_ == 0);
+	CHECK(a->script_command("level 60", 1, &err) && a->level_ == 60);
+	CHECK(a->script_command("level 33", 1, &err) && a->level_ == 33);
+	CHECK(!a->script_command("level 61", 1, &err) && a->level_ == 33);
+}
+
+// The positions of the game are searched in the background from the end (backward) or from the start (forward).
+static void test_forward_analysis()
+{
+	auto a = make_app();
+	start_search_engine(*a);
+	a->show_eval_ = true;
+	for (const char *mv : {"f5", "d6", "c3", "d3"}) a->game_.play(parse_square(mv));
+	PosInfo &shown = a->cache_.get(a->game_.now());  // the position shown is known: the background goes on
+	shown.search_done = true;
+	shown.search_level = a->level_;
+	std::wstring err;
+	CHECK(a->script_command("analysis forward", 1, &err));
+	CHECK(a->hint_busy_ && a->hint_pos_ == key_of(a->game_.at(0)));
+	a->stop_search(1);
+	CHECK(a->script_command("analysis backward", 1, &err));
+	CHECK(a->hint_busy_ && a->hint_pos_ == key_of(a->game_.at(a->game_.size() - 1)));
+	a->stop_search(1);
+	CHECK(a->script_command("analysis off", 1, &err));
+	CHECK(!a->hint_busy_);
+}
+
+// "Stop the background work" also stops the book analyses (the precision stages, the points of the graph) and the
+// search of the other positions; nothing starts again before the position changes.
+static void test_stop_background()
+{
+	auto a = make_app();
+	start_engine(*a);
+	a->show_eval_ = a->use_book_ = true;
+	a->count_ = false;
+	a->game_.play(parse_square("f5"));
+	a->request_analysis();
+	const int book = a->book_id_;
+	CHECK(book != 0);
+	a->on_command(cmd::TaskCancel);
+	CHECK(a->book_id_ == 0 && a->stopped_.count(book));
+	feed(*a, "!@cancel id=" + std::to_string(book) + "\n");
+	CHECK(a->book_id_ == 0 && a->graph_id_ == 0 && a->requests_.empty());
+	a->game_.play(parse_square("d6"));
+	a->position_changed();
+	CHECK(a->book_id_ != 0);
+}
+
+// The kept lines (bookmarks) are chosen from their pictures above the graph: "bookmark <n>" shows the n-th one.
+static void test_bookmarks()
+{
+	auto a = make_app();
+	a->kept_.clear();
+	for (const char *mv : {"f5", "d6", "c3"}) a->game_.play(parse_square(mv));
+	a->keep_now(true);
+	a->set_game(Game{}, true);
+	std::wstring err;
+	CHECK(a->script_command("bookmark 1", 1, &err));
+	CHECK(a->game_.size() == 3 && a->game_.cursor() == 3);
+	CHECK(!a->script_command("bookmark 2", 1, &err));
+	// asked again: at the same place it stays one, at another place of the same line it is a new one
+	CHECK(a->script_command("keep", 1, &err) && a->kept_.size() == 1);
+	a->game_.go_to(1);
+	CHECK(a->script_command("keep", 1, &err) && a->kept_.size() == 2 && a->kept_[1].cursor == 1);
+	CHECK(a->script_command("bookmark 1", 1, &err) && a->game_.cursor() == 3);
+	CHECK(!a->script_command("tab kept", 1, &err));  // the tab of the kept lines is gone
+	a->kept_.clear();
+}
+
+// The design is switched with one key (D) or "design toggle".
+static void test_design_toggle()
+{
+	auto a = make_app();
+	std::wstring err;
+	const Design d = a->design_;
+	CHECK(a->script_command("design toggle", 1, &err) && a->design_ != d);
+	CHECK(a->script_command("design toggle", 1, &err) && a->design_ == d);
+}
+
 // With a real engine (app_test --real <engine exe> <book>, not run by ctest): the position changed again and again, so
 // that the book analyses asked are stopped before their end; once the engine is quiet, every number stopped has had
 // the end of its answer (none kept taken for good), and only the requests of the position shown are left.
@@ -292,6 +538,147 @@ static int real_engine(const std::wstring &exe, const std::wstring &book)
 	return failures ? 1 : 0;
 }
 
+// The light of the effects of each stage (app_test --glow <folder>, not run by ctest): the moves of a position get the
+// stages 0 to 7; each square is drawn at many times with the effects on and off, and the light the effects add (the
+// sum of the gains of brightness over the square, in pixels at full white) is written per stage, with its largest
+// value and how much it moves from one time to the next. Pictures of the board go to the folder.
+static bool render(App &a, std::vector<BYTE> &px, double t, bool board)
+{
+	Gfx &g = a.gfx_;
+	auto *dc = g.dc();
+	const UINT w = g.width(), h = g.height();
+	const D2D1_PIXEL_FORMAT pf = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
+	Microsoft::WRL::ComPtr<ID2D1Bitmap1> frame, read;
+	if (FAILED(dc->CreateBitmap({w, h}, nullptr, 0, D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_TARGET, pf, 96, 96), &frame))) return false;
+	Microsoft::WRL::ComPtr<ID2D1Image> old;
+	dc->GetTarget(&old);
+	dc->SetTarget(frame.Get());
+	dc->BeginDraw();
+	dc->SetTransform(D2D1::Matrix3x2F::Identity());
+	dc->Clear(theme(a.design_).bg);
+	if (board) draw_board(a);
+	for (int sq = 0; sq < 64; ++sq) draw_cell(a, sq, t);
+	const HRESULT hr = dc->EndDraw();
+	dc->SetTarget(old.Get());
+	if (FAILED(hr)) return false;
+	if (FAILED(dc->CreateBitmap({w, h}, nullptr, 0, D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_CPU_READ | D2D1_BITMAP_OPTIONS_CANNOT_DRAW, pf, 96, 96), &read)))
+		return false;
+	const D2D1_POINT_2U at{0, 0};
+	const D2D1_RECT_U all{0, 0, w, h};
+	if (FAILED(read->CopyFromBitmap(&at, frame.Get(), &all))) return false;
+	D2D1_MAPPED_RECT mr{};
+	if (FAILED(read->Map(D2D1_MAP_OPTIONS_READ, &mr))) return false;
+	px.resize(static_cast<size_t>(w) * h * 4);
+	for (UINT y = 0; y < h; ++y) std::memcpy(px.data() + static_cast<size_t>(y) * w * 4, mr.bits + static_cast<size_t>(y) * mr.pitch, w * 4);
+	read->Unmap();
+	return true;
+}
+
+static double brightness(const std::vector<BYTE> &px, UINT w, const D2D1_RECT_F &r, const std::vector<BYTE> *base, double *gain)
+{
+	double sum = 0, g = 0;
+	for (int y = static_cast<int>(r.top); y < static_cast<int>(r.bottom); ++y)
+		for (int x = static_cast<int>(r.left); x < static_cast<int>(r.right); ++x) {
+			const size_t i = (static_cast<size_t>(y) * w + x) * 4;
+			auto lum = [&](const std::vector<BYTE> &p) { return (0.0722 * p[i] + 0.7152 * p[i + 1] + 0.2126 * p[i + 2]) / 255.0; };
+			const double v = lum(px);
+			sum += v;
+			if (base) g += std::max(0.0, v - lum(*base));
+		}
+	if (gain) *gain = g;
+	return sum;
+}
+
+static int glow_measure(const std::wstring &dir)
+{
+	CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+	auto a = make_app();
+	DestroyWindow(a->hwnd_);
+	a->hwnd_ = CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 900, 900, nullptr, nullptr, nullptr, nullptr);
+	if (!a->gfx_.init(a->hwnd_)) return 2;
+	a->gfx_.resize();
+	a->panel_hidden_ = true;
+	a->show_eval_ = a->use_book_ = true;
+	a->layout();
+	// a position with many moves: the first eight get the stages 0 to 7, all with the same value
+	for (const char *mv : {"f5", "d6", "c3", "d3", "c4", "f4", "f6", "f3", "e6", "e7"}) a->game_.play(parse_square(mv));
+	PosInfo &info = a->cache_.get(a->game_.now());
+	std::vector<int> sqs;
+	for (auto &m : info.moves) {
+		if (sqs.size() == 8) break;
+		m.book_row = m.in_book = true;
+		m.book_value = 4;
+		m.book_level = 21;
+		m.stage = static_cast<int>(sqs.size());
+		sqs.push_back(m.sq);
+	}
+	if (sqs.size() < 8) return 3;
+	const int frames = 120;  // 6 seconds
+	std::printf("design top stage light peak motion\n");
+	for (const Design d : {Design::Standard, Design::Paw})
+		for (const TopEffect top : {TopEffect::Strong, TopEffect::Normal, TopEffect::Weak}) {
+			a->design_ = d;
+			a->top_effect_ = top;
+			a->gfx_.clear_shapes();
+			std::vector<BYTE> off, on, prev;
+			a->effects_ = Effects::Off;
+			if (!render(*a, off, 0, false)) return 4;
+			a->effects_ = Effects::On;
+			a->prepare_glows();
+			double light[8] = {}, peak[8] = {}, motion[8] = {};
+			for (int f = 0; f < frames; ++f) {
+				const double t = 0.05 * f;
+				if (!render(*a, on, t, false)) return 4;
+				for (int k = 0; k < 8; ++k) {
+					const D2D1_RECT_F r = a->lay_.cell_rect(sqs[static_cast<size_t>(k)]);
+					double g = 0;
+					brightness(on, a->gfx_.width(), r, &off, &g);
+					light[k] += g / frames;
+					peak[k] = std::max(peak[k], g);
+					if (!prev.empty()) {
+						double mv = 0;
+						brightness(on, a->gfx_.width(), r, &prev, &mv);
+						motion[k] += mv / (frames - 1);
+					}
+				}
+				prev = on;
+			}
+			for (int k = 3; k < 8; ++k) {
+				if (k == 7 || top == TopEffect::Normal)
+					std::printf("%s %s %d %.0f %.0f %.1f\n", d == Design::Paw ? "paw" : "standard",
+					            top == TopEffect::Strong ? "strong" : top == TopEffect::Weak ? "weak" : "normal", k, light[k], peak[k], motion[k]);
+			}
+			// the squares of the stages 3 to 7 side by side, at a few times
+			if (top == TopEffect::Normal) {
+				for (const double t : {0.4, 1.3, 2.2}) {
+					for (int k = 3; k < 8; ++k) {
+						const D2D1_RECT_F r = a->lay_.cell_rect(sqs[static_cast<size_t>(k)]);
+						const std::wstring name = dir + L"\\cell-" + (d == Design::Paw ? L"paw" : L"std") + L"-" + std::to_wstring(k) + L"-" +
+						                          std::to_wstring(static_cast<int>(t * 10)) + L".png";
+						a->gfx_.save_png(name, {static_cast<UINT32>(r.left), static_cast<UINT32>(r.top), static_cast<UINT32>(r.right), static_cast<UINT32>(r.bottom)}, [&] {
+							a->gfx_.dc()->Clear(theme(a->design_).bg);
+							draw_board(*a);
+							for (int sq = 0; sq < 64; ++sq) draw_cell(*a, sq, t);
+						});
+					}
+				}
+			}
+			// pictures of the board at two times
+			if (top == TopEffect::Normal || top == TopEffect::Strong) {
+				for (const double t : {0.4, 1.3}) {
+					const std::wstring name = dir + L"\\glow-" + (d == Design::Paw ? L"paw" : L"std") + L"-" +
+					                          (top == TopEffect::Strong ? L"strong" : L"normal") + L"-" + std::to_wstring(static_cast<int>(t * 10)) + L".png";
+					a->gfx_.save_png(name, {0, 0, a->gfx_.width(), a->gfx_.height()}, [&] {
+						a->gfx_.dc()->Clear(theme(a->design_).bg);
+						draw_board(*a);
+						for (int sq = 0; sq < 64; ++sq) draw_cell(*a, sq, t);
+					});
+				}
+			}
+		}
+	return 0;
+}
+
 // The lines an engine wrote (app_test --replay <log>, not run by ctest), given again to the app through the engine
 // of the tests: every book analysis of the log comes to its end however its lines were cut.
 static int replay(const std::wstring &file)
@@ -335,6 +722,10 @@ int main(int argc, char **argv)
 		std::printf(r ? "%d failures\n" : "all passed\n", failures);
 		return r;
 	}
+	if (argc == 4 && std::string(argv[1]) == "--glow") {
+		lang::load(widen(argv[3]), "ja");
+		return glow_measure(widen(argv[2]));
+	}
 	if (argc == 4 && std::string(argv[1]) == "--real") {
 		lang::load(L".", "ja");
 		const int r = real_engine(widen(argv[2]), widen(argv[3]));
@@ -347,13 +738,41 @@ int main(int argc, char **argv)
 		return 0;
 	}
 	lang::load(argc > 1 ? widen(argv[1]) : std::wstring(L"."), "ja");
+	std::setvbuf(stdout, nullptr, _IONBF, 0);  // (the lines before a crash are kept)
+	std::printf("%s\n", "test_mixed_lines");
 	test_mixed_lines();
+	std::printf("%s\n", "test_old_settings");
 	test_old_settings();
+	std::printf("%s\n", "test_settings_keep_counts");
 	test_settings_keep_counts();
+	std::printf("%s\n", "test_command_letters");
 	test_command_letters();
+	std::printf("%s\n", "test_stopped_numbers");
 	test_stopped_numbers();
+	std::printf("%s\n", "test_engine_ended");
 	test_engine_ended();
+	std::printf("%s\n", "test_recompute");
 	test_recompute();
+	std::printf("%s\n", "test_reduce_script");
+	test_reduce_script();
+	std::printf("%s\n", "test_reduce_unknown");
+	test_reduce_unknown();
+	std::printf("%s\n", "test_pv_on_board");
+	test_pv_on_board();
+	std::printf("%s\n", "test_precision_off");
+	test_precision_off();
+	std::printf("%s\n", "test_graph_yields");
+	test_graph_yields();
+	std::printf("%s\n", "test_levels");
+	test_levels();
+	std::printf("%s\n", "test_forward_analysis");
+	test_forward_analysis();
+	std::printf("%s\n", "test_stop_background");
+	test_stop_background();
+	std::printf("%s\n", "test_bookmarks");
+	test_bookmarks();
+	std::printf("%s\n", "test_design_toggle");
+	test_design_toggle();
 	if (failures) {
 		std::printf("%d failures\n", failures);
 		return 1;

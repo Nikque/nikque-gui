@@ -59,6 +59,7 @@ void App::position_changed()
 	const Position &p = game_.now();
 	if (selected_sq_ != kNoMove && !p.can_play(selected_sq_)) selected_sq_ = kNoMove;
 	table_scroll_ = 0;
+	background_paused_ = false;  // (stopped until the position changes)
 	tree_sync();
 	request_analysis();
 	// the time of the game goes to the other side after a move (of the person, the computer or a script),
@@ -149,6 +150,7 @@ void App::do_action(Action a)
 	case Action::ListDelete: on_command(cmd::ListDelete); break;
 	case Action::ListReload: on_command(cmd::ListReload); break;
 	case Action::Keep: on_command(cmd::KeepNow); break;
+	case Action::ToggleDesign: on_command(cmd::DesignToggle); break;
 	case Action::EditBoard: on_command(cmd::EditBoard); break;
 	default: break;
 	}
@@ -179,8 +181,8 @@ void App::on_key(WPARAM vk)
 		return;  // digits come with WM_CHAR
 	}
 	if (editing_ && edit_key(vk)) return;
-	// the kept lines: Delete takes the chosen one away
-	if (vk == VK_DELETE && tab_ == Tab::Kept && !panel_hidden_) {
+	// the bookmarks: Delete takes the chosen one away (the mouse on their row)
+	if (vk == VK_DELETE && bookmarks_shown_ && !panel_hidden_ && inside(lay_.bookmarks, static_cast<float>(mouse_.x), static_cast<float>(mouse_.y))) {
 		on_command(cmd::KeptDelete);
 		return;
 	}
@@ -354,14 +356,16 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 				return;
 			}
 	}
-	if (tab_ == Tab::Kept && !editing_) {
+	if (bookmarks_shown_ && !editing_ && inside(lay_.bookmarks, fx, fy)) {
 		for (auto &[k, r] : kept_rects_)
 			if (inside(r, fx, fy)) {
 				kept_sel_ = k;
-				if (dbl) on_command(cmd::KeptShow);
+				if (right) bookmark_menu(x, y);
+				else on_command(cmd::KeptShow);
 				invalidate();
 				return;
 			}
+		return;
 	}
 	if (inside(lay_.graph, fx, fy) && graph_plot_.right > graph_plot_.left) {
 		// to the position nearest to the place clicked
@@ -432,6 +436,27 @@ void App::on_mouse_move(int x, int y)
 		if (!s.empty()) status_ = s;
 		else if (!log_.empty()) status_ = log_.back();
 	}
+	// a bookmark under the mouse: its frame, and its moves in the status line
+	int bm = -1;
+	if (bookmarks_shown_ && inside(lay_.bookmarks, fx, fy))
+		for (auto &[k, r] : kept_rects_)
+			if (inside(r, fx, fy) && k < static_cast<int>(kept_.size())) bm = k;
+	if (bm != kept_hover_) {
+		kept_hover_ = bm;
+		redraw = true;
+		if (bm >= 0) {
+			const Kept &e = kept_[static_cast<size_t>(bm)];
+			std::wstring mv;
+			int n = 0;
+			for (int i = 0; i < e.cursor && i < static_cast<int>(e.moves.size()); ++i) {
+				if (e.moves[i] == kPass) continue;
+				if (n < 24) mv += widen(square_name(e.moves[i]));
+				++n;
+			}
+			if (n > 24) mv += L"…";
+			status_ = lang::f("kept.hover", {std::to_wstring(bm + 1), std::to_wstring(n), mv});
+		}
+	}
 	if (redraw) invalidate();
 }
 
@@ -457,8 +482,8 @@ void App::on_wheel(int x, int y, int delta)
 		list_scroll_ = std::max(0, list_scroll_ - step * 3);
 		invalidate();
 	}
-	else if (inside(lay_.table, fx, fy) && tab_ == Tab::Kept) {
-		kept_scroll_ = std::max(0, kept_scroll_ - step * 3);
+	else if (bookmarks_shown_ && inside(lay_.bookmarks, fx, fy)) {
+		kept_scroll_ = std::max(0, kept_scroll_ - step);
 		invalidate();
 	}
 	else if (inside(lay_.table, fx, fy) && tab_ == Tab::Tree) {
@@ -538,6 +563,10 @@ void App::on_command(int id)
 		base_command(id);
 		return;
 	}
+	if (id == cmd::TaskCancel) {
+		stop_background();
+		return;
+	}
 	if (id >= cmd::ListOpen && id <= cmd::TaskCancel) {
 		list_command(id);
 		return;
@@ -602,13 +631,6 @@ void App::on_command(int id)
 	if (id >= cmd::RecentBook0 && id < cmd::RecentBook0 + 8) {
 		const std::string r = ini_.get("books", "recent" + std::to_string(id - cmd::RecentBook0 + 1));
 		if (!r.empty()) switch_book(widen(r));
-		return;
-	}
-	if (id >= cmd::Level0 && id < cmd::Level0 + static_cast<int>(std::size(kLevels))) {
-		level_ = kLevels[id - cmd::Level0];
-		update_menu();
-		request_analysis();
-		invalidate();
 		return;
 	}
 	switch (id) {
@@ -707,11 +729,33 @@ void App::on_command(int id)
 		position_changed();
 		break;
 	case cmd::Backward:
-		backward_ = !backward_;
+	case cmd::Forward:
+	case cmd::BackgroundOff:
+		backward_ = id == cmd::Backward;
+		forward_ = id == cmd::Forward;
 		update_menu();
 		request_analysis();
 		invalidate();
 		break;
+	case cmd::PrecisionOn:
+		precision_ = !precision_;
+		update_menu();
+		request_analysis();
+		invalidate();
+		break;
+	case cmd::LevelChoose: choose_level(); break;
+	case cmd::PvOnBoard:
+		pv_on_board_ = !pv_on_board_;
+		update_menu();
+		invalidate();
+		break;
+	case cmd::BookmarksShow:
+		bookmarks_shown_ = !bookmarks_shown_;
+		update_menu();
+		layout();
+		invalidate();
+		break;
+	case cmd::DesignToggle: on_command(design_ == Design::Paw ? cmd::DesignStandard : cmd::DesignPaw); break;
 	case cmd::Recompute:
 		// the analyses in progress stop first: the rest of their answers would come to the positions cleared
 		if (!learning_) send(0, stop_main_analyses());
@@ -837,7 +881,6 @@ void App::on_command(int id)
 	case cmd::TabBook:
 	case cmd::TabRecord:
 	case cmd::TabList:
-	case cmd::TabKept:
 	case cmd::TabTree:
 		tab_ = static_cast<Tab>(id - cmd::TabMoves);
 		update_menu();

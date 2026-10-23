@@ -15,7 +15,7 @@ board -X----O---XX-O-----XX-----OOOOO---OOOO-X----O-X-----OXX-----O-O- X
 estimate
 wait 20
 screenshot s7-02-newedax-20.png
-tab kept
+tab moves
 screenshot s7-03-kept.png
 savelog s7-log.txt
 quit

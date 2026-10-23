@@ -209,6 +209,9 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	case WM_SCRIPT:
 		pump_script();
 		return 0;
+	case WM_REDUCE:
+		reduce_counted();
+		return 0;
 	case WM_ACTIVATEAPP:
 		active_ = wp != 0;
 		update_animation_timer();
@@ -312,7 +315,7 @@ void App::load_config()
 	top_effect_ = te == "strong" ? TopEffect::Strong : te == "weak" ? TopEffect::Weak : TopEffect::Normal;
 	show_eval_ = ini_.get_bool("analysis", "show", true);
 	use_book_ = ini_.get_bool("analysis", "book", true);
-	level_ = ini_.get_int("analysis", "level", 21, 1, 60);
+	level_ = ini_.get_int("analysis", "level", 21, 0, 60);
 	threads_ = ini_.get_int("analysis", "threads", 0, 0, 1024);
 	const std::string u = lower(ini_.get("analysis", "umi", "best"));
 	umi_ = u == "loss" ? UmiMode::Loss : u == "off" ? UmiMode::Off : u == "range" ? UmiMode::Range : UmiMode::Best;
@@ -328,6 +331,11 @@ void App::load_config()
 		stages_ = "1/1,2/2,3/3,4/4,5/5";
 	count_ = ini_.get_bool("analysis", "count", true);
 	backward_ = ini_.get_bool("analysis", "backward", true);
+	forward_ = ini_.get_bool("analysis", "forward", false);
+	if (forward_) backward_ = false;
+	precision_ = ini_.get_bool("analysis", "precision", true);
+	pv_on_board_ = ini_.get_bool("view", "pv", false);
+	bookmarks_shown_ = ini_.get_bool("window", "bookmarks", true);
 	anim_fps_ = ini_.get_int("view", "fps", 20, 5, 60);
 	font_px_ = ini_.get_int("view", "font", 0, 0, 72);
 	kind_ = lower(ini_.get("engine", "kind", "nikque18")) == "newedax" ? EngineKind::Newedax : EngineKind::Nikque18;
@@ -337,7 +345,7 @@ void App::load_config()
 	log_open_ = ini_.get_bool("window", "log", false);
 	panel_hidden_ = ini_.get_bool("window", "panel_hidden", false);
 	const std::string t = lower(ini_.get("window", "tab", "moves"));
-	tab_ = t == "book" ? Tab::Book : t == "record" ? Tab::Record : t == "list" ? Tab::List : t == "kept" ? Tab::Kept : t == "tree" ? Tab::Tree : Tab::Moves;
+	tab_ = t == "book" ? Tab::Book : t == "record" ? Tab::Record : t == "list" ? Tab::List : t == "tree" ? Tab::Tree : Tab::Moves;
 	hash_bits_ = ini_.get_int("analysis", "hash", 0, 0, 30);
 	if (hash_bits_ > 0 && hash_bits_ < 10) hash_bits_ = 10;
 	move_numbers_ = ini_.get_bool("view", "numbers", false);
@@ -419,6 +427,10 @@ void App::save_config()
 	ini_.set("analysis", "stages", stages_);
 	ini_.set_int("analysis", "count", count_);
 	ini_.set_int("analysis", "backward", backward_);
+	ini_.set_int("analysis", "forward", forward_);
+	ini_.set_int("analysis", "precision", precision_);
+	ini_.set_int("view", "pv", pv_on_board_);
+	ini_.set_int("window", "bookmarks", bookmarks_shown_);
 	ini_.set("engine", "kind", kind_ == EngineKind::Newedax ? "newedax" : "nikque18");
 	ini_.set_int("engine", "search", search_engine_);
 	WINDOWPLACEMENT wp{sizeof wp};
@@ -435,7 +447,7 @@ void App::save_config()
 	ini_.set_int("window", "log", log_open_);
 	ini_.set_int("window", "panel_hidden", panel_hidden_);
 	{
-		const char *names[] = {"moves", "book", "record", "list", "kept", "tree"};
+		const char *names[] = {"moves", "book", "record", "list", "tree"};
 		ini_.set("window", "tab", names[static_cast<int>(tab_)]);
 	}
 	if (ini_.dirty()) ini_.save(ini_path_);
@@ -492,11 +504,13 @@ void App::build_menu()
 	HMENU an = CreatePopupMenu();
 	item(an, cmd::ShowEval, t("menu.analysis.show"), keys_.describe(Action::HideEval));
 	item(an, cmd::Recompute, t("menu.analysis.recompute"));
+	item(an, cmd::LevelChoose, lang::f("menu.analysis.level", {std::to_wstring(level_)}));
+	sep(an);
 	item(an, cmd::Backward, t("menu.analysis.backward"));
-	HMENU lv = CreatePopupMenu();
-	for (size_t i = 0; i < std::size(kLevels); ++i)
-		item(lv, cmd::Level0 + static_cast<int>(i), L"Lv " + std::to_wstring(kLevels[i]));
-	sub(an, lv, t("menu.analysis.level"));
+	item(an, cmd::Forward, t("menu.analysis.forward"));
+	item(an, cmd::BackgroundOff, t("menu.analysis.background_off"));
+	sep(an);
+	item(an, cmd::PrecisionOn, t("menu.analysis.precision"));
 	HMENU umi = CreatePopupMenu();
 	item(umi, cmd::UmiBest, t("menu.analysis.umi.best"));
 	item(umi, cmd::UmiLoss, t("menu.analysis.umi.loss"));
@@ -549,6 +563,7 @@ void App::build_menu()
 	item(keep, cmd::LearnMerge, t("menu.learn.merge"));
 	item(keep, cmd::LearnSubtree, t("menu.learn.subtree"));
 	item(keep, cmd::LearnPrune, t("menu.learn.prune"));
+	item(keep, cmd::LearnReduce, t("menu.learn.reduce"));
 	sep(keep);
 	item(keep, cmd::LearnExport, t("menu.learn.export"));
 	item(keep, cmd::LearnImport, t("menu.learn.import"));
@@ -680,6 +695,7 @@ void App::build_menu()
 	sub(bar, io, t("menu.io"));
 
 	HMENU view = CreatePopupMenu();
+	item(view, cmd::DesignToggle, t("menu.view.design.toggle"), keys_.describe(Action::ToggleDesign));
 	HMENU des = CreatePopupMenu();
 	item(des, cmd::DesignStandard, t("menu.view.design.standard"));
 	item(des, cmd::DesignPaw, t("menu.view.design.paw"));
@@ -688,12 +704,12 @@ void App::build_menu()
 	item(eff, cmd::EffectsOn, t("menu.view.effects.on"));
 	item(eff, cmd::EffectsSubdued, t("menu.view.effects.subdued"));
 	item(eff, cmd::EffectsOff, t("menu.view.effects.off"));
+	sep(eff);
+	AppendMenuW(eff, MF_STRING | MF_GRAYED, 0, t("menu.view.top").c_str());  // (a heading)
+	item(eff, cmd::TopStrong, t("menu.view.top.strong"));
+	item(eff, cmd::TopNormal, t("menu.view.top.normal"));
+	item(eff, cmd::TopWeak, t("menu.view.top.weak"));
 	sub(view, eff, t("menu.view.effects"));
-	HMENU top = CreatePopupMenu();
-	item(top, cmd::TopStrong, t("menu.view.top.strong"));
-	item(top, cmd::TopNormal, t("menu.view.top.normal"));
-	item(top, cmd::TopWeak, t("menu.view.top.weak"));
-	sub(view, top, t("menu.view.top"));
 	sep(view);
 	HMENU ori = CreatePopupMenu();
 	for (int s = 0; s < 8; ++s) item(ori, cmd::Rotate0 + s, t("orient." + std::to_string(s)));
@@ -701,6 +717,7 @@ void App::build_menu()
 	item(ori, cmd::RotateNext, t("menu.view.orient.next"), keys_.describe(Action::Rotate));
 	sub(view, ori, t("menu.view.orient"));
 	item(view, cmd::MoveNumbers, t("menu.view.numbers"));
+	item(view, cmd::PvOnBoard, t("menu.view.pv"));
 	HMENU ci = CreatePopupMenu();
 	item(ci, cmd::CellInfoNone, t("menu.view.cell.none"));
 	item(ci, cmd::CellInfoPositions, t("menu.view.cell.positions"));
@@ -713,10 +730,11 @@ void App::build_menu()
 	item(view, cmd::TabBook, t("menu.view.tab.book"));
 	item(view, cmd::TabRecord, t("menu.view.tab.record"));
 	item(view, cmd::TabList, t("menu.view.tab.list"));
-	item(view, cmd::TabKept, t("menu.view.tab.kept"));
 	item(view, cmd::TabTree, t("menu.view.tab.tree"));
 	HMENU kp = CreatePopupMenu();
 	item(kp, cmd::KeepNow, t("menu.kept.keep"), keys_.describe(Action::Keep));
+	item(kp, cmd::BookmarksShow, t("menu.kept.strip"));
+	sep(kp);
 	item(kp, cmd::KeptShow, t("menu.kept.show"));
 	item(kp, cmd::KeptCompare, t("menu.kept.compare"));
 	item(kp, cmd::KeptDelete, t("menu.kept.delete"), L"Delete");
@@ -767,10 +785,14 @@ void App::update_menu()
 	enable_popup(book_menu_, keep_menu_, !learning_);
 	enable_popup(learn_menu_, leaf_menu_, !learning_);
 	check(cmd::ShowEval, show_eval_);
-	check(cmd::Backward, backward_);
+	radio(cmd::Backward, cmd::BackgroundOff, backward_ ? cmd::Backward : forward_ ? cmd::Forward : cmd::BackgroundOff);
+	check(cmd::PrecisionOn, precision_);
+	check(cmd::PvOnBoard, pv_on_board_);
+	check(cmd::BookmarksShow, bookmarks_shown_);
 	check(cmd::FixRecord, fixed_on_);
 	enable(cmd::LearnStop, learning_);
 	for (int id = cmd::LearnDeviate; id <= cmd::LearnJobLast; ++id) enable(id, !learning_);
+	enable(cmd::LearnReduce, !learning_ && reduce_.state == ReduceJob::None);
 	// these close the main engine (a learning command takes no input to stop)
 	for (int id : {cmd::ReloadBook, cmd::OpenBook, cmd::EngineNikque, cmd::EngineNewedax, cmd::RestartEngines}) enable(id, !learning_);
 	enable(cmd::LearnContinue, !learning_);
@@ -790,7 +812,7 @@ void App::update_menu()
 	enable(cmd::ListDelete, have_list && list_index_ >= 0);
 	enable(cmd::ListReload, have_list && list_index_ >= 0);
 	enable(cmd::ListSearchClear, hits_shown_);
-	enable(cmd::TaskCancel, task_busy_);
+	enable(cmd::TaskCancel, true);  // (also the book analyses and the searches of the game)
 	enable(cmd::StopScript, !script_.empty() || script_wait_ != ScriptWait::None);
 	for (int id : {cmd::KeptShow, cmd::KeptCompare, cmd::KeptDelete}) enable(id, kept_sel_ >= 0 && kept_sel_ < static_cast<int>(kept_.size()));
 	enable(cmd::KeptClear, !kept_.empty());
@@ -808,10 +830,10 @@ void App::update_menu()
 	check(cmd::CompareOn, compare_);
 	enable(cmd::PlayTakeBack, play_mode_ == PlayMode::HumanBlack || play_mode_ == PlayMode::HumanWhite);
 	enable(cmd::PlayStop, play_mode_ != PlayMode::Free);
-	int lv = -1;
-	for (size_t i = 0; i < std::size(kLevels); ++i)
-		if (kLevels[i] == level_) lv = static_cast<int>(i);
-	for (size_t i = 0; i < std::size(kLevels); ++i) check(cmd::Level0 + static_cast<int>(i), static_cast<int>(i) == lv);
+	{
+		const std::wstring lv = lang::f("menu.analysis.level", {std::to_wstring(level_)});
+		ModifyMenuW(m, cmd::LevelChoose, MF_BYCOMMAND | MF_STRING, cmd::LevelChoose, lv.c_str());
+	}
 	radio(cmd::UmiBest, cmd::UmiOff, umi_ == UmiMode::Best ? cmd::UmiBest : umi_ == UmiMode::Loss ? cmd::UmiLoss : cmd::UmiOff);
 	radio(cmd::BaseDeviate, cmd::BaseDeviate3,
 	      base_ == "deviate2" ? cmd::BaseDeviate2 : base_ == "deviate3" ? cmd::BaseDeviate3 : cmd::BaseDeviate);
@@ -859,6 +881,7 @@ void App::set_window_icon()
 
 void App::layout()
 {
+	if (!gfx_.factory()) return;  // (no window drawn yet)
 	Layout &L = lay_;
 	const float W = static_cast<float>(gfx_.width()), H = static_cast<float>(gfx_.height());
 	const Theme &th = theme(design_);
@@ -919,10 +942,14 @@ void App::layout()
 	const float rest_top = L.range.bottom + 4 * L.scale;
 	const float rest_h = std::max(0.0f, P.bottom - rest_top);
 	const float split_h = std::round(7 * L.scale);
-	float gh = std::round(rest_h * graph_ratio_);
-	gh = std::clamp(gh, std::min(L.row * 3, rest_h * 0.5f), std::max(L.row * 3, rest_h - L.row * 4));
-	L.table = {P.left, rest_top, P.right, P.bottom - gh - split_h};
-	L.splitter = {P.left, L.table.bottom, P.right, L.table.bottom + split_h};
+	// the row of the bookmarks, right above the graph
+	const float bm_h = bookmarks_shown_ ? std::round(L.row * 2.7f) : 0;
+	const float avail_h = std::max(0.0f, rest_h - bm_h);
+	float gh = std::round(avail_h * graph_ratio_);
+	gh = std::clamp(gh, std::min(L.row * 3, avail_h * 0.5f), std::max(L.row * 3, avail_h - L.row * 4));
+	L.table = {P.left, rest_top, P.right, std::max(rest_top, P.bottom - gh - split_h - bm_h)};
+	L.bookmarks = {P.left, L.table.bottom, P.right, L.table.bottom + bm_h};
+	L.splitter = {P.left, L.bookmarks.bottom, P.right, L.bookmarks.bottom + split_h};
 	L.graph = {P.left, L.splitter.bottom, P.right, P.bottom};
 
 	// the range row: "label  X [ 2 ] ---o---  Y [ 4 ] ---o---"
@@ -1032,8 +1059,8 @@ CellView App::cell_view(int sq) const
 	if (!show_eval_ || v.stone) return v;
 	const PosInfo *info = cache_.peek(p);
 
-	// the expected line of the move under the mouse, from the reply on: numbers on the squares
-	if (info && hover_sq_ != kNoMove && hover_sq_ != sq) {
+	// the expected line of the move under the mouse, from the reply on: numbers on the squares (when it is set so)
+	if (pv_on_board_ && info && hover_sq_ != kNoMove && hover_sq_ != sq) {
 		if (const MoveEval *h = info->find(hover_sq_); h && h->pv.size() > 1) {
 			int side = p.side ^ 1, num = 0;
 			for (size_t k = 1; k < h->pv.size() && num < 12; ++k) {
@@ -1071,7 +1098,8 @@ CellView App::cell_view(int sq) const
 	};
 	v.has_value = value_of(*m, &v.value);
 	v.stage = (use_book_ && m->book_row && m->stage > 0) ? m->stage : 0;
-	if (v.has_value && v.stage == 0) {
+	// a value of the book whose stage is not known (the precision stages not asked, or not come yet): no level of the search
+	if (v.has_value && v.stage == 0 && !(use_book_ && m->in_book && !(le && sq == played_sq && le->played_improved))) {
 		v.level = shown_level(*m, use_book_);
 		v.exact = move_exact(*m, p);
 		if (le && sq == played_sq && le->played_improved) {

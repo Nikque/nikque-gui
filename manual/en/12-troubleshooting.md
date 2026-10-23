@@ -6,6 +6,9 @@
 |---|---|
 | "No engine" in the top bar | the engine executable or `eval.dat` is not found; the log shows where it was looked for. Check `dir=` and `exe=` of `[nikque18]` and `[newedax]` in `config.ini` |
 | "No book analyses (old engine)" | the engine is older than v4.5.5-nikque.19 or newedax.4. Use the included engines or later versions |
+| "This engine has no book reduce" | making the book lighter needs v4.5.5-nikque.20 or newedax.5. Use the included engines |
+| The book accuracy is heavy or slow | turn off Analysis → Compute the book accuracy: only the book values are shown. Moving the position stops the work on the position before and starts the new one; Input/Output → Stop the background work stops the work now |
+| Discs and numbers appear on other squares when the mouse is over a move | that is the expected line; View → Show on the board the expected line of the move under the mouse turns it off (off at first) |
 | "Book path not usable" | the book name is too long or has letters not in the code page of the system, and no short form can be given. Copy the book to a place with a short name, or rename it |
 | "Reading the book" for long | a large book takes time to read (the engine reads it) |
 | "Counting…" stays in the Book tab | near the start of a large book, counting the positions takes time. Turning off Analysis → Also count the book positions makes it faster |

@@ -17,5 +17,7 @@ const std::string &code();
 const std::wstring &t(std::string_view key);
 // replaces {0}, {1}, ... in the words for a key
 std::wstring f(std::string_view key, std::initializer_list<std::wstring_view> args);
+// a number with a comma every three digits ("25,184")
+std::wstring number(long long n);
 
 }  // namespace ng::lang

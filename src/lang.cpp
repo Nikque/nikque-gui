@@ -110,6 +110,17 @@ const std::string &code()
 	return loaded;
 }
 
+std::wstring number(long long n)
+{
+	const std::wstring digits = std::to_wstring(n < 0 ? -n : n);
+	std::wstring out = n < 0 ? L"-" : L"";
+	for (size_t i = 0; i < digits.size(); ++i) {
+		if (i > 0 && (digits.size() - i) % 3 == 0) out += L',';
+		out += digits[i];
+	}
+	return out;
+}
+
 const wchar_t *ui_font()
 {
 	if (loaded == "en") return L"Segoe UI";

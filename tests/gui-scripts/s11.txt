@@ -1,4 +1,4 @@
-# C: three games of the computer against itself with the book moves spread, each game into the list and the kept games
+# C: three games of the computer against itself with the book moves spread, each game into the list and the bookmarks (end_keep)
 log s11 start
 engine newedax
 wait 40
@@ -9,7 +9,7 @@ game engines 3
 waitgame 600
 tab list
 screenshot s11-01-list.png
-tab kept
+tab moves
 screenshot s11-02-kept.png
 savelog s11-log.txt
 quit

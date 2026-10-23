@@ -1,4 +1,4 @@
-# the display of B: move numbers, square numbers, orientation, the book tab, kept lines, a position from text,
+# the display of B: move numbers, square numbers, orientation, the book tab, the bookmarks, a position from text,
 # the paw design, the four languages
 log s1 start
 wait 40
@@ -18,7 +18,7 @@ tab book
 wait 40
 screenshot s1-04-umi-book.png
 keep
-tab kept
+tab moves
 screenshot s1-05-kept.png
 board ---------------------------OX------XO--------------------------- O
 wait 40

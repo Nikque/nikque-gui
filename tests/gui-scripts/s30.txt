@@ -1,0 +1,40 @@
+# feature1: the precision stages off and on again, every level, the forward analysis, the bookmarks and their row,
+# the design switched in one step, stopping the background work, then book reduce (counted first, then done from the
+# initial position on the copy of the book) and from a position no longer in the book
+log s30 start
+engine nikque18
+wait 60
+moves d3e3f5e6f7c2f2c5d2c4b1g1f4g6h5g8e7g4g7e8d6e2b5h7b3d7g2a5d8c6f6g3h6g5a6a7h4h3
+wait 40
+precision off
+wait 40
+screenshot s30-01-precision-off.png
+precision on
+wait 40
+screenshot s30-02-precision-on.png
+level 0
+wait 20
+level 60
+level 10
+analysis forward
+wait 20
+analysis backward
+keep
+back 3
+keep
+bookmark 1
+screenshot s30-03a-bookmark1.png
+bookmark 2
+wait 20
+screenshot s30-03-bookmarks.png
+design toggle
+screenshot s30-04-paw.png
+design toggle
+stop
+screenshot s30-05-stopped.png
+book reduce 2 4
+wait 40
+screenshot s30-06-reduced.png
+book reduce 2 4 here
+savelog s30-log.txt
+quit
