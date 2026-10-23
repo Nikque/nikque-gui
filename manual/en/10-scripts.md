@@ -26,7 +26,7 @@ A UTF-8 text file with one command a line, run with Input/Output → Run a comma
 | `pv on\|off` | the expected line of the move under the mouse on the board, or not |
 | `book reload` | reads the book again (restarts the main engine) |
 | `book reduce <X> <Y> [here]` | makes the book lighter (from the initial position; `here`: from the position shown); counted, then done without asking |
-| `engine nikque18\|newedax` | kind of engine |
+| `engine nikque\|newedax` | kind of engine |
 | `design standard\|paw\|toggle` / `effects on\|subdued\|off` | design (`toggle` switches it), effects |
 | `tab moves\|book\|record\|list\|tree` | tab |
 | `rotate <0-7>` / `cellinfo none\|positions\|level\|stage\|umi` | board orientation, number on the squares |
@@ -65,7 +65,7 @@ A UTF-8 text file with one command a line, run with Input/Output → Run a comma
 
 ```text
 # learn the missing lines after f5d6 with the book shown
-engine nikque18
+engine nikque
 moves f5d6
 wait 60
 learn book store

@@ -68,7 +68,7 @@ std::wstring pick_file(HWND owner)
 
 std::wstring App::book_file() const
 {
-	const char *sec = kind_ == EngineKind::Newedax ? "newedax" : "nikque18";
+	const char *sec = engine_section(kind_);
 	const std::string bk = ini_.get(sec, "book");
 	const std::wstring dir = engine_dir();
 	if (bk.empty()) return dir + L"\\data\\book.dat";

@@ -30,7 +30,7 @@ So the values keep coming while the book is learning, and the analysis of the bo
 ## License
 
 - nikque GUI: MIT License (`LICENSE.txt`).
-- The included engines (Edax nikque, newedax): GNU GPL v3, separate programs. The GPL text and the place of the source are in `LICENSE.txt` and `SOURCE.txt` of `engines\nikque18` and `engines\newedax`.
+- The included engines (Edax nikque, newedax): GNU GPL v3, separate programs. The GPL text and the place of the source are in `LICENSE.txt` and `SOURCE.txt` of `engines\nikque` and `engines\newedax`.
 
 ## System
 

@@ -338,7 +338,8 @@ void App::load_config()
 	bookmarks_shown_ = ini_.get_bool("window", "bookmarks", true);
 	anim_fps_ = ini_.get_int("view", "fps", 20, 5, 60);
 	font_px_ = ini_.get_int("view", "font", 0, 0, 72);
-	kind_ = lower(ini_.get("engine", "kind", "nikque18")) == "newedax" ? EngineKind::Newedax : EngineKind::Nikque18;
+	ini_.rename_section("nikque18", "nikque");  // (a config.ini of 0.2.0 or before)
+	kind_ = lower(ini_.get("engine", "kind", "nikque")) == "newedax" ? EngineKind::Newedax : EngineKind::Nikque18;
 	search_engine_ = ini_.get_bool("engine", "search", true);
 	panel_w_ = static_cast<float>(ini_.get_int("window", "panel_w", 420, 200, 4000));
 	graph_ratio_ = ini_.get_int("window", "graph", 34, 10, 90) / 100.0f;
@@ -370,8 +371,8 @@ void App::load_config()
 	// listed even when empty, so that config.ini shows them
 	if (ini_.section("script").empty()) ini_.set("script", "startup", "");
 	keys_.load(ini_);
-	// the engine folders are listed even when empty (empty: next to the exe, engines\nikque18 and engines\newedax)
-	for (const char *sec : {"nikque18", "newedax"}) {
+	// the engine folders are listed even when empty (empty: next to the exe, engines\nikque and engines\newedax)
+	for (const char *sec : {"nikque", "newedax"}) {
 		const auto have = ini_.section(sec);
 		for (const char *k : {"dir", "exe", "eval", "book"}) {
 			const bool listed = std::any_of(have.begin(), have.end(), [&](const auto &kv) { return iequals(kv.first, k); });
@@ -431,7 +432,7 @@ void App::save_config()
 	ini_.set_int("analysis", "precision", precision_);
 	ini_.set_int("view", "pv", pv_on_board_);
 	ini_.set_int("window", "bookmarks", bookmarks_shown_);
-	ini_.set("engine", "kind", kind_ == EngineKind::Newedax ? "newedax" : "nikque18");
+	ini_.set("engine", "kind", engine_section(kind_));
 	ini_.set_int("engine", "search", search_engine_);
 	WINDOWPLACEMENT wp{sizeof wp};
 	if (GetWindowPlacement(hwnd_, &wp)) {

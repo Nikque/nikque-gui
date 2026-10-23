@@ -24,10 +24,10 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・newedax）は G
 ---------
 - 配布の ZIP を好きな場所に展開し、nikque-gui.exe を起動します（インストールは要りません）。
   nikque-gui.exe と同じフォルダに config.ini・lang フォルダ・readme.txt があります。
-- エンジンが付いています：engines\nikque18 に C 版の Edax v4.5.5-nikque.20、engines\newedax に
-  newedax.5（どちらも wEdax-x86-64-v4.exe・-v3.exe・wEdax-x86-64.exe と data\eval.dat）。
-  フォルダの名前 nikque18 は config.ini の系の名前 [nikque18] に合わせたもので、中身は nikque.20 です。
-- すでにあるエンジンのフォルダを使うときは、config.ini の [nikque18]・[newedax] の dir= で指します。
+- エンジンが付いています：engines\nikque に C 版の Edax v4.5.5-nikque.21、engines\newedax に
+  newedax.6（どちらも wEdax-x86-64-v4.exe・-v3.exe・wEdax-x86-64.exe と data\eval.dat）。
+  0.2.0 までの config.ini（系の名前 [nikque18]）も、そのまま読めます。
+- すでにあるエンジンのフォルダを使うときは、config.ini の [nikque]・[newedax] の dir= で指します。
   GUI には book の解析のコマンド（book moveinfo など）が要るので、v4.5.5-nikque.19・newedax.4 以降を
   使います。古いバージョンでは上の帯に「book の解析なし（古いエンジン）」と出て、book の値・木・book タブは
   出ません。book を軽くする機能（book reduce）は v4.5.5-nikque.20・newedax.5 からです。
@@ -140,7 +140,7 @@ Ntest の形式は「空き 手番の側の石 手番」。
   pv on|off                マウスを乗せた手の読み筋を盤に表示する・しない
   book reload              book を読み込み直す（メインエンジンを再起動）
   book reduce <X> <Y> [here]  book を軽くする（初期局面から。here は今の局面から）。数えてから、確かめずに行う
-  engine nikque18|newedax / design standard|paw|toggle / effects on|subdued|off
+  engine nikque|newedax / design standard|paw|toggle / effects on|subdued|off
   tab moves|book|record|list|tree / rotate <0-7> / cellinfo none|positions|level|stage|umi
   lang ja|en|zh-Hans|zh-Hant
   wait [秒]                今の局面の解析が終わるまで待つ（既定 30 秒まで。時間で終わったときはログに出る）
@@ -169,8 +169,8 @@ Ntest の形式は「空き 手番の側の石 手番」。
 
 8. config.ini の主な項目
 ------------------------
-[engine] kind=nikque18|newedax、search=1（探索用エンジンを使う）
-[nikque18]・[newedax] dir・exe・eval・book
+[engine] kind=nikque|newedax、search=1（探索用エンジンを使う）
+[nikque]・[newedax] dir・exe・eval・book
 [analysis] level（0〜60）・threads（0 は全部）・hash（ハッシュ表のビット数、0 はエンジンのまま）・umi・x・y・base・stages・
            precision（1 で精度を計算する）・backward・forward（棋譜の局面を裏で読む順）・compare
 [play] level・opening（search|best|wide）・width・until・clock・ponder・end_keep・end_list
@@ -184,12 +184,13 @@ Ntest の形式は「空き 手番の側の石 手番」。
 9. ファイル
 -----------
 kept.txt（しおり）、screenshots\（スクリーンショット）は exe の隣に作ります。
-定石名は exe の隣の opening.ini（名前=手順）を読みます（ファイルは付いていません）。
+定石名は exe の隣の opening.ini を読みます（付いています）。テキストファイルで、1 行に「名前=手順」
+（手順は初手を f5 として書く。行の頭の空白は段を見せるだけ、// で始まる行は注釈）。メモ帳などで直せます。
 
 10. ライセンス
 --------------
 nikque GUI：MIT License（LICENSE.txt）。エンジン（Edax nikque・newedax）：GNU GPL v3（別のプログラム）。
-付いているエンジンの GPL の文とソースの場所は、engines\nikque18・engines\newedax の LICENSE.txt と
+付いているエンジンの GPL の文とソースの場所は、engines\nikque・engines\newedax の LICENSE.txt と
 SOURCE.txt にあります。
 
 
@@ -209,10 +210,10 @@ The GUI is under the MIT License. The engines (Edax nikque, newedax) are GPL and
 -------------
 - Unpack the ZIP anywhere and start nikque-gui.exe (no installation). config.ini, the lang folder and
   readme.txt are next to nikque-gui.exe.
-- The engines are included: engines\nikque18 holds Edax v4.5.5-nikque.20 (C version), engines\newedax holds
-  newedax.5 (each with wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe and data\eval.dat). The folder name
-  nikque18 follows the section name [nikque18] of config.ini; it holds nikque.20.
-- To use engine folders you already have, point to them with dir= in [nikque18] and [newedax] of config.ini.
+- The engines are included: engines\nikque holds Edax v4.5.5-nikque.21 (C version), engines\newedax holds
+  newedax.6 (each with wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe and data\eval.dat). A config.ini of 0.2.0 or
+  before (section [nikque18]) is read as it is.
+- To use engine folders you already have, point to them with dir= in [nikque] and [newedax] of config.ini.
   The GUI needs the book analyses (book moveinfo and the others) of v4.5.5-nikque.19 or newedax.4 or later:
   with an older engine the top bar says "No book analyses (old engine)" and the book values, the tree and
   the Book tab stay empty. Making the book lighter (book reduce) needs v4.5.5-nikque.20 or newedax.5.
@@ -325,13 +326,14 @@ See the Japanese part (section 8) for the keys; their names are the same.
 9. Files
 --------
 kept.txt (bookmarks) and screenshots\ are made next to the exe. Opening names are read from opening.ini
-next to the exe (name=moves; not included).
+next to the exe (included): a text file of lines name=moves (moves from the start, f5 first;
+leading spaces only show the levels, lines starting with // are notes). It can be edited with Notepad.
 
 10. License
 -----------
 nikque GUI: MIT License (LICENSE.txt). Engines (Edax nikque, newedax): GNU GPL v3 (separate programs).
 The GPL text and the place of the source of the included engines are in LICENSE.txt and SOURCE.txt of
-engines\nikque18 and engines\newedax.
+engines\nikque and engines\newedax.
 
 
 ========================================================================
@@ -347,9 +349,9 @@ GUI 为 MIT 许可。引擎（Edax nikque、newedax）为 GPL，作为独立程�
 2. 放置
 -------
 - 将 ZIP 解压到任意位置，启动 nikque-gui.exe（无需安装）。config.ini、lang 文件夹、readme.txt 在 nikque-gui.exe 旁。
-- 附带引擎：engines\nikque18 为 C 版 Edax v4.5.5-nikque.20，engines\newedax 为 newedax.5
-  （各含 wEdax-x86-64-v4.exe、-v3.exe、wEdax-x86-64.exe 与 data\eval.dat）。文件夹名 nikque18 与 config.ini 的 [nikque18] 一致，内容为 nikque.20。
-- 使用已有的引擎文件夹时，在 config.ini 的 [nikque18]、[newedax] 的 dir= 指定。GUI 需要 v4.5.5-nikque.19、newedax.4 以后的
+- 附带引擎：engines\nikque 为 C 版 Edax v4.5.5-nikque.21，engines\newedax 为 newedax.6
+  （各含 wEdax-x86-64-v4.exe、-v3.exe、wEdax-x86-64.exe 与 data\eval.dat）。0.2.0 以前的 config.ini（[nikque18]）也可直接读取。
+- 使用已有的引擎文件夹时，在 config.ini 的 [nikque]、[newedax] 的 dir= 指定。GUI 需要 v4.5.5-nikque.19、newedax.4 以后的
   book 分析命令（book moveinfo 等）；旧版本时上方栏显示「无 book 分析（旧引擎）」，不显示 book 值、树与 book 标签页。
   减小 book 的功能（book reduce）需要 v4.5.5-nikque.20、newedax.5 以后。
 - 不附带 book。请把您的 book.dat 放在引擎的 data\book.dat，或用 book= 指定。book 由引擎读取（GUI 不读取 book 文件）。
@@ -377,7 +379,7 @@ book 的整理与导出（包括 book reduce：删除从指定局面按 book dev
 5. 许可
 -------
 nikque GUI：MIT License（LICENSE.txt）。引擎（Edax nikque、newedax）：GNU GPL v3（独立程序）。
-附带引擎的 GPL 文本与源代码位置见 engines\nikque18、engines\newedax 的 LICENSE.txt 与 SOURCE.txt。
+附带引擎的 GPL 文本与源代码位置见 engines\nikque、engines\newedax 的 LICENSE.txt 与 SOURCE.txt。
 
 
 ========================================================================
@@ -393,9 +395,9 @@ GUI 為 MIT 授權。引擎（Edax nikque、newedax）為 GPL，作為獨立程�
 2. 放置
 -------
 - 將 ZIP 解壓到任意位置，啟動 nikque-gui.exe（無需安裝）。config.ini、lang 資料夾、readme.txt 在 nikque-gui.exe 旁。
-- 附帶引擎：engines\nikque18 為 C 版 Edax v4.5.5-nikque.20，engines\newedax 為 newedax.5
-  （各含 wEdax-x86-64-v4.exe、-v3.exe、wEdax-x86-64.exe 與 data\eval.dat）。資料夾名 nikque18 與 config.ini 的 [nikque18] 一致，內容為 nikque.20。
-- 使用已有的引擎資料夾時，在 config.ini 的 [nikque18]、[newedax] 的 dir= 指定。GUI 需要 v4.5.5-nikque.19、newedax.4 以後的
+- 附帶引擎：engines\nikque 為 C 版 Edax v4.5.5-nikque.21，engines\newedax 為 newedax.6
+  （各含 wEdax-x86-64-v4.exe、-v3.exe、wEdax-x86-64.exe 與 data\eval.dat）。0.2.0 以前的 config.ini（[nikque18]）也可直接讀取。
+- 使用已有的引擎資料夾時，在 config.ini 的 [nikque]、[newedax] 的 dir= 指定。GUI 需要 v4.5.5-nikque.19、newedax.4 以後的
   book 分析命令（book moveinfo 等）；舊版本時上方列顯示「無 book 分析（舊引擎）」，不顯示 book 值、樹與 book 分頁。
   減小 book 的功能（book reduce）需要 v4.5.5-nikque.20、newedax.5 以後。
 - 不附帶 book。請把您的 book.dat 放在引擎的 data\book.dat，或用 book= 指定。book 由引擎讀取（GUI 不讀取 book 檔案）。
@@ -423,4 +425,4 @@ book 的整理與匯出（包括 book reduce：刪除從指定局面按 book dev
 5. 授權
 -------
 nikque GUI：MIT License（LICENSE.txt）。引擎（Edax nikque、newedax）：GNU GPL v3（獨立程式）。
-附帶引擎的 GPL 文字與原始碼位置見 engines\nikque18、engines\newedax 的 LICENSE.txt 與 SOURCE.txt。
+附帶引擎的 GPL 文字與原始碼位置見 engines\nikque、engines\newedax 的 LICENSE.txt 與 SOURCE.txt。

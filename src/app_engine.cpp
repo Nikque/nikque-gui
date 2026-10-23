@@ -22,6 +22,12 @@ bool file_exists(const std::wstring &p)
 	return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
 }
 
+bool dir_exists(const std::wstring &p)
+{
+	const DWORD a = GetFileAttributesW(p.c_str());
+	return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
+}
+
 std::wstring absolute(const std::wstring &base, const std::string &p)
 {
 	const std::wstring w = widen(p);
@@ -57,10 +63,13 @@ int cpu_level()
 
 std::wstring App::engine_dir(EngineKind k) const
 {
-	const char *sec = k == EngineKind::Newedax ? "newedax" : "nikque18";
+	const char *sec = engine_section(k);
 	const std::string d = ini_.get(sec, "dir");
-	if (d.empty()) return exe_dir_ + L"\\engines\\" + widen(sec);
-	return absolute(exe_dir_, d);
+	if (!d.empty()) return absolute(exe_dir_, d);
+	const std::wstring dir = exe_dir_ + L"\\engines\\" + widen(sec);
+	// (the folder of the C version in a distribution of 0.2.0 or before)
+	if (k == EngineKind::Nikque18 && !dir_exists(dir) && dir_exists(exe_dir_ + L"\\engines\\nikque18")) return exe_dir_ + L"\\engines\\nikque18";
+	return dir;
 }
 
 std::wstring App::engine_name() const
@@ -94,7 +103,7 @@ void App::send(int role, const std::string &text)
 
 std::wstring App::engine_exe(EngineKind k) const
 {
-	const char *sec = k == EngineKind::Newedax ? "newedax" : "nikque18";
+	const char *sec = engine_section(k);
 	const std::wstring dir = engine_dir(k);
 	const std::string e = ini_.get(sec, "exe", "auto");
 	if (!e.empty() && !iequals(e, "auto")) return absolute(dir, e);
@@ -110,7 +119,7 @@ std::wstring App::engine_exe(EngineKind k) const
 
 std::wstring App::engine_eval(EngineKind k) const
 {
-	const char *sec = k == EngineKind::Newedax ? "newedax" : "nikque18";
+	const char *sec = engine_section(k);
 	const std::string ev = ini_.get(sec, "eval");
 	return ev.empty() ? engine_dir(k) + L"\\data\\eval.dat" : absolute(engine_dir(k), ev);
 }
@@ -808,7 +817,7 @@ void App::switch_book(const std::wstring &path)
 	if (refuse_while_learning()) return;
 	if (message(lang::f("ask.open_book", {path}), MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
 		return;
-	const char *sec = kind_ == EngineKind::Newedax ? "newedax" : "nikque18";
+	const char *sec = engine_section(kind_);
 	const std::string p = narrow(path);
 	ini_.set(sec, "book", p);
 	// the recent books, newest first, up to 8

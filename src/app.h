@@ -233,6 +233,8 @@ enum class Tab : int { Moves = 0, Book = 1, Record = 2, List = 3, Tree = 4, Coun
 // the small number at the lower left of a move's square
 enum class CellInfo : int { None = 0, Positions, Level, Stage, Umi };
 enum class EngineKind : int { Nikque18 = 0, Newedax = 1 };
+// the section of config.ini and the folder of an engine (up to 0.2.0 the C version was "nikque18")
+inline const char *engine_section(EngineKind k) { return k == EngineKind::Newedax ? "newedax" : "nikque"; }
 enum class UmiMode : int { Best = 0, Loss = 1, Off = 2, Range = 3 };
 enum class Column : int { Move, Value, Stage, Missing, Positions, Level, Umi, Compare, Count };
 // who plays in a game: people only (free), a person and the computer, the computer on both sides

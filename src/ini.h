@@ -22,6 +22,8 @@ public:
 	void set_int(std::string_view section, std::string_view key, int value);
 	// all "key=value" of a section, in file order
 	std::vector<std::pair<std::string, std::string>> section(std::string_view section) const;
+	// gives a section a new name, unless a section of that name is there already; returns true if renamed
+	bool rename_section(std::string_view from, std::string_view to);
 
 private:
 	// line index of the key in the section, or -1; `end` gets the line after the section's last entry

@@ -18,8 +18,8 @@ Settings → Open config.ini opens it in Notepad. The GUI also writes it when it
 
 | Section | Main keys |
 |---|---|
-| `[engine]` | `kind=nikque18\|newedax`, `search=1` (use the search engine) |
-| `[nikque18]`, `[newedax]` | `dir` (engine folder), `exe` (`auto` or the file name), `eval`, `book` |
+| `[engine]` | `kind=nikque\|newedax`, `search=1` (use the search engine) |
+| `[nikque]`, `[newedax]` | `dir` (engine folder), `exe` (`auto` or the file name), `eval`, `book` |
 | `[analysis]` | `level`, `threads` (0: all), `hash` (bits of the hash table; 0: the engine's), `umi`, `x`, `y`, `base`, `stages`, `precision` (1: compute the book accuracy), `backward`, `forward` (the order of the search of the game), `compare` |
 | `[play]` | `level`, `opening` (`search\|best\|wide`), `width`, `until`, `clock`, `ponder`, `end_keep`, `end_list` |
 | `[view]` | `design`, `effects`, `language`, `numbers`, `pv` (1: the expected line on the board), `cell_info`, `fps`, `font`, `opening_file`, `screenshot_dir` |
@@ -54,4 +54,4 @@ The default keys (all can be changed in `[keys]`, for example `back=Left, Backsp
 
 ## Files
 
-Made next to the exe: `kept.txt` (bookmarks), `screenshots\`. Read: `opening.ini` (opening names, not included).
+Made next to the exe: `kept.txt` (bookmarks), `screenshots\`. Read: `opening.ini` (opening names, included).

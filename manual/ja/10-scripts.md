@@ -26,7 +26,7 @@
 | `pv on\|off` | マウスを乗せた手の読み筋を盤に表示する・しない |
 | `book reload` | book を読み込み直す（メインエンジンを再起動） |
 | `book reduce <X> <Y> [here]` | book を軽くする（初期局面から。`here` は今の局面から）。数えてから、確かめずに行う |
-| `engine nikque18\|newedax` | エンジンの系 |
+| `engine nikque\|newedax` | エンジンの系 |
 | `design standard\|paw\|toggle` / `effects on\|subdued\|off` | デザイン（`toggle` で切り替え）・効果 |
 | `tab moves\|book\|record\|list\|tree` | タブ |
 | `rotate <0-7>` / `cellinfo none\|positions\|level\|stage\|umi` | 盤の向き・マスの左下に表示する数 |
@@ -65,7 +65,7 @@
 
 ```text
 # 今の book で、f5d6 の後の足りない進行を学習する
-engine nikque18
+engine nikque
 moves f5d6
 wait 60
 learn book store
@@ -78,7 +78,7 @@ quit
 
 ```text
 # book を軽くしてから、別の名前で保存する（元の book は残す）
-engine nikque18
+engine nikque
 book reduce 2 4
 edax book save "D:\books\軽い.dat"
 book reload

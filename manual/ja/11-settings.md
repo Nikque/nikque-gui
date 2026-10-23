@@ -20,8 +20,8 @@
 
 | 節 | 主な項目 |
 |---|---|
-| `[engine]` | `kind=nikque18\|newedax`、`search=1`（探索用エンジンを使う） |
-| `[nikque18]`・`[newedax]` | `dir`（エンジンのフォルダ）・`exe`（`auto` か exe の名前）・`eval`・`book` |
+| `[engine]` | `kind=nikque\|newedax`、`search=1`（探索用エンジンを使う） |
+| `[nikque]`・`[newedax]` | `dir`（エンジンのフォルダ）・`exe`（`auto` か exe の名前）・`eval`・`book` |
 | `[analysis]` | `level`（0〜60）・`threads`（0 は全部）・`hash`（ハッシュ表のビット数、0 はエンジンのまま）・`umi`・`x`・`y`・`base`・`stages`・`precision`（1 で精度を計算する）・`backward`・`forward`（棋譜の局面を裏で読む順）・`compare` |
 | `[play]` | `level`・`opening`（`search\|best\|wide`）・`width`・`until`・`clock`・`ponder`・`end_keep`・`end_list` |
 | `[view]` | `design`・`effects`・`language`・`numbers`・`pv`（1 で読み筋を盤に表示）・`cell_info`・`fps`・`font`・`opening_file`・`screenshot_dir` |
@@ -56,4 +56,4 @@
 
 ## ファイル
 
-exe の隣に作るもの：`kept.txt`（しおり）、`screenshots\`（スクリーンショット）。読むもの：`opening.ini`（定石名、付いていません）。
+exe の隣に作るもの：`kept.txt`（しおり）、`screenshots\`（スクリーンショット）。読むもの：`opening.ini`（定石名、付いています）。

@@ -269,7 +269,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 	}
 	if (c == "engine") {
 		const EngineKind k = a1 == "newedax" ? EngineKind::Newedax : EngineKind::Nikque18;
-		if (a1 != "newedax" && a1 != "nikque18") return bad("script.bad_word");
+		if (a1 != "newedax" && a1 != "nikque" && a1 != "nikque18") return bad("script.bad_word");  // (nikque18: up to 0.2.0)
 		if (k != kind_) {
 			kind_ = k;
 			update_menu();

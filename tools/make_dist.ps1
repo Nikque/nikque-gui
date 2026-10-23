@@ -1,16 +1,17 @@
 param(
 	[Parameter(Mandatory)] [string]$Nikque,    # a worktree of the C version (Edax nikque) whose bin\ holds the release build
 	[Parameter(Mandatory)] [string]$Newedax,   # a worktree of newedax whose bin\ holds the release build
-	[string]$NikqueName = "v4.5.5-nikque.20",
-	[string]$NewedaxName = "v4.5.5-newedax.5",
+	[string]$NikqueName = "v4.5.5-nikque.21",
+	[string]$NewedaxName = "v4.5.5-newedax.6",
 	[string]$Out = "D:\nikque-gui\dist"
 )
 # Makes the distribution of nikque GUI: a folder nikque-gui-<version> and its ZIP in $Out.
 #   nikque-gui.exe, config.ini (res\default-config.ini), readme.txt, LICENSE.txt, lang\*.txt, manual\ (ja, en, images)
-#   engines\nikque18 and engines\newedax: wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe (exe=auto chooses among them),
+#   engines\nikque and engines\newedax: wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe (exe=auto chooses among them),
 #   data\eval.dat, LICENSE.txt (GPL v3 of the engine) and SOURCE.txt (where the source is).
 # The GUI is taken from build\Release (build.cmd): the measuring build (NG_MEASURE) is refused.
-# No book, no opening.ini, no test files. A list of the files with their SHA-256 is written next to the ZIP.
+#   opening.ini (res\opening.ini: the names of the openings, without note lines).
+# No book, no test files. A list of the files with their SHA-256 is written next to the ZIP.
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $cml = Get-Content -Raw (Join-Path $root "CMakeLists.txt")
@@ -33,6 +34,7 @@ Copy-Item $gui $dst
 Copy-Item (Join-Path $root "readme.txt") $dst
 Copy-Item (Join-Path $root "LICENSE.txt") $dst
 Copy-Item (Join-Path $root "res\default-config.ini") (Join-Path $dst "config.ini")
+Copy-Item (Join-Path $root "res\opening.ini") (Join-Path $dst "opening.ini")
 Copy-Item (Join-Path $root "lang\*.txt") (Join-Path $dst "lang")
 Copy-Item -Recurse (Join-Path $root "manual") $dst
 
@@ -60,12 +62,14 @@ function Copy-Engine([string]$tree, [string]$folder, [string]$title, [string]$re
 	)
 	[System.IO.File]::WriteAllText((Join-Path $e "SOURCE.txt"), ($text -join "`r`n") + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
 }
-Copy-Engine $Nikque "nikque18" "Edax (C version, nikque)" "https://github.com/Nikque/edax-reversi-AVX" $NikqueName
+Copy-Engine $Nikque "nikque" "Edax (C version, nikque)" "https://github.com/Nikque/edax-reversi-AVX" $NikqueName
 Copy-Engine $Newedax "newedax" "newedax (C++ version of Edax)" "https://github.com/Nikque/newedax" $NewedaxName
 
 # checks: nothing for tests or measuring, no folder of the build machine in the GUI
-$bad = Get-ChildItem -Recurse $dst | Where-Object { $_.Name -match '^(opening\.ini|book\.dat|kept\.txt|config-test.*|.*\.pdb|.*\.log|measure.*)$' -or $_.FullName.Substring($dst.Length) -match '\\_test\\' }
+$bad = Get-ChildItem -Recurse $dst | Where-Object { $_.Name -match '^(book\.dat|kept\.txt|config-test.*|.*\.pdb|.*\.log|measure.*)$' -or $_.FullName.Substring($dst.Length) -match '\\_test\\' -or ($_.Name -eq "opening.ini" -and $_.DirectoryName -ne $dst) }
 if ($bad) { throw "files that must not be in the distribution: $($bad.FullName -join ', ')" }
+# the opening names: res\opening.ini only, without the note lines ("//")
+if (Select-String -Path (Join-Path $dst "opening.ini") -Pattern '^[\s　]*//' -Quiet) { throw "opening.ini holds note lines" }
 $bytes = [System.IO.File]::ReadAllBytes($gui)
 $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
 $wide = [System.Text.Encoding]::Unicode.GetString($bytes)

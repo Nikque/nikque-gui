@@ -21,4 +21,4 @@ nikque GUI は、オセロのエンジン Edax v4.5.5-nikque（C 版）と newed
 11. [設定](11-settings.md)：config.ini、キー、表示
 12. [困ったときは](12-troubleshooting.md)
 
-対象：nikque GUI 0.2.0、エンジン v4.5.5-nikque.20・v4.5.5-newedax.5（book を軽くする機能のほかは、v4.5.5-nikque.19・newedax.4 でも使えます）。
+対象：nikque GUI 0.2.1、エンジン v4.5.5-nikque.21・v4.5.5-newedax.6（book を軽くする機能は v4.5.5-nikque.20・newedax.5 から、ほかは v4.5.5-nikque.19・newedax.4 でも使えます）。

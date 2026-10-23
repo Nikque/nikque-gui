@@ -199,4 +199,19 @@ std::vector<std::pair<std::string, std::string>> Ini::section(std::string_view s
 	return out;
 }
 
+bool Ini::rename_section(std::string_view from, std::string_view to)
+{
+	std::string name;
+	for (const auto &l : lines_)
+		if (section_header(l, &name) && iequals(name, to)) return false;
+	bool renamed = false;
+	for (auto &l : lines_)
+		if (section_header(l, &name) && iequals(name, from)) {
+			l = "[" + std::string(to) + "]";
+			renamed = true;
+		}
+	if (renamed) dirty_ = true;
+	return renamed;
+}
+
 }  // namespace ng

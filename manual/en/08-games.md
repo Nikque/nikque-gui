@@ -56,4 +56,4 @@ A bookmark keeps a game and a position in it. Right above the graph, pictures of
 
 ## Opening names
 
-With `opening.ini` (lines `name=moves`) next to the exe, the top bar shows the opening name. The file is not included.
+The top bar shows the opening name read from `opening.ini` next to the exe (included): a text file of lines `name=moves` (moves from the start, f5 first; leading spaces only show the levels, lines starting with `//` are notes). It can be edited with Notepad. Another file can be set in `[view] opening_file=` of `config.ini`.

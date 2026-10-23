@@ -4,7 +4,7 @@
 
 ## Installing
 
-1. Unpack the ZIP (`nikque-gui-0.2.0.zip`) anywhere. There is nothing to install.
+1. Unpack the ZIP (`nikque-gui-0.2.1.zip`) anywhere. There is nothing to install.
 2. Start `nikque-gui.exe`. `config.ini`, the `lang` folder and `readme.txt` are in the same folder.
 
 | File | What it is |
@@ -12,11 +12,11 @@
 | `nikque-gui.exe` | the GUI |
 | `config.ini` | settings ([11. Settings](11-settings.md)) |
 | `lang\*.txt` | the words of the screen (Japanese, English, Simplified and Traditional Chinese) |
-| `engines\nikque18` | Edax v4.5.5-nikque.20, C version |
-| `engines\newedax` | newedax.5, C++ version |
+| `engines\nikque` | Edax v4.5.5-nikque.21, C version |
+| `engines\newedax` | newedax.6, C++ version |
 | `readme.txt` | short notes |
 
-The folder name `nikque18` follows the section name `[nikque18]` of `config.ini`; it holds nikque.20. Each engine folder has `wEdax-x86-64-v4.exe` (AVX-512), `wEdax-x86-64-v3.exe` (AVX2), `wEdax-x86-64.exe` (other x64 CPUs) and `data\eval.dat`.
+A `config.ini` of 0.2.0 or before (section `[nikque18]`) is read as it is (and saved with `[nikque]`). Each engine folder has `wEdax-x86-64-v4.exe` (AVX-512), `wEdax-x86-64-v3.exe` (AVX2), `wEdax-x86-64.exe` (other x64 CPUs) and `data\eval.dat`.
 
 ## Choosing the engine
 
@@ -27,7 +27,7 @@ Engine → nikque type / newedax type. Both have the same book analysis commands
 No book is included.
 
 - Put your `book.dat` in `data\book.dat` of the engine folder, or
-- choose it with Book → Open another book… (or drop the file on the window). `book=` in `[nikque18]` and `[newedax]` of `config.ini` does the same.
+- choose it with Book → Open another book… (or drop the file on the window). `book=` in `[nikque]` and `[newedax]` of `config.ini` does the same.
 
 Without a book, the engine makes a small book (the start position only) in `data\book.dat`. Replace it with your book later.
 
@@ -36,7 +36,7 @@ Without a book, the engine makes a small book (the start position only) in `data
 
 ## Engines you already have
 
-Write the engine folder in `dir=` of `[nikque18]` and `[newedax]` in `config.ini`. With `exe=auto` the executable is chosen for the CPU; a file name in `exe=` is used as it is.
+Write the engine folder in `dir=` of `[nikque]` and `[newedax]` in `config.ini`. With `exe=auto` the executable is chosen for the CPU; a file name in `exe=` is used as it is.
 
 The GUI uses the book analysis commands (`book moveinfo` and the others), so it needs v4.5.5-nikque.19 or v4.5.5-newedax.4 or later. With an older engine the top bar says "No book analyses (old engine)", and the book values, the tree and the Book tab stay empty (the search values are shown). Making the book lighter (`book reduce`) needs v4.5.5-nikque.20 or v4.5.5-newedax.5; an older engine says so and does nothing.
 

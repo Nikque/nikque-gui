@@ -476,6 +476,71 @@ static void test_bookmarks()
 	a->kept_.clear();
 }
 
+// A right click on the picture of a bookmark selects it and opens its menu (to the position, compare, delete): it is
+// not a move back.
+static void test_bookmark_right_click()
+{
+	auto a = make_app();
+	a->kept_.clear();
+	for (const char *mv : {"f5", "d6", "c3"}) a->game_.play(parse_square(mv));
+	a->keep_now(false);
+	a->game_.go_to(1);
+	a->keep_now(false);
+	a->game_.go_to(3);
+	CHECK(a->kept_.size() == 2);
+	a->bookmarks_shown_ = true;
+	a->lay_.panel = D2D1::RectF(480, 0, 1000, 700);
+	a->lay_.bookmarks = D2D1::RectF(500, 300, 900, 360);
+	a->kept_rects_ = {{0, D2D1::RectF(500, 300, 560, 360)}, {1, D2D1::RectF(570, 300, 630, 360)}};
+	// (no screen: the menu, if it is shown, is closed by a timer of this thread)
+	const UINT_PTR timer = SetTimer(nullptr, 0, 200, [](HWND, UINT, UINT_PTR, DWORD) { EndMenu(); });
+	a->on_mouse_down(600, 330, true, false);
+	KillTimer(nullptr, timer);
+	CHECK(a->game_.cursor() == 3);
+	CHECK(a->kept_sel_ == 1);
+	a->on_command(cmd::KeptDelete);
+	CHECK(a->kept_.size() == 1 && a->kept_[0].cursor == 3);
+	a->kept_.clear();
+}
+
+// The C version is "nikque": the folder engines\nikque, the section [nikque], kind=nikque. A config.ini of 0.2.0 or
+// before ([nikque18], kind=nikque18) is read as it is and saved with the new names; without engines\nikque, the folder
+// engines\nikque18 of an older distribution is used. (Last: the words are read again from the folder of the test.)
+static void test_engine_names()
+{
+	auto a = make_app();
+	const std::wstring dir = a->temp_dir_ + L"ng-app-test-engine";
+	CreateDirectoryW(dir.c_str(), nullptr);
+	{
+		FILE *f = nullptr;
+		_wfopen_s(&f, a->ini_path_.c_str(), L"wb");
+		CHECK(f != nullptr);
+		if (f) {
+			std::fprintf(f, "[engine]\r\nkind=nikque18\r\n[nikque18]\r\ndir=%s\r\nexe=auto\r\n", narrow(dir).c_str());
+			std::fclose(f);
+		}
+	}
+	a->load_config();
+	CHECK(a->kind_ == EngineKind::Nikque18);
+	CHECK(a->engine_dir(EngineKind::Nikque18) == dir);
+	CHECK(a->ini_.section("nikque18").empty() && !a->ini_.section("nikque").empty());
+	a->save_config();
+	CHECK(a->ini_.get("engine", "kind") == "nikque");
+	// dir= empty: engines\nikque next to the exe, else engines\nikque18 when only that one is there
+	const std::wstring e = a->exe_dir_ + L"\\engines";
+	CreateDirectoryW(e.c_str(), nullptr);
+	CreateDirectoryW((e + L"\\nikque18").c_str(), nullptr);
+	a->ini_.set("nikque", "dir", "");
+	CHECK(a->engine_dir(EngineKind::Nikque18) == e + L"\\nikque18");
+	CreateDirectoryW((e + L"\\nikque").c_str(), nullptr);
+	CHECK(a->engine_dir(EngineKind::Nikque18) == e + L"\\nikque");
+	RemoveDirectoryW((e + L"\\nikque").c_str());
+	RemoveDirectoryW((e + L"\\nikque18").c_str());
+	RemoveDirectoryW(e.c_str());
+	RemoveDirectoryW(dir.c_str());
+	DeleteFileW(a->ini_path_.c_str());
+}
+
 // The design is switched with one key (D) or "design toggle".
 static void test_design_toggle()
 {
@@ -771,8 +836,12 @@ int main(int argc, char **argv)
 	test_stop_background();
 	std::printf("%s\n", "test_bookmarks");
 	test_bookmarks();
+	std::printf("%s\n", "test_bookmark_right_click");
+	test_bookmark_right_click();
 	std::printf("%s\n", "test_design_toggle");
 	test_design_toggle();
+	std::printf("%s\n", "test_engine_names");
+	test_engine_names();
 	if (failures) {
 		std::printf("%d failures\n", failures);
 		return 1;

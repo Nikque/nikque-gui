@@ -30,10 +30,10 @@ $cfg = (Get-Content -Raw -Encoding UTF8 (Join-Path $root "tests\gui-scripts\conf
 $sec = ""
 $cfg = foreach ($l in $cfg) {
 	if ($l -match '^\[(.+)\]$') { $sec = $Matches[1] }
-	if ($sec -in "nikque18", "newedax") {
+	if ($sec -in "nikque", "newedax") {
 		if ($l -match '^dir=') { "dir="; continue }
 		if ($l -match '^exe=') { "exe=auto"; continue }
-		if ($l -match '^book=') { if ($sec -eq "nikque18") { "book=$copy" } else { "book=$books\book2.dat" }; continue }
+		if ($l -match '^book=') { if ($sec -eq "nikque") { "book=$copy" } else { "book=$books\book2.dat" }; continue }
 	}
 	if ($l -eq "[list]") { "[play]"; "end_list=1"; "" }
 	$l

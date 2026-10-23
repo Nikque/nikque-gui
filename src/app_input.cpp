@@ -241,6 +241,17 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 		edit_click(sq, right);
 		return;
 	}
+	if (right && bookmarks_shown_ && !editing_ && !panel_hidden_ && inside(lay_.bookmarks, fx, fy)) {
+		// on the picture of a bookmark: its menu (to the position, compare, delete)
+		for (auto &[k, r] : kept_rects_)
+			if (inside(r, fx, fy)) {
+				kept_sel_ = k;
+				invalidate();
+				bookmark_menu(x, y);
+				return;
+			}
+		return;
+	}
 	if (right) {
 		// a right click goes one move back (on the board, also anywhere but the panel)
 		if (!editing_ && (sq != kNoMove || !inside(lay_.panel, fx, fy))) do_action(Action::Back);
@@ -360,8 +371,7 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 		for (auto &[k, r] : kept_rects_)
 			if (inside(r, fx, fy)) {
 				kept_sel_ = k;
-				if (right) bookmark_menu(x, y);
-				else on_command(cmd::KeptShow);
+				on_command(cmd::KeptShow);
 				invalidate();
 				return;
 			}
