@@ -403,18 +403,21 @@ public:
 	std::deque<LearnJob> learn_queue_;
 	bool queue_running_ = false;
 	// book reduce: the positions kept and removed are counted first (book reducecount), then the command runs as a
-	// learning command from the same position
+	// learning command from the same position. The count goes when the background work stops and when the main engine
+	// closes (cancel_reduce), also after its answer has come.
 	struct ReduceJob {
-		enum State { None, Counting, Counted, Unknown, NotInBook, Deep, Stopped } state = None;
+		enum State { None, Counting, Counted, Unknown, NotInBook, Deep, Damaged, Stopped } state = None;
 		int id = 0;                // the count asked of the main engine
 		int x = 2, y = 4;
 		bool initial = true;       // from the initial position (else from the position shown)
 		bool ask = true;           // asked in a message box before the book changes (not in a script)
+		bool damaged = false;      // the engine found a damaged book ("@error id=<id> damaged=1")
 		Position start{};          // the command runs after `moves` from `start`
 		std::string moves;
 		long long kept = 0, removed = 0, positions = 0;
 	};
 	ReduceJob reduce_;
+	int reduce_epoch_ = 0;         // one more each time the counts go (a count asked in a message box is then not used)
 	// search engine: the hint in progress
 	int marker_id_ = 0;
 	bool hint_busy_ = false, hint_accept_ = false;
@@ -454,6 +457,7 @@ public:
 		std::vector<int> moves;    // with the passes
 		int cursor = 0;
 		long long time = 0;        // seconds since 1970
+		bool asked = false;        // bookmarked by the user (else kept by itself when another game came: its place follows)
 	};
 	std::vector<Kept> kept_;
 	int kept_sel_ = -1;
@@ -640,6 +644,7 @@ public:
 	void forget_main_requests();      // the main engine closed: its requests and the analyses asked of it go
 	std::string stop_main_analyses(); // the book analyses in progress stop ("stop id=" lines to send), their answers dropped
 	void stop_request(std::string &out, int &id);  // "stop id=<id>" added to `out`, the answer dropped; id becomes 0
+	void cancel_reduce(std::string *out);  // the count of book reduce goes (its "stop id=" added to `out` if not null)
 	void board_to(int role, std::string &out, const Position &p);  // "setboard" when the engine has another position
 	std::string moves_to_cursor() const;  // the moves of the game up to the place shown, for "play" (a pass "pa")
 	// the options of an engine without the book (an empty book of its own in the temporary folder); none when the

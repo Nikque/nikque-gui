@@ -228,7 +228,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 			const auto x = w.size() > 2 ? number(w[2]) : std::nullopt, y = w.size() > 3 ? number(w[3]) : std::nullopt;
 			if (!x || !y || *x < 0 || *x > 129 || *y < 0 || *y > 254) return bad("script.bad_number");
 			const bool here = w.size() > 4 && lower(w[4]) == "here";
-			if (w.size() > 4 && !here) return bad("script.bad_word");
+			if (w.size() > 5 || (w.size() > 4 && !here)) return bad("script.bad_word");
 			if (!eng_[0].alive) return bad("learn.no_engine");
 			if (learning_) return bad("learn.busy");
 			if (!reduce_book(*x, *y, !here, false)) return bad("learn.busy");

@@ -165,11 +165,19 @@ void App::forget_main_requests()
 	stopped_.clear();
 	book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = findline_id_ = list_book_id_ = 0;
 	missing_ = MissingList{};
-	if (reduce_.id) {  // the count of book reduce goes with them
+	cancel_reduce(nullptr);  // the count of book reduce goes with them (its answer may have come: it is for that book)
+}
+
+void App::cancel_reduce(std::string *out)
+{
+	++reduce_epoch_;
+	if (reduce_.state == ReduceJob::None) return;
+	if (reduce_.id) {  // still counted
+		if (out) stop_request(*out, reduce_.id);
 		reduce_.id = 0;
-		reduce_.state = ReduceJob::Stopped;
-		if (hwnd_) PostMessageW(hwnd_, WM_REDUCE, 0, 0);
+		if (hwnd_) PostMessageW(hwnd_, WM_REDUCE, 0, 0);  // (a script waits no longer)
 	}
+	reduce_.state = ReduceJob::Stopped;  // (an answer that has come is not taken: WM_REDUCE is on its way)
 }
 
 std::string line_commands(const Position &start, const std::string &moves)
@@ -569,6 +577,7 @@ void App::on_engine(WPARAM tag, bool ended)
 				measure::engine_answer(0);
 			}
 			if (f.kind() == "error") {
+				if (id > 0 && id == reduce_.id && f.num("damaged").value_or(0)) reduce_.damaged = true;
 				log(lang::t("engine.main") + L": " + engine_text(line));
 				continue;
 			}

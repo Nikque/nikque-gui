@@ -68,7 +68,9 @@ Book → Book maintenance and output → Remove what deviate3 X Y cannot reach, 
 2. The GUI first has the engine count (`book reducecount`, which does not change the book) and shows the numbers of positions kept and removed.
 3. OK runs `book reduce X Y` as a learning command. At its end, the log gives the numbers of positions kept and removed.
 
-- What is kept: the position and the positions reached from it by moves that lose at most X discs each, with at most Y discs lost in all (the range that `book deviate3 X Y` walks when it looks for the positions to expand). The values of the positions kept do not change.
+- What is kept: the position and the positions reached from it by moves that lose at most X discs each, with at most Y discs lost in all (the range that `book deviate3 X Y` walks when it looks for the positions to expand). The values of the positions kept do not change from those computed again first.
+- When Input/Output → Stop the background work is chosen while the positions are counted or after they are counted before the window comes, or when the engine closes (another book or engine too), the book is not made lighter. When the engine closes while the window is shown, OK does nothing either (since 0.2.1).
+- When the book after the position is damaged (a link to a square already taken, a link back to the same position), the GUI says so and does nothing (engines since v4.5.5-nikque.21 and newedax.6).
 - The book is saved to its file when the engine is closed. To keep the original book, copy the file first, or save with Save as… and then read the original again with Read again.
 - An older engine (nikque.19, newedax.4 and before) does not know the command: the GUI says so and does nothing.
 - In a script: `book reduce X Y` (from the position shown: `book reduce X Y here`), without the question ([10. Command scripts](10-scripts.md)).

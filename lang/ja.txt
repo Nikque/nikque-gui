@@ -631,6 +631,7 @@ reduce.done=book を軽くしました：{0} 局面を残し、{1} 局面を消�
 reduce.unknown=このエンジンには book reduce のコマンドがありません（Edax nikque v4.5.5-nikque.20・newedax v4.5.5-newedax.5 から）。book は変えていません
 reduce.notinbook={0}は book にないので、book は変えていません
 reduce.deep={0}は book の深さより先にあるので、book は変えていません
+reduce.damaged={0}から先の book に壊れたつながり（石のあるマスへの手、同じ局面に戻る手など）があるので、数えられませんでした。book は変えていません
 reduce.nothing={0}から deviate3 {1} {2} でたどれない局面はありません（book 全体 {3} 局面）。book は変えていません
 reduce.stopped=book reduce の前に局面を数えていましたが、止まりました（book は変えていません）
 menu.analysis.forward=棋譜の局面を前から裏で読む（前から解析）

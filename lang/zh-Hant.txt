@@ -631,6 +631,7 @@ reduce.done=已減小 book：保留 {0} 個局面，刪除 {1} 個局面（devia
 reduce.unknown=此引擎沒有 book reduce 命令（Edax nikque v4.5.5-nikque.20、newedax v4.5.5-newedax.5 及以後才有）。book 未改變
 reduce.notinbook={0}不在 book 中，book 未改變
 reduce.deep={0}超出了 book 的深度，book 未改變
+reduce.damaged={0}之後的 book 有損壞的連接（走到已有棋子的格子、回到同一局面等），無法計數。book 未改變
 reduce.nothing=從{0}按 deviate3 {1} {2} 能到達所有局面（{3} 個局面），沒有可刪除的局面。book 未改變
 reduce.stopped=已停止 book reduce 之前的計數（book 未改變）
 menu.analysis.forward=在背景從前往後分析棋譜的局面（正向分析）

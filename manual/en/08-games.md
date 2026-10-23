@@ -43,7 +43,7 @@ Input/Output → Search the list (games with this position): the games of the li
 A bookmark keeps a game and a position in it. Right above the graph, pictures of the bookmarked positions are shown, the oldest at the left.
 
 - M (Game → Bookmark the position now; also in View → Bookmarks) bookmarks the position shown. Another position of the same game is another bookmark.
-- A new game, a pasted game, a position set up and a line found also bookmark the game before by themselves (no limit; `kept.txt` next to the exe).
+- A new game, a pasted game, a position set up and a line found also bookmark the game before by themselves (no limit; `kept.txt` next to the exe). When the same game comes again, such a bookmark moves to its last position and stays one. A bookmark made with M does not move: another position of the same game becomes another bookmark (since 0.2.1; the bookmarks of a `kept.txt` of 0.2.0 or before are read as made by themselves).
 - Click a picture to go to that position of its game. A right click opens a menu: Go to the chosen bookmark, Compare with the game of the chosen bookmark, Delete the chosen bookmark.
 - Compare with the game of the chosen bookmark marks the game as a fixed game does (red frame on bad moves, marks where it differs).
 - Hovering over a picture writes the number and the moves of the bookmark in the bottom row.

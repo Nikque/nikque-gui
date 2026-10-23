@@ -338,7 +338,7 @@ bool App::reduce_book(int x, int y, bool initial, bool ask)
 void App::reduce_answer(const Fields &f, bool done)
 {
 	reduce_.id = 0;
-	if (!done || f.num("error").value_or(0)) reduce_.state = ReduceJob::Stopped;
+	if (!done || f.num("error").value_or(0)) reduce_.state = done && reduce_.damaged ? ReduceJob::Damaged : ReduceJob::Stopped;
 	else if (f.num("notinbook").value_or(0)) reduce_.state = ReduceJob::NotInBook;
 	else if (f.num("deep").value_or(0)) reduce_.state = ReduceJob::Deep;
 	else reduce_.state = ReduceJob::Counted;
@@ -365,6 +365,7 @@ void App::reduce_counted()
 	case ReduceJob::Unknown: say(t("reduce.unknown")); return;
 	case ReduceJob::NotInBook: say(lang::f("reduce.notinbook", {from})); return;
 	case ReduceJob::Deep: say(lang::f("reduce.deep", {from})); return;
+	case ReduceJob::Damaged: say(lang::f("reduce.damaged", {from})); return;
 	case ReduceJob::Stopped: log(t("reduce.stopped")); schedule_script(); return;
 	default: break;
 	}
@@ -374,10 +375,15 @@ void App::reduce_counted()
 		return;
 	}
 	if (r.ask) {
+		const int epoch = reduce_epoch_;
 		const std::wstring text = lang::f("reduce.ask", {from, xs, ys, lang::number(r.kept), lang::number(r.removed),
 		                                                 lang::number(r.positions), book_file()}) +
 		                          L"\n\n" + t("warn.book_replaced");
 		if (message(text, MB_OKCANCEL | MB_ICONWARNING) != IDOK) return;
+		if (epoch != reduce_epoch_) {  // the engine closed (another book, engine) while it was asked: the count is old
+			log(t("reduce.stopped"));
+			return;
+		}
 	}
 	if (learning_ || !eng_[0].alive) {
 		schedule_script();

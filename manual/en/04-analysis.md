@@ -27,7 +27,7 @@ The other positions of the game are searched by the search engine when it has no
 
 ## Stopping the background work
 
-Input/Output → Stop the background work stops the work on the game list, the book analyses (the accuracy, the points of the graph, the counts) and the search of the positions of the game. It starts again when the position changes. To keep it stopped, turn off Compute the book accuracy below, or choose Do not search the positions of the game in the background.
+Input/Output → Stop the background work stops the work on the game list, the book analyses (the accuracy, the points of the graph, the counts), the count before book reduce (the book is not made lighter) and the search of the positions of the game. It starts again when the position changes. To keep it stopped, turn off Compute the book accuracy below, or choose Do not search the positions of the game in the background.
 
 ## Accuracy stages of the book (0 to 7)
 

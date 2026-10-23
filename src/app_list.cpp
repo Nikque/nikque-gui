@@ -113,13 +113,19 @@ void App::cancel_task()
 }
 
 // "Stop the background work": the job on the list, the book analyses of the main engine (the precision stages, the
-// points of the graph, the counts) and the searches of the search engine stop; nothing starts again before the
-// position changes (or the analysis is asked again).
+// points of the graph, the counts, the count of book reduce: the book is not reduced) and the searches of the search
+// engine stop; nothing starts again before the position changes (or the analysis is asked again).
 void App::stop_background()
 {
 	cancel_task();
 	background_paused_ = true;
-	if (!learning_) send(0, stop_main_analyses());
+	if (!learning_) {
+		std::string out = stop_main_analyses();
+		cancel_reduce(&out);
+		send(0, out);
+	} else {
+		cancel_reduce(nullptr);
+	}
 	if (hint_busy_) stop_search(1);
 	log(lang::t("task.stopped_all"));
 	update_menu();
@@ -511,9 +517,12 @@ void App::keep_now(bool quiet)
 	k.moves = game_.moves();
 	k.cursor = game_.cursor();
 	k.time = static_cast<long long>(std::time(nullptr));
-	// the same line again: kept once (kept by itself: its place follows; a bookmark asked at another place: a new one)
-	if (!kept_.empty() && kept_.back().start == k.start && kept_.back().moves == k.moves && (quiet || kept_.back().cursor == k.cursor)) {
-		kept_.back().cursor = k.cursor;
+	k.asked = !quiet;
+	// the same line again: kept once (kept by itself: its place follows; at another place than a bookmark asked: a new one)
+	Kept *last = kept_.empty() ? nullptr : &kept_.back();
+	if (last && last->start == k.start && last->moves == k.moves && ((quiet && !last->asked) || last->cursor == k.cursor)) {
+		last->cursor = k.cursor;
+		last->asked = last->asked || !quiet;
 	} else {
 		kept_.push_back(std::move(k));
 	}
@@ -628,6 +637,7 @@ void App::load_kept()
 			if (!g.play(m)) break;
 		k.moves = g.moves();
 		k.cursor = std::clamp(std::atoi(p[3].c_str()), 0, static_cast<int>(k.moves.size()));
+		k.asked = p.size() > 4 && p[4] == "asked";  // (0.2.0 and before: none)
 		kept_.push_back(std::move(k));
 	}
 }
@@ -641,7 +651,7 @@ void App::save_kept() const
 		out += "\t";
 		for (const int m : k.moves)
 			if (m != kPass) out += square_name(m);
-		out += "\t" + std::to_string(k.cursor) + "\r\n";
+		out += "\t" + std::to_string(k.cursor) + (k.asked ? "\tasked" : "") + "\r\n";  // (0.2.0 reads the first four)
 	}
 	const std::wstring path = exe_dir_ + L"\\kept.txt";
 	if (out.empty()) {

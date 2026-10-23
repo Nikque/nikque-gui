@@ -631,6 +631,7 @@ reduce.done=The book is lighter: {0} positions kept, {1} removed (deviate3 {2} {
 reduce.unknown=This engine has no book reduce (Edax nikque v4.5.5-nikque.20 and newedax v4.5.5-newedax.5 or later have it). The book is not changed
 reduce.notinbook=The position ({0}) is not in the book: the book is not changed
 reduce.deep=The position ({0}) is beyond the depth of the book: the book is not changed
+reduce.damaged=The book after {0} is damaged (a move to a square already taken, a move back to the same position…): it cannot be counted. The book is not changed
 reduce.nothing=Nothing to remove: deviate3 {1} {2} from {0} reaches every position ({3} positions). The book is not changed
 reduce.stopped=The count before book reduce was stopped (the book is not changed)
 menu.analysis.forward=Search the positions of the game in the background from the start (forward analysis)

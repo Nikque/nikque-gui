@@ -150,6 +150,57 @@ static void test_reduce_unknown()
 	CHECK(!a->learning_ && a->requests_.empty());
 	CHECK(!a->script_command("book reduce 2", 1, &err));
 	CHECK(!a->script_command("book reduce 2 255", 1, &err));
+	CHECK(!a->script_command("book reduce 2 4 here 1", 1, &err));
+	CHECK(a->requests_.empty());
+}
+
+// The count of book reduce goes when the background work is stopped (while it counts, or after its answer before it
+// is taken) and when the engines start again: no book command follows it, and a script waits no longer.
+static void test_reduce_stopped()
+{
+	for (int k = 0; k < 3; ++k) {
+		auto a = make_app();
+		start_engine(*a);
+		std::wstring err;
+		CHECK(a->script_command("book reduce 2 4", 1, &err));
+		const int id = only_request(*a);
+		CHECK(id != 0);
+		const std::string end = "!@end id=" + std::to_string(id) + " kept=6 removed=1541 positions=1547 ms=0\n";
+		if (k == 0) {
+			a->stop_background();
+			CHECK(a->requests_.empty() && a->stopped_.count(id));  // the engine is asked to stop it
+			feed(*a, end);
+		} else {
+			feed(*a, end);
+			if (k == 1) {
+				a->stop_background();
+			} else {
+				a->stop_engines();
+				start_engine(*a);
+			}
+		}
+		pump_app(*a);
+		CHECK(!a->learning_);
+		CHECK(a->reduce_.state == App::ReduceJob::None);
+		CHECK(!a->script_waiting());
+		CHECK(logged(*a, lang::t("reduce.stopped")));
+		a->learning_ = false;
+	}
+}
+
+// A damaged book (a link to a square already taken, a link back to the same position) is not counted: nothing is done.
+static void test_reduce_damaged()
+{
+	auto a = make_app();
+	start_engine(*a);
+	std::wstring err;
+	CHECK(a->script_command("book reduce 0 0", 1, &err));
+	const int id = only_request(*a);
+	feed(*a, "!@error id=" + std::to_string(id) + " damaged=1\n!@end id=" + std::to_string(id) + " error=1\n");
+	pump_app(*a);
+	CHECK(!a->learning_ && a->requests_.empty() && !a->script_waiting());
+	CHECK(logged(*a, lang::f("reduce.damaged", {lang::t("reduce.at.initial")})));
+	a->learning_ = false;
 }
 
 // A line of the book analyses is written whole by another thread of the engine, while a line of the main thread
@@ -474,6 +525,37 @@ static void test_bookmarks()
 	CHECK(a->script_command("bookmark 1", 1, &err) && a->game_.cursor() == 3);
 	CHECK(!a->script_command("tab kept", 1, &err));  // the tab of the kept lines is gone
 	a->kept_.clear();
+}
+
+// A bookmark asked for stays where it was asked: when the same game goes away from another place, that place is kept
+// as another one (a line kept by itself follows the place). Which ones were asked for is kept in kept.txt.
+static void test_bookmark_asked()
+{
+	auto a = make_app();
+	a->kept_.clear();
+	for (const char *mv : {"f5", "d6", "c3"}) a->game_.play(parse_square(mv));
+	a->game_.go_to(1);
+	a->keep_now(false);
+	a->game_.go_to(3);
+	a->set_game(Game{}, true);
+	CHECK(a->kept_.size() == 2 && a->kept_[0].cursor == 1 && a->kept_[1].cursor == 3);
+	CHECK(a->kept_[0].asked && !a->kept_[1].asked);
+	// kept by itself: its place follows
+	for (const char *mv : {"f5", "d6", "c3"}) a->game_.play(parse_square(mv));
+	a->game_.go_to(2);
+	a->set_game(Game{}, true);
+	CHECK(a->kept_.size() == 2 && a->kept_[1].cursor == 2);
+	a->kept_.clear();
+	a->load_kept();
+	CHECK(a->kept_.size() == 2 && a->kept_[0].cursor == 1 && a->kept_[1].cursor == 2);
+	CHECK(a->kept_[0].asked && !a->kept_[1].asked);
+	// bookmarked where it was kept by itself: asked from then on
+	for (const char *mv : {"f5", "d6", "c3"}) a->game_.play(parse_square(mv));
+	a->game_.go_to(2);
+	a->keep_now(false);
+	CHECK(a->kept_.size() == 2 && a->kept_[1].asked);
+	a->kept_.clear();
+	a->save_kept();
 }
 
 // A right click on the picture of a bookmark selects it and opens its menu (to the position, compare, delete): it is
@@ -822,6 +904,10 @@ int main(int argc, char **argv)
 	test_reduce_script();
 	std::printf("%s\n", "test_reduce_unknown");
 	test_reduce_unknown();
+	std::printf("%s\n", "test_reduce_stopped");
+	test_reduce_stopped();
+	std::printf("%s\n", "test_reduce_damaged");
+	test_reduce_damaged();
 	std::printf("%s\n", "test_pv_on_board");
 	test_pv_on_board();
 	std::printf("%s\n", "test_precision_off");
@@ -838,6 +924,8 @@ int main(int argc, char **argv)
 	test_bookmarks();
 	std::printf("%s\n", "test_bookmark_right_click");
 	test_bookmark_right_click();
+	std::printf("%s\n", "test_bookmark_asked");
+	test_bookmark_asked();
 	std::printf("%s\n", "test_design_toggle");
 	test_design_toggle();
 	std::printf("%s\n", "test_engine_names");
