@@ -20,4 +20,5 @@
 | Wrong language | Settings → Language |
 | Other keys | `[keys]` of `config.ini` (edit it with the GUI closed) |
 
-The log (L) shows the answers of the engines and the messages of the GUI. View → Save the log… saves it.
+- The log (L) shows the engine responses and the GUI messages.
+- View → Save the log… saves it.

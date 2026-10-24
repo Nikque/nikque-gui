@@ -55,7 +55,7 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・newedax）は G
   ← →            1 手戻る・進む（右クリックでも 1 手戻る）
   Ctrl+← →       10 手
   N・Home / End  最初・最後の局面
-  ↑ ↓ / Enter    候補手を選ぶ / 打つ
+  ↑ ↓ / Enter・Space  候補手を選ぶ / 打つ
   B / U / H      book を使う・うみがめ数・評価値を隠す
   R              盤の向き（8 通りを順に。「表示」→「盤の向き」で選べる）
   D              デザインを切り替える（標準 ⇄ 肉球）
@@ -240,7 +240,7 @@ The GUI is under the MIT License. The engines (Edax nikque, newedax) are GPL and
   Left / Right       one move back / forward (a right click also goes back)
   Ctrl+Left/Right    10 moves
   N, Home / End      first / last position
-  Up, Down / Enter   choose a move / play it
+  Up, Down / Enter, Space   choose a move / play it
   B / U / H          book on/off, umigame numbers, hide the values
   R                  board orientation (8 in turn; View → Board orientation to choose)
   D                  switch the design (standard / paw)

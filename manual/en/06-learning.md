@@ -2,11 +2,15 @@
 
 [Contents](README.md) · Previous: [5. Book](05-book.md) · Next: [7. Games](07-play.md)
 
-Book learning is done by the main engine with the book commands. The GUI has the engine play the game up to the position shown, sends the command and waits for its end. Meanwhile the search engine keeps giving values (the accuracy stages are those of before the learning, drawn faint).
+Book learning is done by the main engine running book commands.
+
+- The GUI has the engine play the game up to the current position, sends the command, and waits for it to finish.
+- Meanwhile, the search engine keeps providing values.
+- The accuracy stages shown are those from before the learning, drawn faint.
 
 ## Learning commands
 
-The Learning menu. X and Y are the range values of the right panel.
+Choose them from the Learning menu. X and Y are the range values in the right panel.
 
 | Item | Engine command |
 |---|---|
@@ -21,18 +25,28 @@ The Learning menu. X and Y are the range values of the right panel.
 | Check the solved positions again | `book correct` |
 | Recompute the leaves (4 kinds) | `book leaf recalculate` to `recalculate4` |
 
-A confirmation window shows the command and the book file first. While learning, the learning commands cannot be chosen.
+- Before it starts, a confirmation window shows the command and the book file.
+- While learning is running, the learning commands cannot be chosen.
 
 ## Stop and continue
 
-- Learning → Stop learning…: a book command cannot be stopped in the middle, so the main engine is closed and started again. The window shows the newest file saved on the way (`.dev`, `.dev2`, `.store`… next to the book) and its time.
-- Learning → Continue from the file saved on the way…: if a file saved on the way is newer than the book, it is read and the last learning command goes on from the same position. The last command is kept in `[learn] last_command` of `config.ini`.
+- Learning → Stop learning…:
+  - A book command cannot be interrupted, so the main engine is closed and restarted.
+  - The window shows the newest intermediate save file and its time. Intermediate save files are `.dev`, `.dev2`, `.store` and so on, next to the book.
+- Learning → Continue from the file saved on the way…:
+  - If an intermediate save file is newer than the book, it is loaded.
+  - The last learning command resumes from the same position.
+  - The last command is stored in `[learn] last_command` of `config.ini`.
 
 ## Learning queue
 
-- Learning → Put all the missing lines into the learning queue: each missing line of the Book tab becomes a job: play to its position, `book store`, then the command of the accuracy base with X Y.
-- Start the learning queue… runs them in turn. When stopped, the jobs left stay in the queue. Clear the learning queue empties it.
-- `learn <command>` of a command script also adds a job ([10. Command scripts](10-scripts.md)).
+- Learning → Put all the missing lines into the learning queue: each missing line in the Book tab becomes one job in the queue. Each job does the following:
+  1. play to its position
+  2. `book store`
+  3. the command of the accuracy base, with X Y
+- Start the learning queue… runs the jobs in order. If you stop it, the remaining jobs stay in the queue.
+- Clear the learning queue empties the queue.
+- `learn <command>` in a command script also adds a job ([10. Command scripts](10-scripts.md)).
 
 ## Learning settings
 
@@ -48,5 +62,5 @@ Learning → Learning settings…: settings sent to the main engine (`[learn_opt
 
 ## Notes
 
-- After a command that changes the book, the book file may be saved when the engine is closed. Copy an important book before learning.
-- The speed and memory of learning depend on the engine and the size of the book; learning a large book takes long.
+- After a command that changes the book, the book file may be saved when the engine is closed. Back up an important book before learning.
+- The speed and memory use of learning depend on the engine and the size of the book. Learning a large book takes a long time.

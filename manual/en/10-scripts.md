@@ -2,13 +2,20 @@
 
 [Contents](README.md) · Previous: [9. Tools and files of games](09-tools.md) · Next: [11. Settings](11-settings.md)
 
-A UTF-8 text file with one command a line, run with Input/Output → Run a command script…; Stop the command script stops it. The script run at the start is set in `[script] startup=` of `config.ini`.
+A command script is a UTF-8 text file with one command per line.
 
-- Lines starting with `#` are notes.
-- A command that starts work (`list load`, `search`, `learn start`, `edax`, `tool`, `estimate`, `wait`, `book reduce`…) waits for its end before the next line. A `wait` or `waitgame` that ends by its time says so in the log.
-- Relative names are from the folder of the script.
-- A wrong line is written to the log and the script stops.
-- `run` runs another script (4 levels at most).
+- Input/Output → Run a command script… runs it from top to bottom.
+- Stop the command script stops it.
+- A script to run at startup is set in `[script] startup=` of `config.ini`.
+
+Rules:
+
+- Lines starting with `#` are comments.
+- A command that starts work (`list load`, `search`, `learn start`, `edax`, `tool`, `estimate`, `wait`, `book reduce` and so on) waits until the work finishes before the next line runs.
+- When `wait` or `waitgame` ends because its time ran out, the log says so.
+- Relative paths are relative to the folder of the script.
+- If a line has an error, it is written to the log and the script stops.
+- `run` runs another script (up to 4 levels deep).
 
 ## Commands
 
@@ -54,12 +61,15 @@ A UTF-8 text file with one command a line, run with Input/Output → Run a comma
 | `tree open\|close\|go <moves>` / `tree root` / `tree toggle <moves>` | opens, closes or goes to a row (moves from the root), makes the position shown the root, as ▸ / ▾ of a row |
 | `log <text>` / `quit` | writes to the log, closes the GUI |
 
-## File names and letters
+## File names and characters
 
-- In `edax` and `tool` commands, a file name in `"…"` is given as the engine can open it (its short form, or through the temporary folder). A file not there is taken as a file to be written.
-- Commands are sent in the letters the engine reads (the code page of the system). A folder name with Japanese letters can be given with or without `"…"` (use `"…"` when it has spaces). A name without `"…"` goes to the engine as it is, so a relative name is from the engine folder.
-- The commands of `learn` run later as jobs of the queue, so their `"…"` names are sent as they are: write names without spaces.
-- A command with letters the engine cannot read is written to the log and the script stops.
+- In `edax` and `tool` commands, a file name enclosed in `"…"` is converted to a form the engine can open: its short name, or a copy in the temporary folder.
+- If a file in `"…"` does not exist, it is treated as a file to be written.
+- Commands are converted to the characters the engine can read (the system code page) before they are sent.
+- A folder name with Japanese characters can be passed with or without `"…"`. Use `"…"` when the name contains spaces.
+- A name without `"…"` is passed to the engine as is, so a relative path is relative to the engine folder.
+- `learn` commands run later as jobs in the queue, so their `"…"` names are sent unchanged. Use names without spaces.
+- If a command contains characters the engine cannot read, it is written to the log and the script stops.
 
 ## Example
 

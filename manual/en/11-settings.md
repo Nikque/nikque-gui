@@ -6,15 +6,21 @@
 
 The View menu:
 
-- Switch the design (D): standard and paw in one step; Design chooses one too.
-- Effects: On, Subdued (no motion), Off. Lower in the same menu, the effects of the top stage (stage 7): Strong, Normal, Weak.
-- Board orientation: 8 orientations (R in turn). The game itself is turned.
-- Move numbers on the discs, Show on the board the expected line of the move under the mouse (off at first), Number on the squares ([4. Analysis](04-analysis.md)).
-- Tabs, Bookmarks (Show the row of bookmarks and the others), Hide the right panel (P), Open the log (L), Save the log.
+- Switch the design (D): toggles between standard and paw. You can also choose one in Design.
+- Effects: On, Subdued (no motion), Off. Lower in the same menu, choose the effects of the top stage (stage 7): Strong, Normal, Weak.
+- Board orientation: 8 orientations (R cycles through them). The game itself is transformed.
+- Move numbers on the discs.
+- Show on the board the expected line of the move under the mouse (off by default).
+- Number on the squares ([4. Analysis](04-analysis.md)).
+- Tabs.
+- Bookmarks (Show the row of bookmarks and others).
+- Hide the right panel (P), Open the log (L), Save the log….
 
 ## config.ini
 
-Settings → Open config.ini opens it in Notepad. The GUI also writes it when it closes, so close the GUI before editing it by hand.
+Settings → Open config.ini opens it in Notepad.
+
+The GUI also writes the file when it closes. Close the GUI before editing the file by hand.
 
 | Section | Main keys |
 |---|---|
@@ -33,7 +39,10 @@ Settings → Open config.ini opens it in Notepad. The GUI also writes it when it
 
 ## Keys
 
-The default keys (all can be changed in `[keys]`, for example `back=Left, Backspace`; Help → Keys lists the keys of now):
+The default key assignments:
+
+- All of them can be changed in `[keys]` (for example, `back=Left, Backspace`).
+- Help → Keys lists the current assignments.
 
 | Key | Action |
 |---|---|
@@ -54,4 +63,5 @@ The default keys (all can be changed in `[keys]`, for example `back=Left, Backsp
 
 ## Files
 
-Made next to the exe: `kept.txt` (bookmarks), `screenshots\`. Read: `opening.ini` (opening names, included).
+- Created next to the exe: `kept.txt` (bookmarks), `screenshots\`.
+- Read: `opening.ini` (opening names, included).
