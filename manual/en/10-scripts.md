@@ -71,7 +71,7 @@ Rules:
 - `learn` commands run later as jobs in the queue, so their `"…"` names are sent unchanged. Use names without spaces.
 - If a command contains characters the engine cannot read, it is written to the log and the script stops.
 
-## Example
+## Examples
 
 ```text
 # learn the missing lines after f5d6 with the book shown
@@ -83,5 +83,14 @@ learn book deviate 2 4
 learn start
 edax book save "D:\books\after learning.dat"
 screenshot after.png
+quit
+```
+
+```text
+# make the book smaller, then save it under another name (the original book is kept)
+engine nikque
+book reduce 2 4
+edax book save "D:\books\smaller.dat"
+book reload
 quit
 ```

@@ -12,7 +12,10 @@
   - the positions by level
   - the number of best lines, and writing them to a file
   - a tree of the book lines
-- **Book learning**: runs the learning commands (deviate, enhance, fill and others) from the current position. You can stop a learning run and continue it later from its intermediate save file.
+- **Book learning and maintenance**:
+  - Runs the learning commands (deviate, enhance, fill and others) from the current position.
+  - You can stop a learning run and continue it later from its intermediate save file.
+  - You can also make the book smaller by removing the positions that `book deviate3 X Y` does not reach.
 - **Games**: a person against the computer, or computer against computer. Time controls are available, and opening moves can be drawn from the book.
 - **Game records**:
   - game lists (up to a million games)
