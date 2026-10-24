@@ -6,46 +6,70 @@
 
 ## 日本語
 
-オセロのエンジン [Edax v4.5.5-nikque](https://github.com/Nikque/edax-reversi-AVX)（C 版）と [newedax](https://github.com/Nikque/newedax)（C++ 版）のための Windows の GUI です。
+オセロのエンジン [Edax 4.5.5 nikque](https://github.com/Nikque/edax-reversi-AVX)（C 版）と [newedax](https://github.com/Nikque/newedax)（C++ 版）を画面から使うための、Windows 用のソフトです。
 
-- 盤の上に全部の合法手の評価値と、book の精度（段階 0〜7）を出します。
-- book の解析：次の段階に足りない leaf までの手順、うみがめ数、level ごとの局面数、最善の進行、book の進行の木。
-- book の学習（deviate・enhance・fill など）、止める・途中保存から続ける・学習の列。
-- 対局（人とコンピューター、コンピューターどうし、持ち時間、序盤を book から選ぶ）、比べるモード。
-- 棋譜リスト（100 万局）、棋譜検索、控え、盤面配置、盤から手順の推定、エンジンの道具、命令の列。
-- 画面の言葉：日本語・English・简体中文・繁體中文。
+### できること
 
-**ダウンロード**：[Releases](https://github.com/Nikque/nikque-gui/releases) の `nikque-gui-0.1.0.zip`（エンジン 2 つ入り、book なし）。展開して `nikque-gui.exe` を起動します。
+- **盤の上に評価値を表示**：すべての合法手の評価値と、book の精度（段階 0〜7）を盤に重ねて表示します。
+- **book の解析**：次の精度の段階に足りない局面、うみがめ数（暗記が必要な進行の数）、level ごとの局面数、最善の進行、進行の木。
+- **book の学習と整理**：`deviate`・`enhance`・`fill` などの学習を画面から実行。途中で止めて再開でき、複数の学習を順番に並べられます。book を軽くする `book reduce` も使えます。
+- **対局**：人対コンピューター、コンピューター同士、持ち時間あり。序盤を book から選べます。
+- **棋譜**：100 万局まで扱える棋譜リスト、棋譜検索、盤面の配置、盤面から手順の推定。
+- **そのほか**：2 つの棋譜の比較（悪手や違う手に印）、しおり、コマンドを並べたスクリプトの実行。
+- **表示言語**：日本語・English・简体中文・繁體中文（中国語は機械翻訳）。
+
+### 使い始め方
+
+1. [最新の Release](https://github.com/Nikque/nikque-gui/releases/latest) の zip をダウンロードし、好きな場所に展開します。インストールは要りません。
+2. `nikque-gui.exe` を起動します。
+
+エンジン 2 つ（Edax nikque と newedax）が同梱されています。**book は付いていません**。お持ちの `book.dat` を使う方法は、マニュアルの [2 章「置き方と起動」](manual/ja/02-setup.md#book-を置く) を見てください。
 
 **マニュアル**：[manual/ja](manual/ja/README.md)
 
-### 組み立て
+### ビルド
 
-Visual Studio 2022（C++、x64）と CMake。`build.cmd` で `build\Release` に組み立て、単体の試験 6 本を流します。`build.cmd measure` は計測版（`build-measure`）。配布物は `tools\make_dist.ps1`。
+Visual Studio 2022（C++、x64）と CMake を使います。
+
+- `build.cmd`：`build\Release` にビルドし、単体テスト 6 本を実行します。
+- `build.cmd measure`：計測用のビルド（`build-measure`）。
+- `tools\make_dist.ps1`：配布用の zip を作ります。
 
 ### ライセンス
 
-nikque GUI は MIT License（[LICENSE.txt](LICENSE.txt)）。配布物に入っているエンジンは GNU GPL v3 の別のプログラムで、GUI は子のプロセスとして起動し、文字の命令でやりとりします（ソースは上のリンク、配布物の `engines\*\SOURCE.txt`）。
+nikque GUI は MIT License（[LICENSE.txt](LICENSE.txt)）です。同梱のエンジンは GNU GPL v3 の別のプログラムで、GUI はそれを別のプロセスとして起動し、テキストのコマンドでやりとりします。エンジンのソースは上のリンクと、配布物の `engines\*\SOURCE.txt` にあります。
 
 ## English
 
-A Windows GUI for the Othello engines [Edax v4.5.5-nikque](https://github.com/Nikque/edax-reversi-AVX) (C version) and [newedax](https://github.com/Nikque/newedax) (C++ version).
+A Windows GUI for the Othello engines [Edax 4.5.5 nikque](https://github.com/Nikque/edax-reversi-AVX) (C) and [newedax](https://github.com/Nikque/newedax) (C++).
 
-- The values of all the legal moves and the accuracy of the book (stages 0 to 7) on the board.
-- Book analyses: the lines to the leaves missing for the next stage, umigame numbers, positions by level, best lines, a tree of the book lines.
-- Book learning (deviate, enhance, fill and others): stop, continue from the file saved on the way, a learning queue.
-- Games (a person against the computer, the computer on both sides, time, opening moves from the book), compare mode.
-- Game lists (a million games), search, kept lines, setting up a position, finding the moves of a position, engine tools, command scripts.
-- Languages of the screen: Japanese, English, Simplified and Traditional Chinese.
+### Features
 
-**Download**: `nikque-gui-0.1.0.zip` in [Releases](https://github.com/Nikque/nikque-gui/releases) (two engines included, no book). Unpack it and start `nikque-gui.exe`.
+- **Values on the board**: the score of every legal move and the accuracy of the book (stages 0 to 7).
+- **Book analysis**: positions missing for the next accuracy stage, umigame numbers (how many lines must be memorized), positions per level, best lines, a tree of book lines.
+- **Book learning and maintenance**: run `deviate`, `enhance`, `fill` and other learning commands from the GUI; stop and resume them, and queue several runs. `book reduce` makes a book smaller.
+- **Games**: human vs. computer, computer vs. computer, time controls, openings chosen from the book.
+- **Game records**: lists of up to a million games, search, position setup, finding the moves that lead to a position.
+- **Also**: comparing two game records (bad moves and differences marked), bookmarks, scripts of commands.
+- **Languages**: Japanese, English, Simplified and Traditional Chinese (Chinese is machine-translated).
+
+### Getting started
+
+1. Download the zip from the [latest release](https://github.com/Nikque/nikque-gui/releases/latest) and unpack it anywhere. No installation is needed.
+2. Start `nikque-gui.exe`.
+
+Two engines (Edax nikque and newedax) are included. **No book is included**; to use your own `book.dat`, see [chapter 2 of the manual](manual/en/02-setup.md).
 
 **Manual**: [manual/en](manual/en/README.md)
 
 ### Building
 
-Visual Studio 2022 (C++, x64) and CMake. `build.cmd` builds into `build\Release` and runs the 6 unit tests; `build.cmd measure` builds the measuring version (`build-measure`). `tools\make_dist.ps1` makes the distribution.
+Visual Studio 2022 (C++, x64) and CMake.
+
+- `build.cmd`: builds into `build\Release` and runs the 6 unit tests.
+- `build.cmd measure`: a build for measurements (`build-measure`).
+- `tools\make_dist.ps1`: makes the distribution zip.
 
 ### License
 
-nikque GUI: MIT License ([LICENSE.txt](LICENSE.txt)). The engines of the distribution are separate programs under the GNU GPL v3; the GUI starts them as child processes and talks to them with text commands (source: the links above, and `engines\*\SOURCE.txt` of the distribution).
+nikque GUI is under the MIT License ([LICENSE.txt](LICENSE.txt)). The included engines are separate programs under the GNU GPL v3; the GUI starts them as separate processes and talks to them with text commands. Their source is at the links above and in `engines\*\SOURCE.txt` of the distribution.
