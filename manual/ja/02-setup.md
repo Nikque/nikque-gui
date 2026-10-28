@@ -4,7 +4,7 @@
 
 ## 置き方
 
-1. 配布の ZIP（`nikque-gui-0.2.2.zip`）を好きな場所に展開します。インストールは要りません。
+1. 配布の ZIP（`nikque-gui-0.2.3.zip`）を好きな場所に展開します。インストールは要りません。
 2. `nikque-gui.exe` を起動します。
 
 フォルダの中身：
@@ -14,8 +14,8 @@
 | `nikque-gui.exe` | GUI |
 | `config.ini` | 設定（[11. 設定](11-settings.md)） |
 | `lang\*.txt` | 画面の言葉（日本語・English・简体中文・繁體中文） |
-| `engines\nikque` | C 版の Edax v4.5.5-nikque.22 |
-| `engines\newedax` | newedax.7（C++ 版） |
+| `engines\nikque` | C 版の Edax v4.5.5-nikque.25 |
+| `engines\newedax` | newedax.10（C++ 版） |
 | `readme.txt` | 短い説明 |
 
 - どちらのエンジンのフォルダにも、次のファイルがあります。

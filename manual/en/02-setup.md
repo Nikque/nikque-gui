@@ -4,7 +4,7 @@
 
 ## Installing
 
-1. Unpack the ZIP (`nikque-gui-0.2.2.zip`) anywhere. No installation is needed.
+1. Unpack the ZIP (`nikque-gui-0.2.3.zip`) anywhere. No installation is needed.
 2. Start `nikque-gui.exe`.
 
 Contents of the folder:
@@ -14,8 +14,8 @@ Contents of the folder:
 | `nikque-gui.exe` | the GUI |
 | `config.ini` | settings ([11. Settings](11-settings.md)) |
 | `lang\*.txt` | the words of the screen (Japanese, English, Simplified and Traditional Chinese) |
-| `engines\nikque` | Edax v4.5.5-nikque.22, C version |
-| `engines\newedax` | newedax.7, C++ version |
+| `engines\nikque` | Edax v4.5.5-nikque.25, C version |
+| `engines\newedax` | newedax.10, C++ version |
 | `readme.txt` | short notes |
 
 - Each engine folder contains:
