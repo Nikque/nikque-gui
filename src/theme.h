@@ -41,6 +41,7 @@ struct Theme {
 	bool hearts;          // the stars of the effects are hearts
 	std::array<StageStyle, 8> stage;
 	D2D1_COLOR_F exact;   // the values of a search to the end (not in the book)
+	D2D1_COLOR_F opening_mark, opening_edge;  // the marks of the moves on the lines of the openings
 };
 
 const Theme &theme(Design d);

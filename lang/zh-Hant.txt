@@ -646,6 +646,7 @@ level.window=評估的 Lv
 level.note=Edax 的 Lv（0～60）。越大讀得越深，也越費時（21 為參考）。拖動滑桿或輸入數字來選擇
 menu.view.design.toggle=切換設計（標準 ⇄ 肉球）
 menu.view.pv=在棋盤上顯示滑鼠所指著法的預想變化
+menu.view.opening_marks=標記定石進行中的著法
 action.design=切換設計
 menu.kept.strip=顯示書籤列（圖表上方）
 kept.empty=書籤：按 {0} 為目前局面加入書籤，棋盤縮圖會排列在這裡（點擊縮圖即可轉到該局面）

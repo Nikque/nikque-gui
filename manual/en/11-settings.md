@@ -11,6 +11,7 @@ The View menu:
 - Board orientation: 8 orientations (R cycles through them). The game itself is transformed.
 - Move numbers on the discs.
 - Show on the board the expected line of the move under the mouse (off by default).
+- Mark the moves on the lines of the openings (on by default).
 - Number on the squares ([4. Analysis](04-analysis.md)).
 - Tabs.
 - Bookmarks (Show the row of bookmarks and others).
@@ -28,7 +29,7 @@ The GUI also writes the file when it closes. Close the GUI before editing the fi
 | `[nikque]`, `[newedax]` | `dir` (engine folder), `exe` (`auto` or the file name), `eval`, `book` |
 | `[analysis]` | `level`, `threads` (0: all), `hash` (bits of the hash table; 0: the engine's), `umi`, `x`, `y`, `base`, `stages`, `precision` (1: compute the book accuracy), `backward`, `forward` (the order of the search of the game), `compare` |
 | `[play]` | `level`, `opening` (`search\|best\|wide`), `width`, `until`, `clock`, `ponder`, `end_keep`, `end_list` |
-| `[view]` | `design`, `effects`, `language`, `numbers`, `pv` (1: the expected line on the board), `cell_info`, `fps`, `font`, `opening_file`, `screenshot_dir` |
+| `[view]` | `design`, `effects`, `language`, `numbers`, `opening_marks` (0: no marks on the lines of the openings), `pv` (1: the expected line on the board), `cell_info`, `fps`, `font`, `opening_file`, `screenshot_dir` |
 | `[window]` | size and place, `tab`, `panel_w`, `bookmarks` (1: the row of bookmarks) |
 | `[list]` | `start_ply` (the move to open games of the list at; -1: the last) |
 | `[learn]` | the last learning command and its position (for Continue from the file saved on the way) |

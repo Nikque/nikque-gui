@@ -647,6 +647,41 @@ static void test_values_while_reading()
 	DeleteFileW(path.c_str());
 }
 
+// The moves on the lines of the openings are marked: 2 the move makes an opening, 1 it is on the way to one; the same
+// in every orientation, whether the values are shown or not, and not when the setting is off.
+static void test_opening_marks()
+{
+	auto a = make_app();
+	const std::wstring path = a->temp_dir_ + L"ng-openings-test.ini";
+	FILE *f = nullptr;
+	CHECK(_wfopen_s(&f, path.c_str(), L"wb") == 0 && f);
+	if (f) {
+		const std::string text = "// a note=F5\n虎=F5D6C3D3C4\nイエス流=F5D6C3D3C4B3\nクラシック=F5D6C3D3C4B3C5\nAubrey=F5D6C3D3C4B3D2F4\n";
+		fwrite(text.data(), 1, text.size(), f);
+		fclose(f);
+	}
+	CHECK(a->openings_.load(path) == 4);
+	auto mark = [&](const char *sq) { return a->cell_view(parse_square(sq)).opening; };
+	CHECK(mark("f5") == 1 && mark("d3") == 1 && mark("c4") == 1 && mark("e6") == 1);  // (the same by a symmetry)
+	for (const char *mv : {"f5", "d6", "c3", "d3", "c4"}) a->game_.play(parse_square(mv));
+	CHECK(mark("b3") == 2);
+	a->game_.play(parse_square("b3"));
+	CHECK(mark("c5") == 2 && mark("d2") == 1 && mark("d7") == 0);
+	a->show_eval_ = false;
+	CHECK(mark("c5") == 2);
+	std::wstring err;
+	CHECK(a->script_command("openingmarks off", 1, &err));
+	CHECK(mark("c5") == 0 && mark("d2") == 0);
+	CHECK(a->script_command("openingmarks on", 1, &err));
+	// the same line turned by a symmetry of the initial position
+	a->game_ = Game{};
+	const int s = 4;
+	for (const char *mv : {"f5", "d6", "c3", "d3", "c4", "b3"}) a->game_.play(symmetric_square(parse_square(mv), s));
+	CHECK(a->cell_view(symmetric_square(parse_square("c5"), s)).opening == 2);
+	CHECK(a->cell_view(symmetric_square(parse_square("d2"), s)).opening == 1);
+	DeleteFileW(path.c_str());
+}
+
 // Every level of Edax (0 to 60) can be chosen.
 static void test_levels()
 {
@@ -1139,6 +1174,8 @@ int main(int argc, char **argv)
 	test_book_file();
 	std::printf("%s\n", "test_values_while_reading");
 	test_values_while_reading();
+	std::printf("%s\n", "test_opening_marks");
+	test_opening_marks();
 	std::printf("%s\n", "test_levels");
 	test_levels();
 	std::printf("%s\n", "test_forward_analysis");

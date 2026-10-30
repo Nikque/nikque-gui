@@ -13,6 +13,7 @@
 - 盤の向き：8 通りです（R で順に切り替え）。棋譜そのものを対称に変換します。
 - 手の番号を石に表示する。
 - マウスを乗せた手の読み筋を盤に表示する（初期設定ではオフ）。
+- 定石の手順の手に印を付ける（初期設定ではオン）。
 - マスの左下に表示する数（[4. 解析](04-analysis.md)）。
 - タブ。
 - しおり（しおりの列を表示する、など）。
@@ -30,7 +31,7 @@ GUI を閉じるときにも書き直されます。手で編集するときは�
 | `[nikque]`・`[newedax]` | `dir`（エンジンのフォルダ）・`exe`（`auto` か exe の名前）・`eval`・`book` |
 | `[analysis]` | `level`（0〜60）・`threads`（0 は全部）・`hash`（ハッシュ表のビット数、0 はエンジンのまま）・`umi`・`x`・`y`・`base`・`stages`・`precision`（1 で精度を計算する）・`backward`・`forward`（棋譜の局面を裏で読む順）・`compare` |
 | `[play]` | `level`・`opening`（`search\|best\|wide`）・`width`・`until`・`clock`・`ponder`・`end_keep`・`end_list` |
-| `[view]` | `design`・`effects`・`language`・`numbers`・`pv`（1 で読み筋を盤に表示）・`cell_info`・`fps`・`font`・`opening_file`・`screenshot_dir` |
+| `[view]` | `design`・`effects`・`language`・`numbers`・`opening_marks`（0 で定石の手順の印を出さない）・`pv`（1 で読み筋を盤に表示）・`cell_info`・`fps`・`font`・`opening_file`・`screenshot_dir` |
 | `[window]` | 大きさと場所、`tab`、`panel_w`、`bookmarks`（1 でしおりの列を表示） |
 | `[list]` | `start_ply`（棋譜リストの棋譜を開く手数、-1 は最後） |
 | `[learn]` | 最後の学習のコマンドと局面（「途中保存から再開」が使う） |

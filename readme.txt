@@ -91,7 +91,7 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・newedax）は G
   裏の処理を止める（棋譜リストの処理・精度の計算・棋譜の裏読み。局面を動かすとまた始まる）、
   棋譜のファイル（base の convert・unique・compare・check・correct・complete・problem・tofen）、スクリプト。
 - 表示：デザインを切り替える（D）、デザイン（標準・肉球）、効果（入・控えめ・切、いちばん上の段（段階 7）の
-  強さ）、盤の向き、手の番号、読み筋を盤に表示する、マスの左下に表示する数（book の局面数・Lv・
+  強さ）、盤の向き、手の番号、読み筋を盤に表示する、定石の手順の手に印を付ける、マスの左下に表示する数（book の局面数・Lv・
   精度の段階・うみがめ数）、タブ、しおり、パネル、ログ。
 - しおり：M で今の局面にしおりを挟みます。新しい対局・棋譜の貼り付け・盤面配置・手順の推定のときも、
   それまでの棋譜に自動でしおりが挟まれます（数の制限なし、exe の隣の kept.txt）。グラフの上の
@@ -138,6 +138,7 @@ Ntest の形式は「空き 手番の側の石 手番」。
   analysis backward|forward|off  棋譜の局面を裏で読む順（後ろから解析・前から解析・読まない）
   stop                     裏の処理を止める
   pv on|off                マウスを乗せた手の読み筋を盤に表示する・しない
+  openingmarks on|off      定石の手順の手に印を付ける・付けない
   book reload              book を読み込み直す（メインエンジンを再起動）
   book reduce <X> <Y> [here]  book を軽くする（初期局面から。here は今の局面から）。数えてから、確かめずに行う
   engine nikque|newedax / design standard|paw|toggle / effects on|subdued|off
@@ -174,7 +175,7 @@ Ntest の形式は「空き 手番の側の石 手番」。
 [analysis] level（0〜60）・threads（0 は全部）・hash（ハッシュ表のビット数、0 はエンジンのまま）・umi・x・y・base・stages・
            precision（1 で精度を計算する）・backward・forward（棋譜の局面を裏で読む順）・compare
 [play] level・opening（search|best|wide）・width・until・clock・ponder・end_keep・end_list
-[view] design・effects・language・numbers・pv（1 で読み筋を盤に表示）・cell_info・fps・font・opening_file・screenshot_dir
+[view] design・effects・language・numbers・opening_marks（0 で定石の手順の印を出さない）・pv（1 で読み筋を盤に表示）・cell_info・fps・font・opening_file・screenshot_dir
 [window] 大きさと場所、tab、panel_w、bookmarks（1 でしおりの列を表示）
 [list] start_ply（棋譜リストの棋譜を開く手数、-1 は最後）
 [learn_options] エンジンに送る学習の設定
@@ -275,7 +276,7 @@ The GUI is under the MIT License. The engines (Edax nikque, newedax) are GPL and
   the search of the game; it starts again when the position changes); files of games (base convert, unique,
   compare, check, correct, complete, problem, tofen); command scripts.
 - View: switch the design (D), design (standard, paw), effects (on, subdued, off; the strength of the top stage),
-  orientation, move numbers, the expected line on the board, number on the squares (book positions, Lv,
+  orientation, move numbers, the expected line on the board, the marks on the lines of the openings, number on the squares (book positions, Lv,
   accuracy stage or umigame numbers at the lower left), tabs, bookmarks, panel, log.
 - Bookmarks: M bookmarks the position now. A new game, a pasted game, a position set up and a line found also
   bookmark the game before (no limit; kept.txt next to the exe). Click a picture in the row of bookmarks above
@@ -314,7 +315,7 @@ A UTF-8 text file with one command a line, run with Input/Output → Run a comma
 the start is set in [script] startup= of config.ini. Lines starting with # are notes. A command that starts
 work waits for its end. Relative names are from the script's folder. The commands are listed in the
 Japanese part above (moves, board, play, new, goto, back, forward, book, book reload, book reduce, eval,
-numbers, level, umi, precision, analysis, stop, pv, engine, design, effects, tab, rotate, cellinfo, lang, wait,
+numbers, level, umi, precision, analysis, stop, pv, openingmarks, engine, design, effects, tab, rotate, cellinfo, lang, wait,
 estimate, keep, bookmark, bookmarks, screenshot, savelog, list ..., search, learn, edax, tool, run, game,
 comlevel, clock, ponder, opening, go, takeback, waitgame, compare, tree, log, quit).
 A wait or waitgame that ends by its time says so in the log.

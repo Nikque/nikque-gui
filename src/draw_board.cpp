@@ -415,6 +415,22 @@ void draw_cell(App &app, int sq, double t)
 		dc->DrawGeometry(g.Get(), gx.brush(rgb(0x09090b)), 1.0f);
 	}
 
+	// the lines of the openings, at the upper right: filled, this move makes an opening; only the outline, it is on the way
+	if (v.opening) {
+		const float size = c * (th.hearts ? 0.3f : 0.26f);
+		dc->SetTransform(D2D1::Matrix3x2F::Scale(size, size) *
+		                 D2D1::Matrix3x2F::Translation(rc.right - c * 0.17f, rc.top + (th.hearts ? c * 0.15f : c * 0.04f + size / 2)));
+		ID2D1Geometry *shape = th.hearts ? static_cast<ID2D1Geometry *>(gx.heart()) : gx.ribbon();
+		if (v.opening == 2) {
+			dc->FillGeometry(shape, gx.brush(th.opening_mark));
+			dc->DrawGeometry(shape, gx.brush(th.opening_edge), 0.09f);
+		} else {
+			dc->DrawGeometry(shape, gx.brush(th.opening_edge), 0.26f);
+			dc->DrawGeometry(shape, gx.brush(th.opening_mark), 0.13f);
+		}
+		dc->SetTransform(D2D1::Matrix3x2F::Identity());
+	}
+
 	if (v.pv_num > 0) {
 		// the expected line: a see-through stone of the side who plays there, and the order
 		const float r = c * 0.36f;

@@ -646,6 +646,7 @@ level.window=評価の Lv
 level.note=Edax の Lv（0〜60）。大きいほど深く読み、時間がかかります（21 が目安）。スライダーを動かすか、数を書いて選びます
 menu.view.design.toggle=デザインを切り替える（標準 ⇄ 肉球）
 menu.view.pv=マウスを乗せた手の読み筋を盤に表示する
+menu.view.opening_marks=定石の手順の手に印を付ける
 action.design=デザインを切り替える
 menu.kept.strip=しおりの列を表示する（グラフの上）
 kept.empty=しおり：{0} で今の局面にしおりを挟むと、ここに盤の絵が並びます（絵を押すとその局面へ）

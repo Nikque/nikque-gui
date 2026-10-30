@@ -277,11 +277,11 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		}
 		return true;
 	}
-	if (c == "pv" || c == "precision" || c == "bookmarks") {
-		bool *flag = c == "pv" ? &pv_on_board_ : c == "precision" ? &precision_ : &bookmarks_shown_;
+	if (c == "pv" || c == "precision" || c == "bookmarks" || c == "openingmarks") {
+		bool *flag = c == "pv" ? &pv_on_board_ : c == "precision" ? &precision_ : c == "openingmarks" ? &opening_marks_ : &bookmarks_shown_;
 		bool v = *flag;
 		if (!on_off(&v)) return bad("script.on_off");
-		if (v != *flag) on_command(c == "pv" ? cmd::PvOnBoard : c == "precision" ? cmd::PrecisionOn : cmd::BookmarksShow);
+		if (v != *flag) on_command(c == "pv" ? cmd::PvOnBoard : c == "precision" ? cmd::PrecisionOn : c == "openingmarks" ? cmd::OpeningMarks : cmd::BookmarksShow);
 		return true;
 	}
 	if (c == "analysis") {

@@ -41,6 +41,7 @@ std::wstring trim_w(std::wstring_view s)
 int Openings::load(const std::wstring &path)
 {
 	names_.clear();
+	route_.clear();
 	FILE *f = nullptr;
 	if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return 0;
 	std::string all;
@@ -65,7 +66,10 @@ int Openings::load(const std::wstring &path)
 		if (pm.moves.empty() || name.empty()) continue;
 		Game g;
 		if (replay(g, Position{}, pm.moves) != static_cast<int>(pm.moves.size())) continue;  // not a legal line
-		for (int s = 0; s < 8; ++s) names_.try_emplace(key_of(symmetric(g.now(), s)), name);
+		for (int s = 0; s < 8; ++s) {
+			names_.try_emplace(key_of(symmetric(g.now(), s)), name);
+			for (int k = 0; k <= g.size(); ++k) route_.insert(key_of(symmetric(g.at(k), s)));
+		}
 		++count;
 	}
 	return count;
@@ -79,6 +83,13 @@ const std::wstring *Openings::name_at(const Game &g) const
 		if (it != names_.end()) return &it->second;
 	}
 	return nullptr;
+}
+
+int Openings::mark(const Position &p) const
+{
+	const Position q = p.must_pass() ? p.play(kPass) : p;
+	if (names_.contains(key_of(p)) || names_.contains(key_of(q))) return 2;
+	return route_.contains(key_of(p)) || route_.contains(key_of(q)) ? 1 : 0;
 }
 
 }  // namespace ng

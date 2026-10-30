@@ -47,6 +47,8 @@ bool Gfx::init(HWND hwnd)
 		st[i] = {r * std::cos(a), r * std::sin(a) + 0.04f};
 	}
 	make(star_, st, 10);
+	const D2D1_POINT_2F rib[] = {{-0.35f, -0.5f}, {0.35f, -0.5f}, {0.35f, 0.5f}, {0, 0.22f}, {-0.35f, 0.5f}};
+	make(ribbon_, rib, 5);
 	{
 		factory_->CreatePathGeometry(&heart_);
 		ComPtr<ID2D1GeometrySink> s;

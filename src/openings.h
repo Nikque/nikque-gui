@@ -5,6 +5,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "analysis.h"
 #include "game.h"
@@ -19,9 +20,12 @@ public:
 	size_t positions() const noexcept { return names_.size(); }
 	// the name of the latest position of the game (up to the place shown) that has one
 	const std::wstring *name_at(const Game &g) const;
+	// what the position after a move is: 0 nothing, 1 on the way to an opening, 2 an opening (a forced pass goes with the move)
+	int mark(const Position &p) const;
 
 private:
 	std::unordered_map<PosKey, std::wstring, PosKeyHash> names_;
+	std::unordered_set<PosKey, PosKeyHash> route_;  // the positions on the lines of the openings
 };
 
 }  // namespace ng

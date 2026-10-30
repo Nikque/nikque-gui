@@ -185,6 +185,7 @@ enum : int {
 	SaveLog,
 	DesignToggle,
 	PvOnBoard,
+	OpeningMarks,
 	BookmarksShow,
 	Rotate0 = 1640,  // + symmetry 0..7
 	CellInfoNone = 1650,
@@ -283,6 +284,7 @@ struct CellView {
 	int pv_num = 0;          // 1.. : this square is in the expected line of the move under the mouse
 	int pv_side = 0;         // the side who plays it there (0 black, 1 white)
 	int number = 0;          // the number of the move that put the disc here (numbers shown)
+	int opening = 0;         // this move leads on the way to an opening (1) or to an opening (2)
 	std::wstring info;       // the small number at the lower left (the setting of the squares)
 };
 
@@ -365,6 +367,7 @@ public:
 	bool forward_ = false;     // the positions of the game searched in the background from the start (no values going back)
 	bool precision_ = true;    // the precision stages of the book (book moveinfo parts=stage)
 	bool pv_on_board_ = false; // the expected line of the move under the mouse drawn on the board
+	bool opening_marks_ = true; // the moves on the lines of the openings are marked on the board
 	bool background_paused_ = false;  // "stop the background work": nothing starts again before the position changes
 	bool bookmarks_shown_ = true;     // the row of the pictures of the bookmarks (kept lines) above the graph
 

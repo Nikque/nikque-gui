@@ -646,6 +646,7 @@ level.window=评估的 Lv
 level.note=Edax 的 Lv（0～60）。越大读得越深，也越费时（21 为参考）。拖动滑块或输入数字来选择
 menu.view.design.toggle=切换设计（标准 ⇄ 肉球）
 menu.view.pv=在棋盘上显示鼠标所指着法的预想变化
+menu.view.opening_marks=标记定式进行中的着法
 action.design=切换设计
 menu.kept.strip=显示书签栏（图表上方）
 kept.empty=书签：按 {0} 为当前局面添加书签，棋盘缩略图会排列在这里（点击缩略图即可转到该局面）

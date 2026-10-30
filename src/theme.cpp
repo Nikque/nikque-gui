@@ -57,6 +57,8 @@ const Theme kStandard = [] {
 	t.hearts = false;
 	t.stage = kStages;
 	t.exact = rgb(0xdab2ff);  // purple-300
+	t.opening_mark = rgb(0xffdf20);  // yellow-300
+	t.opening_edge = rgb(0x09090b);
 	return t;
 }();
 
@@ -94,6 +96,8 @@ const Theme kPaw = [] {
 	t.hearts = true;
 	t.stage = kStages;
 	t.exact = rgb(0xc27aff);  // purple-400
+	t.opening_mark = rgb(0xf6339a);  // pink-500
+	t.opening_edge = rgb(0xffffff);
 	return t;
 }();
 

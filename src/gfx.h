@@ -71,6 +71,7 @@ public:
 	ID2D1PathGeometry *sparkle() const { return sparkle_.Get(); }
 	ID2D1PathGeometry *star() const { return star_.Get(); }
 	ID2D1PathGeometry *heart() const { return heart_.Get(); }
+	ID2D1PathGeometry *ribbon() const { return ribbon_.Get(); }
 	ID2D1Geometry *paw() const { return paw_.Get(); }
 	// ten thin rays from (0, 0) to radius 1
 	ID2D1PathGeometry *rays() const { return rays_.Get(); }
@@ -99,7 +100,7 @@ private:
 	ComPtr<ID2D1SolidColorBrush> brush_;
 	ComPtr<ID2D1StrokeStyle> round_join_;
 	ComPtr<IDWriteFontFace> number_face_, ui_face_;
-	ComPtr<ID2D1PathGeometry> sparkle_, star_, heart_;
+	ComPtr<ID2D1PathGeometry> sparkle_, star_, heart_, ribbon_;
 	ComPtr<ID2D1Geometry> paw_;
 	ComPtr<ID2D1PathGeometry> rays_;
 	std::unordered_map<int, ComPtr<ID2D1LinearGradientBrush>> gradients_;

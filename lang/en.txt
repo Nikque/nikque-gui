@@ -646,6 +646,7 @@ level.window=Search level
 level.note=The level of Edax (0 to 60). The higher, the deeper and the slower (21 is a good start). Move the slider or type a number
 menu.view.design.toggle=Switch the design (standard ⇄ paw)
 menu.view.pv=Show on the board the expected line of the move under the mouse
+menu.view.opening_marks=Mark the moves on the lines of the openings
 action.design=Switch the design
 menu.kept.strip=Show the row of bookmarks (above the graph)
 kept.empty=Bookmarks: press {0} to bookmark the position now; its picture comes here (click a picture to go there)

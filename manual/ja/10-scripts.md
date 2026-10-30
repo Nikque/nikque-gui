@@ -31,6 +31,7 @@
 | `analysis backward\|forward\|off` | 棋譜の局面を裏で読む順（後ろから解析・前から解析・読まない） |
 | `stop` | 裏の処理を止める |
 | `pv on\|off` | マウスを乗せた手の読み筋を盤に表示する・しない |
+| `openingmarks on\|off` | 定石の手順の手に印を付ける・付けない |
 | `book reload` | book を読み込み直す（メインエンジンを再起動） |
 | `book reduce <X> <Y> [here]` | book を軽くする（初期局面から。`here` は今の局面から）。数えてから、確かめずに行う |
 | `engine nikque\|newedax` | エンジンの系列 |

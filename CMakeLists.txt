@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(nikque_gui VERSION 0.2.4 LANGUAGES CXX RC)
+project(nikque_gui VERSION 0.3.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

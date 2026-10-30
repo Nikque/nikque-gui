@@ -759,6 +759,11 @@ void App::on_command(int id)
 		update_menu();
 		invalidate();
 		break;
+	case cmd::OpeningMarks:
+		opening_marks_ = !opening_marks_;
+		update_menu();
+		invalidate();
+		break;
 	case cmd::BookmarksShow:
 		bookmarks_shown_ = !bookmarks_shown_;
 		update_menu();

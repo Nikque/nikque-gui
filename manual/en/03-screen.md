@@ -36,6 +36,17 @@ The top bar also shows a message in these cases:
 - Left-click to play a move. Right-click or press Left to go back one move.
 - View → Number on the squares shows book positions, Lv, the accuracy stage or umigame numbers at the lower left of each square.
 
+### Marks on the lines of the openings
+
+A move that leads to a registered opening (`opening.ini`) has a mark at the upper right of its square.
+
+- A filled mark: this move makes an opening.
+- Only the outline: this move is on the way to an opening.
+
+The mark is a ribbon in the standard design and a heart in the paw design. It is the same in every orientation of the board, and when another order of the moves reaches the same position.
+
+View → Mark the moves on the lines of the openings turns them on or off (on at first). They stay when H hides the values.
+
 ### Expected line on the board
 
 With View → Show on the board the expected line of the move under the mouse turned on, hovering over a move draws the line that follows it (up to 12 moves) as semi-transparent discs with numbers.

@@ -338,6 +338,7 @@ void App::load_config()
 	if (forward_) backward_ = false;
 	precision_ = ini_.get_bool("analysis", "precision", true);
 	pv_on_board_ = ini_.get_bool("view", "pv", false);
+	opening_marks_ = ini_.get_bool("view", "opening_marks", true);
 	bookmarks_shown_ = ini_.get_bool("window", "bookmarks", true);
 	anim_fps_ = ini_.get_int("view", "fps", 20, 5, 60);
 	font_px_ = ini_.get_int("view", "font", 0, 0, 72);
@@ -434,6 +435,7 @@ void App::save_config()
 	ini_.set_int("analysis", "forward", forward_);
 	ini_.set_int("analysis", "precision", precision_);
 	ini_.set_int("view", "pv", pv_on_board_);
+	ini_.set_int("view", "opening_marks", opening_marks_);
 	ini_.set_int("window", "bookmarks", bookmarks_shown_);
 	ini_.set("engine", "kind", engine_section(kind_));
 	ini_.set_int("engine", "search", search_engine_);
@@ -722,6 +724,7 @@ void App::build_menu()
 	sub(view, ori, t("menu.view.orient"));
 	item(view, cmd::MoveNumbers, t("menu.view.numbers"));
 	item(view, cmd::PvOnBoard, t("menu.view.pv"));
+	item(view, cmd::OpeningMarks, t("menu.view.opening_marks"));
 	HMENU ci = CreatePopupMenu();
 	item(ci, cmd::CellInfoNone, t("menu.view.cell.none"));
 	item(ci, cmd::CellInfoPositions, t("menu.view.cell.positions"));
@@ -792,6 +795,7 @@ void App::update_menu()
 	radio(cmd::Backward, cmd::BackgroundOff, backward_ ? cmd::Backward : forward_ ? cmd::Forward : cmd::BackgroundOff);
 	check(cmd::PrecisionOn, precision_);
 	check(cmd::PvOnBoard, pv_on_board_);
+	check(cmd::OpeningMarks, opening_marks_);
 	check(cmd::BookmarksShow, bookmarks_shown_);
 	check(cmd::FixRecord, fixed_on_);
 	enable(cmd::LearnStop, learning_);
@@ -1060,6 +1064,7 @@ CellView App::cell_view(int sq) const
 		break;
 	}
 	if (v.stone && move_numbers_) v.number = move_number_at(sq);
+	if (opening_marks_ && !v.stone && p.can_play(sq)) v.opening = openings_.mark(p.play(sq));
 	if (!show_eval_ || v.stone) return v;
 	const PosInfo *info = cache_.peek(p);
 
