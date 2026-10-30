@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "analysis.h"
+#include "bookpeek.h"
 #include "engine.h"
 #include "game.h"
 #include "gamelist.h"
@@ -37,6 +38,7 @@ std::string line_commands(const Position &start, const std::string &moves);
 inline constexpr UINT WM_TASK = WM_APP + 2;  // a background job has ended
 inline constexpr UINT WM_SCRIPT = WM_APP + 3;  // the command script goes on (after the work that it waited for)
 inline constexpr UINT WM_REDUCE = WM_APP + 4;  // the count of book reduce has come (asked after the lines of the engine are read)
+inline constexpr UINT WM_BOOK_PEEK = WM_APP + 5;  // a position was looked up in the book file (the main engine is reading it)
 
 // menu commands
 namespace cmd {
@@ -287,7 +289,7 @@ struct CellView {
 struct EngineSlot {
 	EngineProcess proc;
 	bool alive = false;
-	bool loaded = false;               // the first answer came (the book is read)
+	bool loaded = false;               // the first answer came (the book is read: an engine reads no command before)
 	std::optional<PosKey> board;       // the position the engine has (setboard)
 	unsigned generation = 0;           // counts the starts: messages of a process closed before are ignored
 	int ping_id = 0;                   // the echo marker the engine has not answered yet (watch)
@@ -369,6 +371,9 @@ public:
 	// engines: [0] main (reads the book), [1] search only (no book), [2] tools (started for one job, no book),
 	// [3] play (the moves of the computer in a game, no book), [4] compare (the other engine, search only)
 	EngineSlot eng_[5];
+	BookPeek book_peek_;           // the book file looked up while the main engine reads it
+	unsigned book_peek_generation_ = 0;  // answers of a lookup started before are not taken
+	std::optional<u64> book_bytes_;      // the size of the book file when the main engine started (none: no file)
 	bool tool_busy_ = false;
 	int tool_end_id_ = 0;
 	std::wstring tool_label_;
@@ -609,6 +614,8 @@ public:
 	void on_engine(WPARAM tag, bool ended);
 	void request_analysis();
 	void pump_graph();
+	void request_book_peek();    // the positions to look up in the book file, the position shown first
+	void book_peek_answers();    // the answers of the lookups (WM_BOOK_PEEK)
 	void pump_search();
 	void request_missing(std::string &out, const Position &p);
 	int missing_target() const;

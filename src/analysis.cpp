@@ -39,7 +39,7 @@ void PosInfo::reset_book()
 		m.cmp_bound = keep.cmp_bound;
 	}
 	book_params.clear();
-	book_begun = book_done = in_book = count_done = false;
+	book_begun = book_done = book_peeked = in_book = count_done = false;
 	levels_done = false;
 	levels.clear();
 	levels_positions = -1;
@@ -264,6 +264,7 @@ void apply_move_line(PosInfo &info, const Fields &f)
 		// an answer without the stage part (parts=count) has these rows without stage, missing and link:
 		// they keep what an answer with the stage part said
 		m->in_book = f.num("book").value_or(0) == 1;
+		m->leaf = f.num("leaf").value_or(0) == 1;
 		if (auto st = f.num("stage")) {
 			m->book_row = true;
 			m->stage = static_cast<int>(*st);
@@ -276,8 +277,7 @@ void apply_move_line(PosInfo &info, const Fields &f)
 			m->book_value = static_cast<int>(f.num("value").value_or(0));
 			m->book_level = static_cast<int>(f.num("level").value_or(0));
 			m->lines = f.num("lines").value_or(-1);
-		} else if (f.num("leaf").value_or(0) == 1) {
-			m->leaf = true;
+		} else if (m->leaf) {
 			m->leaf_value = static_cast<int>(f.num("value").value_or(0));
 			m->leaf_level = static_cast<int>(f.num("level").value_or(0));
 		}

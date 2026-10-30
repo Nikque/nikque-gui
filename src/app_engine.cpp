@@ -35,6 +35,16 @@ std::wstring absolute(const std::wstring &base, const std::string &p)
 	return base + L"\\" + w;
 }
 
+// the size of a file, for the log
+std::wstring size_text(u64 bytes)
+{
+	wchar_t s[32];
+	if (bytes >= 1u << 30) swprintf_s(s, L"%.1f GB", static_cast<double>(bytes) / (1u << 30));
+	else if (bytes >= 1u << 20) swprintf_s(s, L"%.1f MB", static_cast<double>(bytes) / (1u << 20));
+	else swprintf_s(s, L"%llu B", bytes);
+	return s;
+}
+
 // 4: AVX-512 (x86-64-v4), 3: AVX2 (x86-64-v3), 1: other
 int cpu_level()
 {
@@ -166,6 +176,7 @@ void App::forget_main_requests()
 	book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = findline_id_ = list_book_id_ = 0;
 	missing_ = MissingList{};
 	cancel_reduce(nullptr);  // the count of book reduce goes with them (its answer may have come: it is for that book)
+	book_peek_.stop();
 }
 
 void App::cancel_reduce(std::string *out)
@@ -279,6 +290,12 @@ void App::start_engines()
 		s.board.reset();
 		s.open.clear();
 		s.book_arg = role == 0 ? *book_arg : std::wstring();
+		if (role == 0) {
+			WIN32_FILE_ATTRIBUTE_DATA attr{};
+			book_bytes_.reset();
+			if (GetFileAttributesExW(book.c_str(), GetFileExInfoStandard, &attr))
+				book_bytes_ = u64{attr.nFileSizeHigh} << 32 | attr.nFileSizeLow;
+		}
 		engine_level_[role] = level_;
 		if (!s.alive) {
 			log(lang::f("log.start_failed", {exe, err}));
@@ -291,6 +308,7 @@ void App::start_engines()
 			// an engine without them reads a "stop" with nothing to drop yet
 			s.probe_id = new_id();
 			send(0, "stop id=" + std::to_string(s.probe_id) + "\n");
+			book_peek_.start(book, hwnd_, WM_BOOK_PEEK, ++book_peek_generation_);
 		}
 		send(role, "mode 3\n");
 		if (role == 0) send(0, learn_options_commands());  // the settings of book learning
@@ -346,7 +364,7 @@ void App::restart_engines()
 // while the position shown has nothing waiting, so that it is never kept waiting by them.
 void App::pump_graph()
 {
-	if (!eng_[0].alive || learning_ || !use_book_ || !show_eval_ || graph_id_ || book_id_ || background_paused_) return;
+	if (!eng_[0].alive || !eng_[0].loaded || learning_ || !use_book_ || !show_eval_ || graph_id_ || book_id_ || background_paused_) return;
 	const std::string params = book_params();
 	auto ask = [&](const Position &p) {
 		const PosKey key = key_of(p);
@@ -375,6 +393,54 @@ void App::pump_graph()
 	}
 }
 
+// The engine reads no command while it reads its book, and may take minutes: the book file is looked up meanwhile, for
+// the position shown and then for the positions of the game (the points of the graph).
+void App::request_book_peek()
+{
+	if (!book_peek_.running() || !use_book_ || !show_eval_) return;
+	std::vector<Position> wanted;
+	auto add = [&](const Position &p) {
+		if (p.game_over()) return;
+		const PosInfo *info = cache_.peek(p);
+		if (info && (info->book_peeked || info->book_done)) return;
+		if (std::find(wanted.begin(), wanted.end(), p) == wanted.end()) wanted.push_back(p);
+	};
+	add(game_.now());
+	for (int i = 0; i <= game_.size(); ++i)
+		if (!game_.at(i).must_pass()) add(game_.at(i));
+	book_peek_.ask(std::move(wanted));
+}
+
+void App::book_peek_answers()
+{
+	std::vector<BookPeekAnswer> answers;
+	book_peek_.take(answers);
+	if (eng_[0].loaded) return;  // the engine answers now
+	bool changed = false;
+	for (const BookPeekAnswer &a : answers) {
+		if (a.generation != book_peek_generation_) continue;
+		PosInfo &info = cache_.get(a.pos);
+		info.book_peeked = true;
+		info.in_book = a.in_book;
+		for (const BookPeekMove &e : a.moves) {
+			MoveEval *m = info.find(e.sq);
+			if (!m) continue;
+			m->in_book = e.in_book;
+			m->leaf = e.leaf;
+			if (e.in_book) {
+				m->book_value = e.value;
+				m->book_level = e.level;
+				m->lines = e.lines;
+			} else if (e.leaf) {
+				m->leaf_value = e.value;
+				m->leaf_level = e.level;
+			}
+		}
+		changed = true;
+	}
+	if (changed) invalidate();
+}
+
 void App::request_analysis()
 {
 	const Position &p = game_.now();
@@ -382,7 +448,9 @@ void App::request_analysis()
 	const bool want = show_eval_ && !p.game_over();
 
 	// ---- main engine: the book analyses of the position
-	if (eng_[0].alive && !learning_) {  // no analysis while the book is learning
+	if (eng_[0].alive && !eng_[0].loaded) {
+		request_book_peek();
+	} else if (eng_[0].alive && !learning_) {  // no analysis while the book is learning
 		std::string out;
 		auto cancel = [&](int &id, bool keep) {
 			if (!keep) stop_request(out, id);
@@ -535,8 +603,14 @@ void App::on_engine(WPARAM tag, bool ended)
 	std::vector<std::string> lines;
 	s.proc.take_lines(lines);
 	if (role == 0) unmix_lines(lines, s.open);
-	bool changed = false, ask_missing = false;
+	bool changed = false, ask_missing = false, book_read = false;
 	const PosKey here = key_of(game_.now());
+	auto loaded_now = [&] {
+		if (s.loaded) return;
+		s.loaded = true;
+		book_read = changed = true;
+		measure::engine_answer(0);
+	};
 
 	if (role == 2) {
 		for (const std::string &line : lines)
@@ -569,13 +643,10 @@ void App::on_engine(WPARAM tag, bool ended)
 			if (role == 1) continue;  // the search engine is asked no book analysis
 			if (s.probe_id && id == s.probe_id) {
 				s.probe_id = 0;  // the book analyses are known
+				loaded_now();
 				continue;
 			}
-			if (!s.loaded) {
-				s.loaded = true;
-				changed = true;
-				measure::engine_answer(0);
-			}
+			loaded_now();
 			if (f.kind() == "error") {
 				if (id > 0 && id == reduce_.id && f.num("damaged").value_or(0)) reduce_.damaged = true;
 				log(lang::t("engine.main") + L": " + engine_text(line));
@@ -703,6 +774,7 @@ void App::on_engine(WPARAM tag, bool ended)
 				s.probe_id = 0;
 				s.old = true;
 				log(lang::f("log.old_engine", {engine_exe()}));
+				loaded_now();
 			}
 			changed = true;
 			continue;
@@ -793,6 +865,12 @@ void App::on_engine(WPARAM tag, bool ended)
 			hint_busy_ = hint_accept_ = false;
 		}
 		changed = true;
+	}
+	if (book_read) {  // the position shown is asked now
+		book_peek_.stop();
+		if (book_bytes_) log(lang::f("log.book_loaded", {book_file(), size_text(*book_bytes_)}));
+		else log(lang::f("log.book_missing", {book_file()}));
+		if (s.alive) request_analysis();
 	}
 	if (ask_missing && s.alive && !learning_) {
 		std::string out;

@@ -5,11 +5,13 @@
 #include <wrl/client.h>
 
 #include <algorithm>
+#include <bit>
 #include <cstdio>
 #include <cstring>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <unordered_set>
 
 #include "app.h"
 #include "lang.h"
@@ -453,6 +455,198 @@ static void test_graph_yields()
 	(void) graph_pos;
 }
 
+// The engine reads no command before its book is read: the book analyses wait, and only the position shown then is
+// asked (one that was left is not, and the commands do not fill the pipe of the engine).
+static void test_requests_wait_for_book()
+{
+	auto a = make_app();
+	start_engine(*a);
+	a->eng_[0].loaded = false;
+	a->show_eval_ = a->use_book_ = true;
+	a->count_ = false;
+	for (const char *mv : {"f5", "d6", "c3"}) {
+		a->game_.play(parse_square(mv));
+		a->request_analysis();
+		a->pump_graph();
+		CHECK(a->requests_.empty() && a->book_id_ == 0 && a->graph_id_ == 0);
+	}
+	a->book_bytes_ = 84;
+	feed(*a, "");  // (the answer to the "stop id=" sent first: the book is read)
+	CHECK(a->eng_[0].loaded);
+	CHECK(a->book_id_ != 0 && a->requests_.count(a->book_id_) && a->requests_[a->book_id_].pos == key_of(a->game_.now()));
+	CHECK(logged(*a, L"book を読み込みました") && logged(*a, L"（84 B）"));  // it is said, with the size of the book
+	auto none = make_app();
+	start_engine(*none);
+	none->eng_[0].loaded = false;
+	feed(*none, "");
+	CHECK(logged(*none, L"book のファイルがありません"));
+}
+
+// a book file of the positions with the values given, written as a book of the engine writes it
+struct FilePosition {
+	Position pos;
+	int value = 0;
+	int level = 0;
+	int leaf = kNoMove;      // on the position given
+	int leaf_value = 0;
+};
+constexpr unsigned kFileLines = 300007;  // (three bytes in the form 2)
+static void write_book_file(const std::wstring &path, const std::vector<FilePosition> &list, bool shuffled = false, int form = 1)
+{
+	std::vector<std::pair<u32, std::string>> rows;
+	for (const FilePosition &f : list) {
+		const BookBoard b = book_board(f.pos);
+		const char leaf = static_cast<char>(f.leaf == kNoMove ? 65 : symmetric_square(f.leaf, b.symmetry));
+		std::string r(form == 2 ? 23 : 40, '\0');
+		std::memcpy(r.data(), &b.player, 8);
+		std::memcpy(r.data() + 8, &b.opponent, 8);
+		if (form == 2) {
+			r[17] = static_cast<char>(f.level);
+			r[18] = r[19] = r[20] = static_cast<char>(f.value);
+			r[21] = static_cast<char>(f.leaf_value);
+			r[22] = leaf;
+			r.append(3, '\0');  // wins, draws, losses, then the lines
+			for (unsigned v = kFileLines; v; v >>= 7) r.push_back(static_cast<char>((v & 0x7f) | (v >= 0x80 ? 0x80 : 0)));
+		} else {
+			std::memcpy(r.data() + 28, &kFileLines, 4);
+			const short v = static_cast<short>(f.value);
+			std::memcpy(r.data() + 32, &v, 2);
+			std::memcpy(r.data() + 34, &v, 2);
+			std::memcpy(r.data() + 36, &v, 2);
+			r[39] = static_cast<char>(f.level);
+			r.push_back(static_cast<char>(f.leaf_value));  // the leaf: its value, its move
+			r.push_back(leaf);
+		}
+		rows.emplace_back(static_cast<u32>(book_hash(b.player, b.opponent) & 65535), std::move(r));
+	}
+	if (!shuffled) std::stable_sort(rows.begin(), rows.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
+	std::string out = form == 2 ? "NEDXBOOK" : "XADEKOOB";
+	if (form == 2) {
+		out.resize(64, '\0');
+		out[8] = 2;
+		out[10] = 64;
+		out[16] = 4;
+		out[17] = 5;
+		out[18] = 1;
+		const unsigned long long n = rows.size();
+		std::memcpy(out.data() + 48, &n, 8);
+	} else {
+		out.resize(42, '\0');
+		out[8] = 4;
+		out[9] = 5;
+		const unsigned n = static_cast<unsigned>(rows.size());
+		std::memcpy(out.data() + 38, &n, 4);
+	}
+	for (const auto &[bucket, r] : rows) out += r;
+	if (form == 2) {
+		out += "BEND";
+		out.resize(out.size() + 12, '\xff');
+	}
+	FILE *f = nullptr;
+	CHECK(_wfopen_s(&f, path.c_str(), L"wb") == 0 && f);
+	if (f) {
+		fwrite(out.data(), 1, out.size(), f);
+		fclose(f);
+	}
+}
+
+// Positions are found in a book file of any size, in any of their symmetries; a position not in it is not found; a
+// file not in the order of an engine, or of another form, is not used.
+static void test_book_file()
+{
+	const std::wstring path = make_app()->temp_dir_ + L"ng-book-file-test.dat";
+	std::vector<FilePosition> list;
+	std::vector<Position> outside;
+	std::unordered_set<u64> seen;
+	unsigned seed = 12345;
+	auto random = [&] { return seed = seed * 1103515245 + 12345, (seed >> 16) & 0x7fff; };
+	for (int game = 0; list.size() < 30000 && game < 100000; ++game) {
+		Position p;
+		for (int ply = 0; ply < 30 && !p.game_over(); ++ply) {
+			if (p.must_pass()) p = p.play(kPass);
+			u64 m = p.moves();
+			for (unsigned k = random() % std::popcount(m); k; --k) m &= m - 1;
+			p = p.play(std::countr_zero(m));
+			const BookBoard b = book_board(p);
+			if (!seen.insert(b.player ^ std::rotl(b.opponent, 17)).second) continue;
+			if (random() % 8 == 0) outside.push_back(p);
+			else list.push_back({p, static_cast<int>(random() % 129) - 64, static_cast<int>(random() % 61)});
+		}
+	}
+	BookFile file;
+	for (const int form : {1, 2}) {
+		write_book_file(path, list, false, form);
+		CHECK(file.open(path));
+		int wrong = 0;
+		for (size_t k = 0; k < list.size(); k += 97) {
+			const auto r = file.find(symmetric(list[k].pos, static_cast<int>(k % 8)));
+			if (!r || r->value != list[k].value || r->level != list[k].level || r->lines != kFileLines) ++wrong;
+		}
+		CHECK(wrong == 0);
+		wrong = 0;
+		for (size_t k = 0; k < outside.size(); k += 13)
+			if (file.find(outside[k])) ++wrong;
+		CHECK(wrong == 0 && file.usable());
+		file.close();
+		write_book_file(path, list, true, form);
+		CHECK(!file.open(path));
+	}
+	std::string other = "NEDXBOOK";
+	other.resize(1000, '\0');
+	FILE *f = nullptr;
+	if (_wfopen_s(&f, path.c_str(), L"wb") == 0 && f) {
+		fwrite(other.data(), 1, other.size(), f);
+		fclose(f);
+	}
+	CHECK(!file.open(path));
+	DeleteFileW(path.c_str());
+}
+
+// While the main engine reads its book, the values come from the book file (the same as its lines: the value of the
+// position after the move, with its sign changed, or the leaf); then they are the engine's, and a position it does
+// not know any more is not kept from the file.
+static void test_values_while_reading()
+{
+	auto a = make_app();
+	const std::wstring path = a->temp_dir_ + L"ng-book-peek-test.dat";
+	const Position start = Position{}.play(parse_square("f5"));  // (no two of its moves are the same by a symmetry)
+	const int d6 = parse_square("d6"), f4 = parse_square("f4"), f6 = parse_square("f6");
+	write_book_file(path, {{start, 0, 18, f6, 2}, {start.play(d6), -3, 21}});
+	start_engine(*a);
+	a->eng_[0].loaded = false;
+	a->show_eval_ = a->use_book_ = true;
+	a->count_ = false;
+	a->game_.play(parse_square("f5"));
+	// the search engine has given its own value
+	MoveEval *m = a->cache_.get(start).find(d6);
+	m->searched = true;
+	m->score = 9;
+	m->depth = 18;
+	a->book_peek_.start(path, a->hwnd_, WM_BOOK_PEEK, ++a->book_peek_generation_);
+	a->request_analysis();
+	const ULONGLONG end = GetTickCount64() + 10000;
+	while (GetTickCount64() < end && !a->cache_.get(start).book_peeked) {
+		pump_app(*a);
+		Sleep(1);
+	}
+	CHECK(a->cache_.get(start).book_peeked && a->cache_.get(start).in_book);
+	CellView v = a->cell_view(d6);
+	CHECK(v.has_value && v.value == 3 && v.level == 0);  // not the search's 9
+	v = a->cell_view(f6);
+	CHECK(v.has_value && v.value == 2);  // the leaf
+	CHECK(!a->cell_view(f4).has_value);
+	CHECK(!a->cache_.get(start).book_done);
+	feed(*a, "");  // the engine has read its book
+	const int id = a->book_id_;
+	CHECK(id != 0 && !a->book_peek_.running());
+	feed(*a, "!@begin id=" + std::to_string(id) + " ply=1 turn=white moves=3 book=1\n!@move id=" + std::to_string(id) +
+	             " sq=d6 book=1 value=4 level=21 lines=9\n!@move id=" + std::to_string(id) + " sq=f6 book=0\n!@end id=" +
+	             std::to_string(id) + " ms=0\n");
+	CHECK(a->cell_view(d6).value == 4);
+	CHECK(!a->cell_view(f6).has_value);
+	DeleteFileW(path.c_str());
+}
+
 // Every level of Edax (0 to 60) can be chosen.
 static void test_levels()
 {
@@ -879,6 +1073,31 @@ int main(int argc, char **argv)
 		std::printf(r ? "%d failures\n" : "all passed\n", failures);
 		return r;
 	}
+	if (argc == 3 && std::string(argv[1]) == "--peek") {
+		// the moves of the positions given as "board side" lines on the input, as the book file says (time in ms)
+		BookFile file;
+		if (!file.open(widen(argv[2]))) {
+			std::printf("not usable\n");
+			return 1;
+		}
+		for (std::string s; std::getline(std::cin, s);) {
+			Position p;
+			if (s.size() < 66) continue;
+			p.black = p.white = 0;
+			for (int k = 0; k < 64; ++k) {
+				if (s[k] == 'X') p.black |= u64{1} << k;
+				else if (s[k] == 'O') p.white |= u64{1} << k;
+			}
+			p.side = s[65] == 'X' ? kBlack : kWhite;
+			const ULONGLONG t0 = GetTickCount64();
+			const BookPeekAnswer a = book_peek_moves(file, p);
+			std::printf("position %s book=%d ms=%llu\n", s.c_str(), a.in_book ? 1 : 0, GetTickCount64() - t0);
+			for (const BookPeekMove &e : a.moves)
+				std::printf("move %s book=%d leaf=%d value=%d level=%d lines=%lld\n", square_name(e.sq).c_str(), e.in_book ? 1 : 0,
+				            e.leaf ? 1 : 0, e.value, e.level, e.lines);
+		}
+		return 0;
+	}
 	if (argc > 1 && std::string(argv[1]) == "--engine") {
 		for (std::string s; std::getline(std::cin, s);)
 			if (s.starts_with("!")) std::cout << s.substr(1) << std::endl;
@@ -914,6 +1133,12 @@ int main(int argc, char **argv)
 	test_precision_off();
 	std::printf("%s\n", "test_graph_yields");
 	test_graph_yields();
+	std::printf("%s\n", "test_requests_wait_for_book");
+	test_requests_wait_for_book();
+	std::printf("%s\n", "test_book_file");
+	test_book_file();
+	std::printf("%s\n", "test_values_while_reading");
+	test_values_while_reading();
 	std::printf("%s\n", "test_levels");
 	test_levels();
 	std::printf("%s\n", "test_forward_analysis");

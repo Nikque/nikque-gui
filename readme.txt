@@ -33,7 +33,7 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・newedax）は G
   出ません。book を軽くする機能（book reduce）は v4.5.5-nikque.20・newedax.5 からです。
   exe= を auto にすると、CPU に合わせて wEdax-x86-64-v4.exe・-v3.exe・wEdax-x86-64.exe から選びます。
 - book は付いていません。お持ちの book.dat をエンジンの data\book.dat に置くか、book= でファイルを
-  指します。book はエンジンが読みます（GUI は book のファイルを読みません）。book が無いときは、
+  指します。book はエンジンが読みます（GUI が読むのは、読み込みの間に評価値に必要な局面の分だけです）。book が無いときは、
   エンジンが data\book.dat に初期局面だけの小さな book を作ります（後でお持ちの book で置き換えて
   かまいません）。
 - 画面の言葉は「設定」→「言語」で選びます（日本語・English・简体中文・繁體中文）。
@@ -219,7 +219,7 @@ The GUI is under the MIT License. The engines (Edax nikque, newedax) are GPL and
   the Book tab stay empty. Making the book lighter (book reduce) needs v4.5.5-nikque.20 or newedax.5.
   With exe=auto the engine file is chosen for the CPU (wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe).
 - No book is included. Put your book.dat in data\book.dat of the engine, or point to it with book=.
-  The engine reads the book (the GUI never reads the file). Without a book the engine makes a small new book
+  The engine reads the book (the GUI only reads the positions it needs for the values while the engine loads it). Without a book the engine makes a small new book
   (the initial position only) in data\book.dat; replace it with your book later.
 - The language is chosen in Settings → Language.
 - The user manual is manual\en\README.md.
@@ -354,7 +354,7 @@ GUI 为 MIT 许可。引擎（Edax nikque、newedax）为 GPL，作为独立程�
 - 使用已有的引擎文件夹时，在 config.ini 的 [nikque]、[newedax] 的 dir= 指定。GUI 需要 v4.5.5-nikque.19、newedax.4 以后的
   book 分析命令（book moveinfo 等）；旧版本时上方栏显示「无 book 分析（旧引擎）」，不显示 book 值、树与 book 标签页。
   减小 book 的功能（book reduce）需要 v4.5.5-nikque.20、newedax.5 以后。
-- 不附带 book。请把您的 book.dat 放在引擎的 data\book.dat，或用 book= 指定。book 由引擎读取（GUI 不读取 book 文件）。
+- 不附带 book。请把您的 book.dat 放在引擎的 data\book.dat，或用 book= 指定。book 由引擎读取（引擎读取期间，GUI 只读取显示评价值所需的局面）。
   没有 book 时，引擎会在 data\book.dat 建立只含初始局面的小 book（之后可用您的 book 替换）。
 - 语言在「设置」→「语言」中选择。
 
@@ -400,7 +400,7 @@ GUI 為 MIT 授權。引擎（Edax nikque、newedax）為 GPL，作為獨立程�
 - 使用已有的引擎資料夾時，在 config.ini 的 [nikque]、[newedax] 的 dir= 指定。GUI 需要 v4.5.5-nikque.19、newedax.4 以後的
   book 分析命令（book moveinfo 等）；舊版本時上方列顯示「無 book 分析（舊引擎）」，不顯示 book 值、樹與 book 分頁。
   減小 book 的功能（book reduce）需要 v4.5.5-nikque.20、newedax.5 以後。
-- 不附帶 book。請把您的 book.dat 放在引擎的 data\book.dat，或用 book= 指定。book 由引擎讀取（GUI 不讀取 book 檔案）。
+- 不附帶 book。請把您的 book.dat 放在引擎的 data\book.dat，或用 book= 指定。book 由引擎讀取（引擎讀取期間，GUI 只讀取顯示評價值所需的局面）。
   沒有 book 時，引擎會在 data\book.dat 建立只含初始局面的小 book（之後可用您的 book 替換）。
 - 語言在「設定」→「語言」中選擇。
 

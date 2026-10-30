@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(nikque_gui VERSION 0.2.3 LANGUAGES CXX RC)
+project(nikque_gui VERSION 0.2.4 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -44,6 +44,7 @@ add_library(ng_app OBJECT
 	src/app_input.cpp
 	src/app_engine.cpp
 	src/analysis.cpp
+	src/bookpeek.cpp
 	src/openings.cpp
 	src/app_learn.cpp
 	src/app_tools.cpp

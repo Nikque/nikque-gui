@@ -28,7 +28,7 @@
 
 ## How it works
 
-The GUI starts the engines as child processes and communicates with them through text commands. The engine reads the book file; the GUI never reads it.
+The GUI starts the engines as child processes and communicates with them through text commands. The engine reads the book file. The GUI reads only the positions it needs for the values while the engine is still reading the book.
 
 Separate engines are started for separate roles:
 

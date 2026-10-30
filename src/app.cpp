@@ -212,6 +212,9 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	case WM_REDUCE:
 		reduce_counted();
 		return 0;
+	case WM_BOOK_PEEK:
+		book_peek_answers();
+		return 0;
 	case WM_ACTIVATEAPP:
 		active_ = wp != 0;
 		update_animation_timer();

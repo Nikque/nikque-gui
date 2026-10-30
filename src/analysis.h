@@ -56,6 +56,7 @@ struct PosInfo {
 	std::string book_params;       // the parameters the book parts were asked with
 	bool book_begun = false;
 	bool book_done = false;
+	bool book_peeked = false;      // the values of the book were looked up in its file (the engine was reading it)
 	bool in_book = false;
 	bool count_done = false;
 	// search

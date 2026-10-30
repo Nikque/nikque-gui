@@ -10,7 +10,7 @@
 | The book accuracy is heavy or slow | turn off Analysis → Compute the book accuracy: only the book values are shown. Moving the position stops the work on the position before and starts the new one; Input/Output → Stop the background work stops the work now |
 | Discs and numbers appear on other squares when the mouse is over a move | that is the expected line; View → Show on the board the expected line of the move under the mouse turns it off (off at first) |
 | "Book path not usable" | the book name is too long or has letters not in the code page of the system, and no short form can be given. Copy the book to a place with a short name, or rename it |
-| "Reading the book" for long | a large book takes time to read (the engine reads it) |
+| "Reading the book" for long | a large book takes time to read (the engine reads it). The values of the book are shown meanwhile; the accuracy, the umigame numbers and the other analyses come after it. When it is read, the log says where the book is and its size |
 | "Counting…" stays in the Book tab | near the start of a large book, counting the positions takes time. Turning off Analysis → Also count the book positions makes it faster |
 | "This file's path cannot be given to the engine" | it has spaces or letters the engine cannot read, and neither a short name nor the temporary folder could be used. Choose another place |
 | "The command has letters the engine cannot read" | a command of the command box or of a script has letters not in the code page of the system. It was not sent |
