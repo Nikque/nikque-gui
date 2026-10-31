@@ -8,8 +8,8 @@ IDR_LANG_JA RCDATA "../lang/ja.txt"
 CREATEPROCESS_MANIFEST_RESOURCE_ID RT_MANIFEST "app.manifest"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 0,3,0,0
-PRODUCTVERSION 0,3,0,0
+FILEVERSION 0,3,1,0
+PRODUCTVERSION 0,3,1,0
 FILEOS VOS_NT_WINDOWS32
 FILETYPE VFT_APP
 BEGIN
@@ -19,8 +19,8 @@ BEGIN
 		BEGIN
 			VALUE "FileDescription", "nikque GUI"
 			VALUE "ProductName", "nikque GUI"
-			VALUE "FileVersion", "0.3.0"
-			VALUE "ProductVersion", "0.3.0"
+			VALUE "FileVersion", "0.3.1"
+			VALUE "ProductVersion", "0.3.1"
 			VALUE "LegalCopyright", "MIT License"
 		END
 	END

@@ -128,7 +128,7 @@ A bookmark stores a game and a position in it. Pictures of the bookmarked positi
 
 ## Opening names
 
-The top bar shows the opening name, read from `opening.ini` next to the exe (included).
+The opening name is shown under the board ([The screen](03-screen.md)), read from `opening.ini` next to the exe (included).
 
 - It is a text file with one `name=moves` entry per line.
 - Moves are written from the start, with f5 as the first move.

@@ -47,6 +47,12 @@ The mark is a ribbon in the standard design and a heart in the paw design. It is
 
 View → Mark the moves on the lines of the openings turns them on or off (on at first). They stay when H hides the values.
 
+### Opening names
+
+When the position is a registered opening, its name is shown large under the board. Further on, the name of the last opening passed stays in dim letters. Going back shows the name for that position again.
+
+A click on the name hides it and leaves a short "(opening)"; another click shows it again.
+
 ### Expected line on the board
 
 With View → Show on the board the expected line of the move under the mouse turned on, hovering over a move draws the line that follows it (up to 12 moves) as semi-transparent discs with numbers.

@@ -901,21 +901,12 @@ void draw_bar(App &app)
 	else if (app.eng_[0].alive && app.eng_[0].old) eng += L"  " + lang::t("bar.old_engine");
 	else if (app.use_book_ && app.eng_[0].alive && !app.eng_[0].loaded) eng += L"  " + lang::t("bar.loading");
 	if (!app.use_book_) eng += L"  " + lang::t("bar.book_off");
-	// the opening name (a click hides it; hidden, a short mark stays to click again)
-	size_t opening_part = SIZE_MAX;
-	if (const std::wstring *name = app.openings_.name_at(app.game_)) {
-		opening_part = parts.size();
-		parts.push_back(app.show_opening_ ? *name : lang::t("bar.opening_hidden"));
-	}
 	if (const std::wstring game = play_bar_text(app); !game.empty()) parts.push_back(game);
 	parts.push_back(eng);
-	app.opening_rect_ = {};
 	float x = L.bar.left + 10 * L.scale;
 	for (size_t i = 0; i < parts.size(); ++i) {
 		const float tw = gx.text_width(parts[i], f);
-		const bool hidden = i == opening_part && !app.show_opening_;
-		gx.draw_text(parts[i], f, D2D1::RectF(x, L.bar.top, x + tw + 2, L.bar.bottom), hidden ? th.text_dim : th.text, false);
-		if (i == opening_part) app.opening_rect_ = {x, L.bar.top, x + tw + 2, L.bar.bottom};
+		gx.draw_text(parts[i], f, D2D1::RectF(x, L.bar.top, x + tw + 2, L.bar.bottom), th.text, false);
 		x += tw + 12 * L.scale;
 		dc->DrawLine({x, L.bar.top + L.row * 0.25f}, {x, L.bar.bottom - L.row * 0.25f}, gx.brush(th.line), 1.0f);
 		x += 12 * L.scale;

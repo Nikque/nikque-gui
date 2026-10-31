@@ -249,6 +249,7 @@ struct Layout {
 	float scale = 1;
 	float font = 14, font_s = 11, row = 24;
 	D2D1_RECT_F bar{}, board_area{}, panel{}, log{};
+	D2D1_RECT_F opening{};  // the row of the opening name under the board (empty without names)
 	// board: whole pixels
 	int cell = 40, line = 1, frame = 2;
 	int bx = 0, by = 0, board_px = 0;  // top left of the frame, size with the frame
@@ -338,7 +339,7 @@ public:
 	AnalysisCache cache_;
 	Openings openings_;
 	bool show_opening_ = true;
-	D2D1_RECT_F opening_rect_{};   // the opening name in the bar (a click hides it)
+	D2D1_RECT_F opening_rect_{};   // the opening name under the board (a click hides it)
 	// the small menus of book commands (greyed as a whole while the book is learning)
 	HMENU book_menu_ = nullptr, keep_menu_ = nullptr, learn_menu_ = nullptr, leaf_menu_ = nullptr;
 

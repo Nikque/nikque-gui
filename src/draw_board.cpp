@@ -51,6 +51,22 @@ D2D1_POINT_2F star_point(const Layout &L, int i)
 	return {L.bx + L.frame + kx * (L.cell + L.line) + h, L.by + L.frame + ky * (L.cell + L.line) + h};
 }
 
+// the mark of the openings, centered on x, y: filled, or only the outline
+void draw_opening_mark(Gfx &gx, const Theme &th, float x, float y, float size, bool filled)
+{
+	auto *dc = gx.dc();
+	dc->SetTransform(D2D1::Matrix3x2F::Scale(size, size) * D2D1::Matrix3x2F::Translation(x, y));
+	ID2D1Geometry *shape = th.hearts ? static_cast<ID2D1Geometry *>(gx.heart()) : gx.ribbon();
+	if (filled) {
+		dc->FillGeometry(shape, gx.brush(th.opening_mark));
+		dc->DrawGeometry(shape, gx.brush(th.opening_edge), 0.09f);
+	} else {
+		dc->DrawGeometry(shape, gx.brush(th.opening_edge), 0.26f);
+		dc->DrawGeometry(shape, gx.brush(th.opening_mark), 0.13f);
+	}
+	dc->SetTransform(D2D1::Matrix3x2F::Identity());
+}
+
 void draw_star_points(App &app, const Theme &th, const D2D1_RECT_F *limit)
 {
 	const Layout &L = app.lay_;
@@ -418,17 +434,7 @@ void draw_cell(App &app, int sq, double t)
 	// the lines of the openings, at the upper right: filled, this move makes an opening; only the outline, it is on the way
 	if (v.opening) {
 		const float size = c * (th.hearts ? 0.3f : 0.26f);
-		dc->SetTransform(D2D1::Matrix3x2F::Scale(size, size) *
-		                 D2D1::Matrix3x2F::Translation(rc.right - c * 0.17f, rc.top + (th.hearts ? c * 0.15f : c * 0.04f + size / 2)));
-		ID2D1Geometry *shape = th.hearts ? static_cast<ID2D1Geometry *>(gx.heart()) : gx.ribbon();
-		if (v.opening == 2) {
-			dc->FillGeometry(shape, gx.brush(th.opening_mark));
-			dc->DrawGeometry(shape, gx.brush(th.opening_edge), 0.09f);
-		} else {
-			dc->DrawGeometry(shape, gx.brush(th.opening_edge), 0.26f);
-			dc->DrawGeometry(shape, gx.brush(th.opening_mark), 0.13f);
-		}
-		dc->SetTransform(D2D1::Matrix3x2F::Identity());
+		draw_opening_mark(gx, th, rc.right - c * 0.17f, rc.top + (th.hearts ? c * 0.15f : c * 0.04f + size / 2), size, v.opening == 2);
 	}
 
 	if (v.pv_num > 0) {
@@ -441,6 +447,45 @@ void draw_cell(App &app, int sq, double t)
 		IDWriteTextFormat *f = gx.text(std::round(c * 0.3f), true, DWRITE_TEXT_ALIGNMENT_CENTER, Face::Number);
 		gx.draw_text(std::to_wstring(v.pv_num), f, rc, black ? rgb(0xffffff) : rgb(0x09090b));
 	}
+}
+
+// the opening name under the board: on a plate with the mark when the position is the opening, plain and dim after it
+// (a click hides it; hidden, a short mark stays to click again)
+static void draw_opening_name(App &app, const Theme &th)
+{
+	const Layout &L = app.lay_;
+	Gfx &gx = app.gfx_;
+	auto *dc = gx.dc();
+	app.opening_rect_ = {};
+	if (L.opening.bottom <= L.opening.top || app.editing_) return;
+	const std::wstring *name = app.openings_.name_at(app.game_);
+	if (!name) return;
+	const D2D1_RECT_F box{L.opening.left, L.opening.top + std::round(6 * L.scale), L.opening.right, L.opening.bottom};
+	app.opening_rect_ = box;
+	if (!app.show_opening_) {
+		gx.draw_text(lang::t("bar.opening_hidden"), gx.text(L.font_s, false, DWRITE_TEXT_ALIGNMENT_CENTER), box, th.text_dim);
+		return;
+	}
+	const bool now = app.openings_.mark(app.game_.now()) == 2;
+	if (!now) {
+		gx.draw_text(*name, gx.text(L.font, false, DWRITE_TEXT_ALIGNMENT_CENTER), box, th.text_dim);
+		return;
+	}
+	const float corner = (box.bottom - box.top) * 0.3f;
+	dc->FillRoundedRectangle(D2D1::RoundedRect(box, corner, corner), gx.brush(th.panel2));
+	dc->DrawRoundedRectangle(D2D1::RoundedRect(box, corner, corner), gx.brush(th.opening_mark), std::round(1.5f * L.scale));
+	// the name with the mark on its left, in the middle; a long name gets smaller to fit
+	float px = std::round(L.font * 1.25f);
+	const float size = std::round(px * (th.hearts ? 1.0f : 0.8f)), gap = std::round(px * 0.45f);
+	const float room = box.right - box.left - size - gap - 2 * corner;
+	float tw = gx.text_width(*name, gx.text(px, true));
+	if (tw > room) {
+		px = std::max(L.font_s, std::floor(px * room / tw));
+		tw = gx.text_width(*name, gx.text(px, true));
+	}
+	const float x = std::max(box.left + corner, std::round((box.left + box.right - size - gap - tw) / 2));
+	draw_opening_mark(gx, th, x + size / 2, (box.top + box.bottom) / 2, size, true);
+	gx.draw_text(*name, gx.text(px, true), D2D1::RectF(x + size + gap, box.top, box.right - corner, box.bottom), th.text);
 }
 
 void draw_board(App &app)
@@ -485,6 +530,7 @@ void draw_board(App &app)
 
 	const double t = app.now_s();
 	for (int sq = 0; sq < 64; ++sq) draw_cell(app, sq, t);
+	draw_opening_name(app, th);
 }
 
 }  // namespace ng

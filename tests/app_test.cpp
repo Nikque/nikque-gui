@@ -673,6 +673,12 @@ static void test_opening_marks()
 	CHECK(a->script_command("openingmarks off", 1, &err));
 	CHECK(mark("c5") == 0 && mark("d2") == 0);
 	CHECK(a->script_command("openingmarks on", 1, &err));
+	// the name under the board: the position is the opening, then the name stays after it
+	CHECK(a->openings_.name_at(a->game_) && *a->openings_.name_at(a->game_) == L"イエス流");
+	CHECK(a->openings_.mark(a->game_.now()) == 2);
+	a->game_.play(parse_square("d7"));
+	CHECK(a->openings_.name_at(a->game_) && *a->openings_.name_at(a->game_) == L"イエス流");
+	CHECK(a->openings_.mark(a->game_.now()) == 0);
 	// the same line turned by a symmetry of the initial position
 	a->game_ = Game{};
 	const int s = 4;

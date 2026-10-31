@@ -913,7 +913,9 @@ void App::layout()
 		if (L.panel_below) area_h = std::round(ch * 0.62f);
 		else area_w = std::max(120.0f, W - want_panel);
 	}
-	const float avail = std::max(40.0f, std::min(area_w - coord - 2 * pad, area_h - coord - 2 * pad));
+	// the row of the opening name is kept all the time: the board stays where it is when a name comes
+	const float name_h = openings_.empty() ? 0 : std::round(L.row * 1.4f);
+	const float avail = std::max(40.0f, std::min(area_w - coord - 2 * pad, area_h - coord - name_h - 2 * pad));
 	int cell = std::max(4, static_cast<int>(avail / 8));
 	int lw = 1, fw = 2;
 	for (; cell > 4; --cell) {
@@ -926,6 +928,7 @@ void App::layout()
 	L.frame = fw;
 	L.board_px = 8 * cell + 9 * lw + 2 * fw;
 	const float block = L.board_px + coord;  // the board with the coordinates
+	const float block_h = block + name_h;
 	if (panel_hidden_) {
 		L.board_area = {0, top, W, bottom};
 		L.panel = {W, top, W, bottom};
@@ -934,13 +937,15 @@ void App::layout()
 		L.board_area = {0, top, used, bottom};
 		L.panel = {used, top, W, bottom};
 	} else {
-		const float used = std::round(block + 2 * pad);
+		const float used = std::round(block_h + 2 * pad);
 		L.board_area = {0, top, W, top + used};
 		L.panel = {0, top + used, W, bottom};
 	}
 	const float aw = L.board_area.right - L.board_area.left, ah = L.board_area.bottom - L.board_area.top;
 	L.bx = static_cast<int>(L.board_area.left + coord + std::floor((aw - block) / 2));
-	L.by = static_cast<int>(L.board_area.top + coord + std::floor((ah - block) / 2));
+	L.by = static_cast<int>(L.board_area.top + coord + std::floor((ah - block_h) / 2));
+	const float board_bottom = static_cast<float>(L.by + L.board_px);
+	L.opening = {static_cast<float>(L.bx), board_bottom, static_cast<float>(L.bx + L.board_px), board_bottom + name_h};
 	L.panel_split = {L.panel.left - 4 * L.scale, top, L.panel.left + 4 * L.scale, bottom};
 
 	// the panel
