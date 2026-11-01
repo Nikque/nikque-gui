@@ -39,7 +39,7 @@ void PosInfo::reset_book()
 		m.cmp_bound = keep.cmp_bound;
 	}
 	book_params.clear();
-	book_begun = book_done = book_peeked = in_book = count_done = false;
+	book_begun = book_done = book_peeked = values_done = in_book = count_done = false;
 	levels_done = false;
 	levels.clear();
 	levels_positions = -1;

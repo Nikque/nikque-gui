@@ -173,8 +173,9 @@ void App::forget_main_requests()
 {
 	requests_.clear();
 	stopped_.clear();
-	book_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = findline_id_ = list_book_id_ = 0;
+	book_id_ = values_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = findline_id_ = list_book_id_ = 0;
 	missing_ = MissingList{};
+	stages_held_ = false;
 	cancel_reduce(nullptr);  // the count of book reduce goes with them (its answer may have come: it is for that book)
 	book_peek_.stop();
 }
@@ -226,7 +227,7 @@ std::string App::stop_main_analyses()
 {
 	std::string out;
 	if (missing_id_) missing_.asked = false;  // asked again
-	for (int *id : {&book_id_, &count_id_, &levels_id_, &best_id_, &graph_id_, &missing_id_}) stop_request(out, *id);
+	for (int *id : {&book_id_, &values_id_, &count_id_, &levels_id_, &best_id_, &graph_id_, &missing_id_}) stop_request(out, *id);
 	return out;
 }
 
@@ -360,11 +361,65 @@ void App::restart_engines()
 	position_changed();
 }
 
+// With the precision stages the engine writes the rows of the book moves when their stages are known, at the end of an
+// answer that may take minutes (and the end of an answer with the umigame numbers may be as far). The values are asked
+// by themselves, before all the rest: the analyses are done one after the other, and an answer of nothing else is
+// there at once.
+void App::ask_book_values(std::string &out, const Position &p)
+{
+	board_to(0, out, p);
+	values_id_ = new_id();
+	out += "book moveinfo id=" + std::to_string(values_id_) + " parts=\n";
+	requests_[values_id_] = {Request::Values, key_of(p)};
+}
+
+std::optional<Position> App::next_values()
+{
+	if (tab_ == Tab::Tree && !panel_hidden_)
+		if (const auto p = tree_next_wanted(true)) return p;
+	for (int i = 0; i <= game_.size(); ++i) {
+		const Position &p = game_.at(i);
+		if (p.game_over() || p.must_pass()) continue;
+		const PosInfo *info = cache_.peek(p);
+		if (!info || !info->values_done) return p;
+	}
+	return std::nullopt;
+}
+
+// The engine reads its book, learns, or has a long job to do that moving the position does not stop (the analyses are
+// done one after the other): nothing is asked behind it, and the book file is looked up meanwhile.
+bool App::book_held() const
+{
+	if (!eng_[0].loaded || learning_) return true;
+	for (const auto &[id, r] : requests_) {
+		if (r.kind == Request::FindLine || r.kind == Request::ListBook || r.kind == Request::ListBookAdd ||
+		    r.kind == Request::BestExport || r.kind == Request::ReduceCount)
+			return true;
+	}
+	return false;
+}
+
 // The book analyses of the other positions of the game, for the points of the graph: one at a time and only
-// while the position shown has nothing waiting, so that it is never kept waiting by them.
+// while the position shown has nothing waiting, so that it is never kept waiting by them. The values of all the
+// positions (and of the open nodes of the tree) go before everything else.
 void App::pump_graph()
 {
-	if (!eng_[0].alive || !eng_[0].loaded || learning_ || !use_book_ || !show_eval_ || graph_id_ || book_id_ || background_paused_) return;
+	if (!eng_[0].alive || book_held() || !use_book_ || !show_eval_ || values_id_) return;
+	if (!background_paused_ && values_apart()) {
+		if (const auto p = next_values()) {
+			std::string out = stop_main_analyses();
+			stages_held_ = true;
+			ask_book_values(out, *p);
+			send(0, out);
+			return;
+		}
+	}
+	if (stages_held_) {
+		stages_held_ = false;
+		request_analysis();
+		return;
+	}
+	if (graph_id_ || book_id_ || background_paused_) return;
 	const std::string params = book_params();
 	auto ask = [&](const Position &p) {
 		const PosKey key = key_of(p);
@@ -402,7 +457,7 @@ void App::request_book_peek()
 	auto add = [&](const Position &p) {
 		if (p.game_over()) return;
 		const PosInfo *info = cache_.peek(p);
-		if (info && (info->book_peeked || info->book_done)) return;
+		if (info && (info->book_peeked || info->values_done)) return;
 		if (std::find(wanted.begin(), wanted.end(), p) == wanted.end()) wanted.push_back(p);
 	};
 	add(game_.now());
@@ -415,7 +470,7 @@ void App::book_peek_answers()
 {
 	std::vector<BookPeekAnswer> answers;
 	book_peek_.take(answers);
-	if (eng_[0].loaded) return;  // the engine answers now
+	if (!book_held()) return;  // the engine answers now
 	bool changed = false;
 	for (const BookPeekAnswer &a : answers) {
 		if (a.generation != book_peek_generation_) continue;
@@ -448,9 +503,14 @@ void App::request_analysis()
 	const bool want = show_eval_ && !p.game_over();
 
 	// ---- main engine: the book analyses of the position
-	if (eng_[0].alive && !eng_[0].loaded) {
+	if (eng_[0].alive && book_held()) {
+		if (eng_[0].loaded) {
+			if (!learning_) send(0, stop_main_analyses());
+			if (!book_peek_.running()) book_peek_.start(book_file(), hwnd_, WM_BOOK_PEEK, ++book_peek_generation_);
+		}
 		request_book_peek();
-	} else if (eng_[0].alive && !learning_) {  // no analysis while the book is learning
+	} else if (eng_[0].alive) {
+		book_peek_.stop();
 		std::string out;
 		auto cancel = [&](int &id, bool keep) {
 			if (!keep) stop_request(out, id);
@@ -461,12 +521,17 @@ void App::request_analysis()
 		const std::string params = book_params();
 		const bool params_changed = info && info->set_book_params(params);
 		cancel(book_id_, book_on && same(book_id_) && !params_changed);
+		cancel(values_id_, book_on && same(values_id_));
+		const bool ask_values = info && values_apart() && !info->values_done && !values_id_;
+		// the rest is asked when the values are there: of the position shown, of the game and of the tree
+		const bool wait_values = info && values_apart() && (ask_values || values_id_ || (!background_paused_ && next_values()));
+		info = book_on ? &cache_.get(p) : nullptr;  // (the lookup of the nodes of the tree may make room)
 		// a point of the graph asked with other book settings is of no use any more; the position shown goes first:
-		// a point of the graph for it becomes its request, one for another position waits while it is not known (the
-		// analyses of the engine are done one after the other)
+		// a point of the graph for it becomes its request (unless it would hold the values back), one for another
+		// position waits while it is not known (the analyses of the engine are done one after the other)
 		const auto graph = requests_.find(graph_id_);
 		const bool graph_ok = graph != requests_.end() && graph->second.params == params;
-		if (graph_ok && info && !info->book_done && !book_id_ && graph->second.pos == key) {
+		if (graph_ok && info && !info->book_done && !book_id_ && graph->second.pos == key && !wait_values) {
 			graph->second.kind = Request::Book;
 			book_id_ = graph_id_;
 			graph_id_ = 0;
@@ -477,31 +542,40 @@ void App::request_analysis()
 		cancel(best_id_, book_on && tab_ == Tab::Book && same(best_id_));
 		if (info) {
 			auto board = [&] { board_to(0, out, p); };
-			if (!info->book_done && !book_id_) {
-				board();
-				book_id_ = new_id();
-				out += "book moveinfo id=" + std::to_string(book_id_) + " " + params + "\n";
-				requests_[book_id_] = {Request::Book, key, params};
+			if (missing_id_ && !same(missing_id_)) {  // (it may take long; asked again by the tab that shows it)
+				missing_.asked = false;
+				stop_request(out, missing_id_);
 			}
-			if (count_ && !info->count_done && !count_id_) {
-				board();
-				count_id_ = new_id();
-				out += "book moveinfo id=" + std::to_string(count_id_) + " parts=count\n";
-				requests_[count_id_] = {Request::Count, key};
+			if (ask_values) ask_book_values(out, p);
+			if (wait_values) {
+				stages_held_ = true;
+			} else {
+				if (!info->book_done && !book_id_) {
+					board();
+					book_id_ = new_id();
+					out += "book moveinfo id=" + std::to_string(book_id_) + " " + params + "\n";
+					requests_[book_id_] = {Request::Book, key, params};
+				}
+				if (count_ && !info->count_done && !count_id_) {
+					board();
+					count_id_ = new_id();
+					out += "book moveinfo id=" + std::to_string(count_id_) + " parts=count\n";
+					requests_[count_id_] = {Request::Count, key};
+				}
+				if (tab_ == Tab::Book && !info->levels_done && !levels_id_) {
+					board();
+					levels_id_ = new_id();
+					out += "book levels id=" + std::to_string(levels_id_) + "\n";
+					requests_[levels_id_] = {Request::Levels, key};
+				}
+				if (tab_ == Tab::Book && !info->best_done && !best_id_) {
+					board();
+					best_id_ = new_id();
+					out += "book bestlines id=" + std::to_string(best_id_) + "\n";  // loss 0: the best moves only
+					requests_[best_id_] = {Request::Best, key};
+				}
+				request_missing(out, p);
 			}
-			if (tab_ == Tab::Book && !info->levels_done && !levels_id_) {
-				board();
-				levels_id_ = new_id();
-				out += "book levels id=" + std::to_string(levels_id_) + "\n";
-				requests_[levels_id_] = {Request::Levels, key};
-			}
-			if (tab_ == Tab::Book && !info->best_done && !best_id_) {
-				board();
-				best_id_ = new_id();
-				out += "book bestlines id=" + std::to_string(best_id_) + "\n";  // loss 0: the best moves only
-				requests_[best_id_] = {Request::Best, key};
-			}
-			request_missing(out, p);
 		}
 		send(0, out);
 		pump_graph();
@@ -603,6 +677,7 @@ void App::on_engine(WPARAM tag, bool ended)
 	std::vector<std::string> lines;
 	s.proc.take_lines(lines);
 	if (role == 0) unmix_lines(lines, s.open);
+	const bool held = role == 0 && book_held();
 	bool changed = false, ask_missing = false, book_read = false;
 	const PosKey here = key_of(game_.now());
 	auto loaded_now = [&] {
@@ -733,10 +808,16 @@ void App::on_engine(WPARAM tag, bool ended)
 				if (done && f.num("error").value_or(0)) log(lang::f("log.analysis_error", {engine_text(line)}));
 				if (req.kind == Request::Book) {
 					info.book_done = done;
+					info.values_done = info.values_done || done;
 					if (book_id_ == id) book_id_ = 0;
 					if (done && req.pos == here) ask_missing = true;  // the best book move is known now
+				} else if (req.kind == Request::Values) {
+					info.values_done = done;
+					changed = true;  // the position shown, or a point of the graph
+					if (values_id_ == id) values_id_ = 0;
 				} else if (req.kind == Request::Graph) {
 					info.book_done = done;
+					info.values_done = info.values_done || done;
 					changed = true;  // a point of the graph
 					if (graph_id_ == id) graph_id_ = 0;
 				} else if (req.kind == Request::Count) {
@@ -872,6 +953,7 @@ void App::on_engine(WPARAM tag, bool ended)
 		else log(lang::f("log.book_missing", {book_file()}));
 		if (s.alive) request_analysis();
 	}
+	if (held && !book_read && s.alive && !book_held()) request_analysis();  // the long job has ended
 	if (ask_missing && s.alive && !learning_) {
 		std::string out;
 		request_missing(out, game_.now());
@@ -882,7 +964,7 @@ void App::on_engine(WPARAM tag, bool ended)
 	// the computer waits for the book analysis of the position (its opening moves)
 	if (role == 0 && com_waiting_book_) {
 		const PosInfo *info = cache_.peek(game_.now());
-		if (info && info->book_done) {
+		if (info && info->values_done) {
 			com_waiting_book_ = false;
 			KillTimer(hwnd_, 4);
 			com_think();

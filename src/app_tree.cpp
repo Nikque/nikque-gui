@@ -67,8 +67,9 @@ bool App::tree_visible(const std::vector<int> &path) const
 	return true;
 }
 
-// the next position of the open nodes still without its book analysis (the root first, then by the paths)
-std::optional<Position> App::tree_next_wanted()
+// the next position of the open nodes still without its book analysis, or without its values (the root first, then by
+// the paths)
+std::optional<Position> App::tree_next_wanted(bool values)
 {
 	const std::string params = book_params();
 	// the answers of the open nodes are kept beside the positions of the game (the graph) and a few others: when more
@@ -80,7 +81,7 @@ std::optional<Position> App::tree_next_wanted()
 		if (p.game_over()) continue;
 		PosInfo &info = cache_.get(p);
 		info.set_book_params(params);
-		if (!info.book_done) return p;
+		if (values ? !info.values_done : !info.book_done) return p;
 	}
 	return std::nullopt;
 }

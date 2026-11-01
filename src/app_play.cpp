@@ -118,7 +118,7 @@ void App::com_think()
 	const bool book_skipped = com_no_book_set_ && com_no_book_ == key;
 	if (opening_ != Opening::Search && use_book_ && p.ply() < opening_until_ && eng_[0].alive && !learning_ && !book_skipped) {
 		const PosInfo *info = cache_.peek(p);
-		if (!info || !info->book_done) {
+		if (!info || !info->values_done) {
 			com_waiting_book_ = true;  // com_think again when the answer has come (or the timer)
 			SetTimer(hwnd_, kTimerCom, kBookWaitMs, nullptr);
 			return;

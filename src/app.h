@@ -319,7 +319,7 @@ struct MissingList {
 
 // a request to the main engine, by id
 struct Request {
-	enum Kind { Book, Count, Levels, Graph, Missing, Best, BestExport, FindLine, ListBook, ListBookAdd, ReduceCount } kind;
+	enum Kind { Book, Values, Count, Levels, Graph, Missing, Best, BestExport, FindLine, ListBook, ListBookAdd, ReduceCount } kind;
 	PosKey pos;
 	std::string params;  // the book settings asked with (book_params, Book and Graph)
 };
@@ -400,6 +400,8 @@ public:
 	std::unordered_map<int, Request> requests_;
 	std::unordered_set<int> stopped_;  // requests stopped whose answer has not ended yet: their numbers stay taken
 	int book_id_ = 0, count_id_ = 0, levels_id_ = 0, best_id_ = 0;   // running on the main engine
+	int values_id_ = 0;        // the values of the book moves of a position, asked before its stages
+	bool stages_held_ = false; // the other analyses of the position shown are asked when the values have come
 	std::wstring best_file_;   // the file the best lines are written to (book bestlines file=)
 	int graph_id_ = 0;         // the book analysis of another position of the game (for the graph), one at a time
 	int missing_id_ = 0;
@@ -616,6 +618,10 @@ public:
 	void paste_moves();
 	bool paste_text(const std::string &utf8);  // moves, a board or bitboards; false when none
 	std::wstring record_text() const;          // the moves up to the position shown, as they are given out
+	void ask_book_values(std::string &out, const Position &p);
+	bool values_apart() const { return precision_ || umi_ != UmiMode::Off; }  // the answer of book moveinfo may take long
+	std::optional<Position> next_values();     // the next position whose values are wanted (the shown one is asked at once)
+	bool book_held() const;                    // the main engine cannot answer book analyses for now
 	void create_record_box();
 	void place_record_box();                   // after the layout
 	void sync_record_box(bool force = false);  // the text box follows the game, but not while it is typed in
@@ -754,7 +760,7 @@ public:
 	void tree_sync();
 	Position tree_position(const std::vector<int> &path) const;
 	bool tree_visible(const std::vector<int> &path) const;
-	std::optional<Position> tree_next_wanted();
+	std::optional<Position> tree_next_wanted(bool values = false);
 	bool tree_waiting() const;
 	void tree_click(const TreeRow &row, bool on_arrow);
 	void tree_go(const std::vector<int> &path);

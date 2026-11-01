@@ -67,6 +67,12 @@ static void feed(App &a, const std::string &lines)
 	CHECK(a.eng_[0].probe_id == 0);
 }
 
+// the values of the book are asked before the rest, a position at a time
+static void answer_values(App &a)
+{
+	while (const int id = a.values_id_) feed(a, "!@end id=" + std::to_string(id) + " ms=0\n");
+}
+
 static bool logged(const App &a, const std::wstring &text)
 {
 	for (const auto &l : a.log_)
@@ -258,6 +264,7 @@ static void test_settings_keep_counts()
 	a->show_eval_ = a->use_book_ = a->count_ = true;
 	a->tab_ = Tab::Book;
 	a->request_analysis();
+	answer_values(*a);
 	const int count = a->count_id_, levels = a->levels_id_;
 	CHECK(count && levels);
 	const std::string c = std::to_string(count), l = std::to_string(levels);
@@ -306,6 +313,7 @@ static void test_old_settings()
 	start_engine(*a);
 	a->show_eval_ = a->use_book_ = true;
 	a->count_ = false;
+	a->cache_.get(a->game_.now()).values_done = true;  // (the stages are asked)
 	a->pump_graph();
 	const int old = a->graph_id_;
 	CHECK(old != 0);
@@ -406,6 +414,7 @@ static void test_precision_off()
 	std::wstring err;
 	CHECK(a->script_command("precision off", 1, &err));
 	a->request_analysis();
+	answer_values(*a);
 	const int off = a->book_id_;
 	CHECK(off != 0 && a->requests_.count(off) && a->requests_[off].params.find("parts=umi") != std::string::npos &&
 	      a->requests_[off].params.find("parts=stage") == std::string::npos);
@@ -432,6 +441,7 @@ static void test_graph_yields()
 	for (const char *mv : {"f5", "d6", "c3", "d3"}) a->game_.play(parse_square(mv));
 	a->game_.go_to(0);
 	a->request_analysis();
+	answer_values(*a);
 	const int first = a->book_id_;
 	CHECK(first != 0);
 	feed(*a, "!@begin id=" + std::to_string(first) + " ply=0 turn=black moves=4 book=1\n!@end id=" + std::to_string(first) + " ms=0\n");
@@ -455,6 +465,72 @@ static void test_graph_yields()
 	(void) graph_pos;
 }
 
+// With the precision stages the engine writes the rows of the book moves at the end of its answer, which may take
+// minutes: the values are asked first, by themselves, and replace the values of the search at once; those of the other
+// positions of the game come before their stages too. Without the stages the answer starts with them.
+static void test_book_values_first()
+{
+	auto a = make_app();
+	start_engine(*a);
+	a->show_eval_ = a->use_book_ = true;
+	a->count_ = false;
+	for (const char *mv : {"f5", "d6", "c3"}) a->game_.play(parse_square(mv));
+	a->game_.go_to(0);
+	MoveEval *m = a->cache_.get(a->game_.now()).find(parse_square("f5"));
+	m->searched = true;
+	m->score = 9;
+	m->depth = 12;
+	a->request_analysis();
+	const int values = a->values_id_;
+	CHECK(values != 0 && a->book_id_ == 0);  // (the analyses are done one after the other)
+	CHECK(a->requests_.count(values) && a->requests_[values].kind == Request::Values);
+	CHECK(a->cell_view(parse_square("f5")).value == 9);
+	const std::string id = std::to_string(values);
+	feed(*a, "!@begin id=" + id + " ply=0 turn=black moves=4 book=1\n!@move id=" + id + " sq=f5 book=1 value=3 level=4 lines=10\n!@end id=" + id + " ms=0\n");
+	CHECK(a->values_id_ != values);
+	CellView v = a->cell_view(parse_square("f5"));
+	CHECK(v.has_value && v.value == 3);  // the book, while the stages are not known
+	CHECK(a->cache_.get(a->game_.now()).values_done && !a->cache_.get(a->game_.now()).book_done);
+	// the other positions: their values, and only then the stages
+	CHECK(a->values_id_ != 0 && a->book_id_ == 0 && a->graph_id_ == 0);
+	while (const int next = a->values_id_) {
+		CHECK(a->book_id_ == 0 && a->requests_[next].kind == Request::Values && a->requests_[next].pos != key_of(a->game_.now()));
+		feed(*a, "!@end id=" + std::to_string(next) + " ms=0\n");
+	}
+	const int book = a->book_id_;
+	CHECK(book != 0 && a->requests_[book].kind == Request::Book && a->requests_[book].pos == key_of(a->game_.now()));
+	const std::string bid = std::to_string(book);
+	feed(*a, "!@move id=" + bid + " sq=f5 book=1 value=3 level=4 lines=10 stage=2 missing=0\n!@end id=" + bid + " ms=0\n");
+	v = a->cell_view(parse_square("f5"));
+	CHECK(v.value == 3 && v.stage == 2);
+	CHECK(a->graph_id_ != 0 && a->requests_[a->graph_id_].kind == Request::Graph);
+	// leaving the position stops its values
+	a->cache_.clear_book();
+	a->request_analysis();
+	const int left = a->values_id_;
+	CHECK(left != 0);
+	a->game_.go_to(1);
+	a->request_analysis();
+	CHECK(a->stopped_.count(left) && a->values_id_ != 0 && a->values_id_ != left);
+	CHECK(a->requests_[a->values_id_].pos == key_of(a->game_.now()));
+	// a point of the graph for a position not known yet holds its values back: it is not taken for the position
+	const int v3 = a->values_id_;
+	feed(*a, "!@cancel id=" + std::to_string(left) + "\n");
+	a->game_.go_to(2);
+	a->graph_id_ = 77;
+	a->requests_[77] = {Request::Graph, key_of(a->game_.now()), a->book_params()};
+	a->request_analysis();
+	CHECK(a->stopped_.count(77) && a->stopped_.count(v3) && a->graph_id_ == 0 && a->values_id_ != 0);
+	// another position's list of missing leaves is stopped too
+	a->stopped_.clear();
+	a->requests_[78] = {Request::Missing, key_of(a->game_.at(0))};
+	a->missing_id_ = 78;
+	a->missing_.pos = key_of(a->game_.at(0));
+	a->game_.go_to(3);
+	a->request_analysis();
+	CHECK(a->stopped_.count(78) && a->missing_id_ == 0);
+}
+
 // The engine reads no command before its book is read: the book analyses wait, and only the position shown then is
 // asked (one that was left is not, and the commands do not fill the pipe of the engine).
 static void test_requests_wait_for_book()
@@ -473,6 +549,7 @@ static void test_requests_wait_for_book()
 	a->book_bytes_ = 84;
 	feed(*a, "");  // (the answer to the "stop id=" sent first: the book is read)
 	CHECK(a->eng_[0].loaded);
+	answer_values(*a);
 	CHECK(a->book_id_ != 0 && a->requests_.count(a->book_id_) && a->requests_[a->book_id_].pos == key_of(a->game_.now()));
 	CHECK(logged(*a, L"book を読み込みました") && logged(*a, L"（84 B）"));  // it is said, with the size of the book
 	auto none = make_app();
@@ -637,6 +714,7 @@ static void test_values_while_reading()
 	CHECK(!a->cell_view(f4).has_value);
 	CHECK(!a->cache_.get(start).book_done);
 	feed(*a, "");  // the engine has read its book
+	answer_values(*a);
 	const int id = a->book_id_;
 	CHECK(id != 0 && !a->book_peek_.running());
 	feed(*a, "!@begin id=" + std::to_string(id) + " ply=1 turn=white moves=3 book=1\n!@move id=" + std::to_string(id) +
@@ -644,6 +722,107 @@ static void test_values_while_reading()
 	             std::to_string(id) + " ms=0\n");
 	CHECK(a->cell_view(d6).value == 4);
 	CHECK(!a->cell_view(f6).has_value);
+	DeleteFileW(path.c_str());
+}
+
+// What needs the values of the book does not wait for the rest of the analyses, and the values come while the engine
+// cannot answer: a long job goes first (it is not stopped by moving the position) or the book is learning.
+static void test_values_not_held_back()
+{
+	const int f5 = parse_square("f5"), d6 = parse_square("d6");
+	const Position after = Position{}.play(f5);
+	auto ready = [&] {
+		auto a = make_app();
+		start_engine(*a);
+		a->show_eval_ = a->use_book_ = true;
+		a->count_ = false;
+		return a;
+	};
+	{  // the computer's opening move: the stages are not known yet
+		auto a = ready();
+		a->play_mode_ = PlayMode::HumanWhite;
+		a->opening_ = Opening::BookBest;
+		a->opening_until_ = 20;
+		PosInfo &info = a->cache_.get(a->game_.now());
+		info.values_done = true;
+		MoveEval *m = info.find(f5);
+		m->in_book = true;
+		m->book_value = 1;
+		a->com_think();
+		CHECK(!a->com_waiting_book_ && a->com_book_move_ == f5);
+		a->com_stop();
+	}
+	{  // an open node of the tree: its values go before the stages running for another position
+		auto a = ready();
+		a->tab_ = Tab::Tree;
+		a->tree_sync();
+		a->tree_open_.insert(std::vector<int>{f5});
+		a->cache_.get(a->game_.now()).values_done = true;
+		a->graph_id_ = 77;
+		a->requests_[77] = {Request::Graph, key_of(a->game_.now()), a->book_params()};
+		a->pump_graph();
+		CHECK(a->stopped_.count(77) && a->graph_id_ == 0);
+		CHECK(a->values_id_ != 0 && a->requests_[a->values_id_].kind == Request::Values && a->requests_[a->values_id_].pos == key_of(after));
+	}
+	{  // without the stages but with the umigame numbers: the end of the answer may be far too
+		auto a = ready();
+		a->precision_ = false;
+		a->request_analysis();
+		CHECK(a->values_id_ != 0);
+	}
+	{  // nothing that takes long: the answer is the values
+		auto a = ready();
+		a->precision_ = false;
+		a->umi_ = UmiMode::Off;
+		a->request_analysis();
+		CHECK(a->values_id_ == 0 && a->book_id_ != 0);
+	}
+	{  // the list of missing leaves of another position stops, shown or not
+		auto a = ready();
+		a->precision_ = false;
+		a->umi_ = UmiMode::Off;
+		a->requests_[78] = {Request::Missing, key_of(after)};
+		a->missing_id_ = 78;
+		a->request_analysis();
+		CHECK(a->stopped_.count(78) && a->missing_id_ == 0 && !a->missing_.asked);
+	}
+	auto peeked = [&](App &a, const Position &p) {
+		const ULONGLONG end = GetTickCount64() + 10000;
+		while (GetTickCount64() < end && !a.cache_.get(p).book_peeked) {
+			pump_app(a);
+			Sleep(1);
+		}
+		return a.cache_.get(p).book_peeked;
+	};
+	auto a = ready();
+	const std::wstring path = a->temp_dir_ + L"ng-book-held-test.dat";
+	write_book_file(path, {{after, 0, 18}, {after.play(d6), -3, 21}});
+	a->ini_.set(engine_section(a->kind_), "book", narrow(path));
+	{  // a long job: nothing is asked behind it, the file is looked up, and the engine is asked after it
+		a->requests_[90] = {Request::BestExport, key_of(Position{})};
+		a->best_file_ = L"x";
+		a->game_.play(f5);
+		a->request_analysis();
+		CHECK(a->book_id_ == 0 && a->values_id_ == 0 && a->count_id_ == 0);
+		CHECK(peeked(*a, after));
+		CHECK(a->cell_view(d6).has_value && a->cell_view(d6).value == 3);
+		a->pump_graph();
+		CHECK(a->values_id_ == 0 && a->graph_id_ == 0);
+		feed(*a, "!@end id=90 written=1 lines=1 incomplete_ends=0\n");
+		CHECK(!a->book_peek_.running());
+		CHECK(a->values_id_ != 0 && a->requests_[a->values_id_].pos == key_of(after));
+	}
+	{  // learning: the same, from the book as it was saved
+		auto b = ready();
+		b->ini_.set(engine_section(b->kind_), "book", narrow(path));
+		b->learning_ = true;
+		b->game_.play(f5);
+		b->request_analysis();
+		CHECK(b->book_id_ == 0 && b->values_id_ == 0 && b->requests_.empty());
+		CHECK(peeked(*b, after));
+		CHECK(b->cell_view(d6).value == 3);
+		b->book_peek_.stop();
+	}
 	DeleteFileW(path.c_str());
 }
 
@@ -826,6 +1005,7 @@ static void test_stop_background()
 	a->count_ = false;
 	a->game_.play(parse_square("f5"));
 	a->request_analysis();
+	answer_values(*a);
 	const int book = a->book_id_;
 	CHECK(book != 0);
 	a->on_command(cmd::TaskCancel);
@@ -834,7 +1014,15 @@ static void test_stop_background()
 	CHECK(a->book_id_ == 0 && a->graph_id_ == 0 && a->requests_.empty());
 	a->game_.play(parse_square("d6"));
 	a->position_changed();
+	answer_values(*a);
 	CHECK(a->book_id_ != 0);
+	// stopped before the rest was asked: the position shown is asked all the same
+	a->on_command(cmd::TaskCancel);
+	a->game_.play(parse_square("c3"));
+	a->background_paused_ = true;
+	a->request_analysis();
+	answer_values(*a);
+	CHECK(a->book_id_ != 0 && a->graph_id_ == 0);
 }
 
 // The kept lines (bookmarks) are chosen from their pictures above the graph: "bookmark <n>" shows the n-th one.
@@ -1003,7 +1191,7 @@ static int real_engine(const std::wstring &exe, const std::wstring &book)
 	a->request_analysis();  // (with the settings of now)
 	// quiet: the answers of the position shown come to their end
 	const ULONGLONG end = GetTickCount64() + 60000;
-	while (GetTickCount64() < end && !(a->book_id_ == 0 && a->count_id_ == 0 && a->levels_id_ == 0 && a->best_id_ == 0 &&
+	while (GetTickCount64() < end && !(a->book_id_ == 0 && a->values_id_ == 0 && a->count_id_ == 0 && a->levels_id_ == 0 && a->best_id_ == 0 &&
 	                                   a->graph_id_ == 0 && a->stopped_.empty()))
 		pump(50);
 	std::printf("stopped at most %zu at a time; now: stopped %zu, requests %zu (book %d graph %d missing %d)\n", stopped_max,
@@ -1270,12 +1458,16 @@ int main(int argc, char **argv)
 	test_precision_off();
 	std::printf("%s\n", "test_graph_yields");
 	test_graph_yields();
+	std::printf("%s\n", "test_book_values_first");
+	test_book_values_first();
 	std::printf("%s\n", "test_requests_wait_for_book");
 	test_requests_wait_for_book();
 	std::printf("%s\n", "test_book_file");
 	test_book_file();
 	std::printf("%s\n", "test_values_while_reading");
 	test_values_while_reading();
+	std::printf("%s\n", "test_values_not_held_back");
+	test_values_not_held_back();
 	std::printf("%s\n", "test_opening_marks");
 	test_opening_marks();
 	std::printf("%s\n", "test_record_box");

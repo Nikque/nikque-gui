@@ -659,7 +659,7 @@ void draw_tree_tab(App &app, const Theme &th)
 	auto build = [&](auto &&self, const Position &p, int parent, int depth) -> void {
 		if (lines.size() >= kMaxLines || p.game_over()) return;
 		const PosInfo *info = app.cache_.peek(p);
-		if (!info || !info->book_done) {
+		if (!info || !info->values_done) {
 			lines.push_back({parent, depth, p.side, nullptr});
 			return;
 		}
