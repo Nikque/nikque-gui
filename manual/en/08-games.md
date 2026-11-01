@@ -6,6 +6,7 @@
 
 - Input/Output → Copy the game (up to this position), Paste a game.
 - The keys are Ctrl+C and Ctrl+V. Press Ctrl+V twice.
+- The box of the moves just above the graph can also copy and paste ([3. The screen](03-screen.md)).
 - Formats that can be pasted:
   - coordinates (`f5d6c3…`)
   - board text (64 squares and the side to move)

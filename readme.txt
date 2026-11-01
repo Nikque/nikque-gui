@@ -46,8 +46,9 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・newedax）は G
   読み筋を盤に表示する」を入れると、盤に半透明の石と番号でも出ます）。
 - 右のパネルのタブ：候補手（並べ替えのできる表）・book（level ごとの数、最善の進行、
   足りない進行）・棋譜・リスト（棋譜リストと検索の結果）・木（book の進行）。
-- その下に、しおりの列（しおりを挟んだ局面の盤の絵。押すとその局面へ、右クリックでメニュー）と、
-  評価値のグラフがいつも出ます。
+- その下に、しおりの列（しおりを挟んだ局面の盤の絵。押すとその局面へ、右クリックでメニュー）、
+  棋譜の欄（今の局面までの棋譜。「コピー」「貼り付け」のボタン。欄の中の Ctrl+V はすぐに読み込み、
+  手で打ったときは Enter で読み込み）、評価値のグラフがいつも出ます。
 - ログ：下の 1 行。押すと広がります。「表示」→「ログを保存」でファイルにできます。
 
 4. キー（既定。config.ini の [keys] で全部変えられます）
@@ -139,6 +140,9 @@ Ntest の形式は「空き 手番の側の石 手番」。
   stop                     裏の処理を止める
   pv on|off                マウスを乗せた手の読み筋を盤に表示する・しない
   openingmarks on|off      定石の手順の手に印を付ける・付けない
+  recordbox on|off         棋譜の欄を表示する・しない
+  recordtext <文字>        棋譜の欄に文字を入れて Enter を押すのと同じ
+  uppermoves on|off        棋譜を大文字で出力する・しない（欄とコピー）
   book reload              book を読み込み直す（メインエンジンを再起動）
   book reduce <X> <Y> [here]  book を軽くする（初期局面から。here は今の局面から）。数えてから、確かめずに行う
   engine nikque|newedax / design standard|paw|toggle / effects on|subdued|off
@@ -175,7 +179,7 @@ Ntest の形式は「空き 手番の側の石 手番」。
 [analysis] level（0〜60）・threads（0 は全部）・hash（ハッシュ表のビット数、0 はエンジンのまま）・umi・x・y・base・stages・
            precision（1 で精度を計算する）・backward・forward（棋譜の局面を裏で読む順）・compare
 [play] level・opening（search|best|wide）・width・until・clock・ponder・end_keep・end_list
-[view] design・effects・language・numbers・opening_marks（0 で定石の手順の印を出さない）・pv（1 で読み筋を盤に表示）・cell_info・fps・font・opening_file・screenshot_dir
+[view] design・effects・language・numbers・opening_marks（0 で定石の手順の印を出さない）・record_box（0 で棋譜の欄を出さない）・upper_moves（1 で棋譜を大文字で出力）・pv（1 で読み筋を盤に表示）・cell_info・fps・font・opening_file・screenshot_dir
 [window] 大きさと場所、tab、panel_w、bookmarks（1 でしおりの列を表示）
 [list] start_ply（棋譜リストの棋譜を開く手数、-1 は最後）
 [learn_options] エンジンに送る学習の設定
@@ -233,7 +237,8 @@ The GUI is under the MIT License. The engines (Edax nikque, newedax) are GPL and
 - Tabs of the right panel: Moves (a sortable table), Book (positions by level, best lines, missing lines),
   Record, List (the game list and search results), Tree (book lines).
 - Below them, always: the row of bookmarks (pictures of the bookmarked positions; click one to go there,
-  right click for its menu) and the graph of values.
+  right click for its menu), the box of the moves (the game up to the position, with the buttons Copy and Paste;
+  Ctrl+V in the box reads at once, Enter reads what you typed) and the graph of values.
 - Log: the bottom row; click to open it. View → Save the log writes it to a file.
 
 4. Keys (default; all can be changed in [keys] of config.ini)
@@ -315,7 +320,7 @@ A UTF-8 text file with one command a line, run with Input/Output → Run a comma
 the start is set in [script] startup= of config.ini. Lines starting with # are notes. A command that starts
 work waits for its end. Relative names are from the script's folder. The commands are listed in the
 Japanese part above (moves, board, play, new, goto, back, forward, book, book reload, book reduce, eval,
-numbers, level, umi, precision, analysis, stop, pv, openingmarks, engine, design, effects, tab, rotate, cellinfo, lang, wait,
+numbers, level, umi, precision, analysis, stop, pv, openingmarks, recordbox, recordtext, uppermoves, engine, design, effects, tab, rotate, cellinfo, lang, wait,
 estimate, keep, bookmark, bookmarks, screenshot, savelog, list ..., search, learn, edax, tool, run, game,
 comlevel, clock, ponder, opening, go, takeback, waitgame, compare, tree, log, quit).
 A wait or waitgame that ends by its time says so in the log.
@@ -369,7 +374,7 @@ Ctrl+C / Ctrl+V：复制/粘贴棋谱；Ctrl+P：截图；Ctrl+Shift+← →：�
 -------
 book 的整理与导出（包括 book reduce：删除从指定局面按 book deviate3 X Y 无法到达的局面以减小 book，执行前先统计并显示保留与删除的局面数）、
 学习的命令、工具（solve、bench、count、perft、estimate、base）、棋谱列表与检索、
-书签（图表上方的书签栏显示局面缩略图，点击即可转到该局面）、摆放局面、从棋盘推断手顺（到第 20 手）、棋盘方向、手顺编号、
+图表上方的棋谱栏（显示到当前局面的棋谱，可复制和粘贴）、书签（图表上方的书签栏显示局面缩略图，点击即可转到该局面）、摆放局面、从棋盘推断手顺（到第 20 手）、棋盘方向、手顺编号、
 格子上的数字、位棋盘、截图、脚本。
 分析：评估的 Lv（0〜60，用滑块选择）、在后台分析棋谱局面的顺序（逆向、正向、不分析）、可关闭 book 精度的计算、停止后台处理。
 对局（人对电脑、电脑对电脑、悔棋、电脑的 Lv、持有时间、序盘从 book 选择）与比较模式（另一引擎的评价值列）。
@@ -415,7 +420,7 @@ Ctrl+C / Ctrl+V：複製/貼上棋譜；Ctrl+P：螢幕截圖；Ctrl+Shift+← �
 -------
 book 的整理與匯出（包括 book reduce：刪除從指定局面按 book deviate3 X Y 無法到達的局面以減小 book，執行前先統計並顯示保留與刪除的局面數）、
 學習的命令、工具（solve、bench、count、perft、estimate、base）、棋譜清單與檢索、
-書籤（圖表上方的書籤列顯示局面縮圖，點擊即可轉到該局面）、擺放局面、從棋盤推斷手順（到第 20 手）、棋盤方向、手順編號、
+圖表上方的棋譜欄（顯示到目前局面的棋譜，可複製和貼上）、書籤（圖表上方的書籤列顯示局面縮圖，點擊即可轉到該局面）、擺放局面、從棋盤推斷手順（到第 20 手）、棋盤方向、手順編號、
 格子上的數字、位元棋盤、螢幕截圖、腳本。
 分析：評估的 Lv（0〜60，用滑桿選擇）、在背景分析棋譜局面的順序（逆向、正向、不分析）、可關閉 book 精度的計算、停止背景處理。
 對局（人對電腦、電腦對電腦、悔棋、電腦的 Lv、持有時間、序盤從 book 選擇）與比較模式（另一引擎的評價值欄）。

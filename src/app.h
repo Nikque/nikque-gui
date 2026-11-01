@@ -187,6 +187,8 @@ enum : int {
 	PvOnBoard,
 	OpeningMarks,
 	BookmarksShow,
+	RecordBoxShow,
+	UpperMoves,
 	Rotate0 = 1640,  // + symmetry 0..7
 	CellInfoNone = 1650,
 	CellInfoPositions,
@@ -255,6 +257,7 @@ struct Layout {
 	int bx = 0, by = 0, board_px = 0;  // top left of the frame, size with the frame
 	bool panel_below = false;
 	D2D1_RECT_F tabs{}, range{}, table{}, bookmarks{}, splitter{}, graph{}, panel_split{};
+	D2D1_RECT_F record{}, record_text{}, record_copy{}, record_paste{};  // the row of the moves as text, above the graph
 	struct Field {
 		D2D1_RECT_F box{}, track{};
 	} fx, fy;
@@ -371,6 +374,16 @@ public:
 	bool opening_marks_ = true; // the moves on the lines of the openings are marked on the board
 	bool background_paused_ = false;  // "stop the background work": nothing starts again before the position changes
 	bool bookmarks_shown_ = true;     // the row of the pictures of the bookmarks (kept lines) above the graph
+	bool record_box_ = true;          // the row of the moves as text above the graph
+	bool upper_moves_ = false;        // the moves given out as text in capitals (F5D6)
+	HWND record_edit_ = nullptr;      // its text box, a child of the window
+	WNDPROC record_edit_proc_ = nullptr;  // the window procedure of the text box before ours
+	std::wstring record_shown_;       // the moves the text box was given last
+	HFONT record_font_ = nullptr;
+	int record_font_px_ = 0;
+	HBRUSH record_brush_ = nullptr;
+	COLORREF record_brush_color_ = 0;
+	int record_hover_ = 0;            // the button under the mouse: 1 copy, 2 paste
 
 	// engines: [0] main (reads the book), [1] search only (no book), [2] tools (started for one job, no book),
 	// [3] play (the moves of the computer in a game, no book), [4] compare (the other engine, search only)
@@ -602,6 +615,13 @@ public:
 	void copy_moves();
 	void paste_moves();
 	bool paste_text(const std::string &utf8);  // moves, a board or bitboards; false when none
+	std::wstring record_text() const;          // the moves up to the position shown, as they are given out
+	void create_record_box();
+	void place_record_box();                   // after the layout
+	void sync_record_box(bool force = false);  // the text box follows the game, but not while it is typed in
+	bool record_take(const std::string &utf8); // as paste_text, from the row: the keys go back to the board after it
+	void record_key(WPARAM vk);                // Enter and Esc in the text box
+	LRESULT record_color(HDC dc);              // the colors of the text box
 	void commit_edit();
 	void set_loss(int x, int y);
 	void choose_level();     // the window of the level of the evaluation (a slider, 0 to 60)
@@ -717,7 +737,7 @@ public:
 	void screenshot(const std::wstring &file = {});
 	void save_board_image();
 	std::wstring images_dir() const;
-	void copy_text(const std::wstring &text);
+	bool copy_text(const std::wstring &text);  // false: the clipboard could not be opened
 	std::wstring clipboard_text();
 	int move_number_at(int sq) const;
 

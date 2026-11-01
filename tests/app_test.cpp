@@ -688,6 +688,102 @@ static void test_opening_marks()
 	DeleteFileW(path.c_str());
 }
 
+// The row above the graph: the text box shows the moves up to the position, what is typed stays until Enter or Esc,
+// Enter loads it; it goes away with the setting and with the panel, and takes room from the table and the graph.
+static void test_record_box()
+{
+	auto a = make_app();
+	DestroyWindow(a->hwnd_);
+	a->hwnd_ = CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 1200, 800, nullptr, nullptr, nullptr, nullptr);
+	CHECK(a->gfx_.init(a->hwnd_));
+	a->gfx_.resize();
+	a->create_record_box();
+	const HWND edit = a->record_edit_;
+	CHECK(edit != nullptr);
+	if (!edit) return;
+	a->layout();
+	const Layout &L = a->lay_;
+	CHECK(L.record.bottom > L.record.top && L.record.top >= L.splitter.bottom && L.record.bottom <= L.graph.top);
+	CHECK(L.record_text.right <= L.record_copy.left && L.record_copy.right <= L.record_paste.left && L.record_paste.right <= L.record.right);
+	auto shown = [&] { return (GetWindowLongPtrW(edit, GWL_STYLE) & WS_VISIBLE) != 0; };
+	auto text = [&] {
+		a->sync_record_box();
+		wchar_t b[256];
+		GetWindowTextW(edit, b, 256);
+		return std::wstring(b);
+	};
+	auto type = [&](const wchar_t *s) {
+		SetWindowTextW(edit, s);
+		SendMessageW(edit, EM_SETMODIFY, TRUE, 0);
+	};
+	CHECK(shown());
+	CHECK(text().empty());
+	for (const char *mv : {"f5", "d6", "c3"}) a->game_.play(parse_square(mv));
+	CHECK(text() == L"f5d6c3");
+	a->game_.go_to(2);
+	CHECK(text() == L"f5d6");
+	// what is typed stays while the game moves, Enter loads it
+	type(L"f5f6");
+	a->game_.go_to(3);
+	CHECK(text() == L"f5f6");
+	SendMessageW(edit, WM_KEYDOWN, VK_RETURN, 0);
+	CHECK(a->game_.size() == 2 && a->game_.moves()[1] == parse_square("f6"));
+	CHECK(text() == L"f5f6");
+	// not moves: nothing happens and the text stays to be corrected
+	type(L"xyz");
+	SendMessageW(edit, WM_KEYDOWN, VK_RETURN, 0);
+	CHECK(a->game_.size() == 2 && text() == L"xyz");
+	// Esc: the moves of the game again
+	SendMessageW(edit, WM_KEYDOWN, VK_ESCAPE, 0);
+	CHECK(text() == L"f5f6");
+	// leaving the box: the same
+	type(L"f5");
+	SendMessageW(edit, WM_KILLFOCUS, 0, 0);
+	CHECK(text() == L"f5f6");
+	// Enter with nothing typed does not cut the game at the position shown
+	a->game_.go_to(1);
+	CHECK(text() == L"f5");
+	SendMessageW(edit, WM_KEYDOWN, VK_RETURN, 0);
+	CHECK(a->game_.size() == 2 && a->game_.cursor() == 1);
+	// while a position is set up, nothing comes in
+	a->editing_ = true;
+	CHECK(!a->record_take("f5d6c3"));
+	CHECK(a->game_.size() == 2);
+	a->editing_ = false;
+	// the commands of a script
+	std::wstring err;
+	CHECK(a->script_command("recordtext f5d6c3d3", 1, &err));
+	CHECK(a->game_.size() == 4 && text() == L"f5d6c3d3");
+	CHECK(!a->script_command("recordtext xyz", 1, &err));
+	CHECK(a->game_.size() == 4);
+	// capitals: the text given out only, it reads back, and what the engines are told stays as it was
+	CHECK(a->script_command("uppermoves on", 1, &err));
+	CHECK(a->upper_moves_ && a->record_text() == L"F5D6C3D3" && text() == L"F5D6C3D3");
+	CHECK(a->game_.to_text(true) == "f5d6c3d3");
+	type(L"F5D6");
+	SendMessageW(edit, WM_KEYDOWN, VK_RETURN, 0);
+	CHECK(a->game_.size() == 2 && text() == L"F5D6");
+	a->game_.go_to(1);
+	CHECK(text() == L"F5");
+	a->game_.go_to(2);
+	a->on_command(cmd::UpperMoves);
+	CHECK(!a->upper_moves_ && a->record_text() == L"f5d6" && text() == L"f5d6");
+	CHECK(!a->script_command("uppermoves maybe", 1, &err));
+	const float graph_h = L.graph.bottom - L.graph.top, table_h = L.table.bottom - L.table.top;
+	CHECK(a->script_command("recordbox off", 1, &err));
+	CHECK(!a->record_box_ && !shown());
+	CHECK(L.record.bottom <= L.record.top);
+	CHECK(L.graph.bottom - L.graph.top >= graph_h && L.table.bottom - L.table.top >= table_h);
+	CHECK(a->script_command("recordbox on", 1, &err));
+	CHECK(a->record_box_ && shown());
+	CHECK(!a->script_command("recordbox maybe", 1, &err));
+	// the panel takes the row with it
+	a->on_command(cmd::TogglePanel);
+	CHECK(!shown());
+	a->on_command(cmd::TogglePanel);
+	CHECK(shown());
+}
+
 // Every level of Edax (0 to 60) can be chosen.
 static void test_levels()
 {
@@ -1182,6 +1278,8 @@ int main(int argc, char **argv)
 	test_values_while_reading();
 	std::printf("%s\n", "test_opening_marks");
 	test_opening_marks();
+	std::printf("%s\n", "test_record_box");
+	test_record_box();
 	std::printf("%s\n", "test_levels");
 	test_levels();
 	std::printf("%s\n", "test_forward_analysis");

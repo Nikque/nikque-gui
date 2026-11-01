@@ -32,6 +32,9 @@ Rules:
 | `stop` | stops the background work |
 | `pv on\|off` | the expected line of the move under the mouse on the board, or not |
 | `openingmarks on\|off` | the marks on the lines of the openings, or not |
+| `recordbox on\|off` | the box of the moves, or not |
+| `recordtext <text>` | as typing the text in the box of the moves and pressing Enter (an error when it cannot be read) |
+| `uppermoves on\|off` | write the game in capitals, or not |
 | `book reload` | reads the book again (restarts the main engine) |
 | `book reduce <X> <Y> [here]` | makes the book lighter (from the initial position; `here`: from the position shown); counted, then done without asking |
 | `engine nikque\|newedax` | kind of engine |

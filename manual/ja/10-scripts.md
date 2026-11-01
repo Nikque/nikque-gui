@@ -32,6 +32,9 @@
 | `stop` | 裏の処理を止める |
 | `pv on\|off` | マウスを乗せた手の読み筋を盤に表示する・しない |
 | `openingmarks on\|off` | 定石の手順の手に印を付ける・付けない |
+| `recordbox on\|off` | 棋譜の欄を表示する・しない |
+| `recordtext <文字>` | 棋譜の欄に文字を入れて Enter を押すのと同じ（読み込めないときはエラー） |
+| `uppermoves on\|off` | 棋譜を大文字で出力する・しない |
 | `book reload` | book を読み込み直す（メインエンジンを再起動） |
 | `book reduce <X> <Y> [here]` | book を軽くする（初期局面から。`here` は今の局面から）。数えてから、確かめずに行う |
 | `engine nikque\|newedax` | エンジンの系列 |

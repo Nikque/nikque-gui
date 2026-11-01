@@ -13,7 +13,7 @@ nikque GUI is a Windows GUI for the Othello engines Edax v4.5.5-nikque (C versio
 
 1. [Introduction](01-introduction.md): what it does, license
 2. [Setting up](02-setup.md): the ZIP, the engines, the book, the language
-3. [The screen](03-screen.md): top bar, board, design, right panel, row of bookmarks, graph, log
+3. [The screen](03-screen.md): top bar, board, design, right panel, row of bookmarks, box of the moves, graph, log
 4. [Analysis](04-analysis.md): values, Lv, searching the game in the background, stopping the background work, accuracy stages of the book, umigame numbers, range, compare mode
 5. [Book](05-book.md): Book tab, tree of the book, output, maintenance, making the book lighter
 6. [Learning](06-learning.md): learning commands, stop and continue, learning queue, learning settings

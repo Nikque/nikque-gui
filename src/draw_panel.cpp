@@ -789,6 +789,30 @@ void draw_tree_tab(App &app, const Theme &th)
 		gx.draw_text(lang::f("tree.too_many", {std::to_wstring(kMaxLines)}), fs, D2D1::RectF(T.left, T.bottom - rh, T.right, T.bottom), th.text_dim);
 }
 
+// The row of the moves as text, right above the graph. On the screen the text box stands over the text drawn here,
+// which is for the images of the window.
+void draw_record_box(App &app, const Theme &th)
+{
+	Gfx &gx = app.gfx_;
+	const Layout &L = app.lay_;
+	if (L.record_text.right <= L.record_text.left) return;
+	const float rad = 4 * L.scale, pad = std::round(6 * L.scale);
+	rounded(gx, L.record_text, rad, th.panel2);
+	const D2D1_RECT_F in{L.record_text.left + pad, L.record_text.top, L.record_text.right - pad, L.record_text.bottom};
+	IDWriteTextFormat *f = gx.text(L.font_s, false);
+	const std::wstring moves = app.record_text();
+	if (moves.empty()) gx.draw_text(lang::t("record.hint"), f, in, th.text_dim);
+	else if (gx.text_width(moves, f) <= in.right - in.left) gx.draw_text(moves, f, in, th.text);
+	else gx.draw_text(moves, gx.text(L.font_s, false, DWRITE_TEXT_ALIGNMENT_TRAILING), in, th.text);  // the last moves
+	IDWriteTextFormat *fc = gx.text(L.font_s, false, DWRITE_TEXT_ALIGNMENT_CENTER);
+	auto button = [&](const D2D1_RECT_F &r, const char *key, bool hover) {
+		rounded(gx, r, rad, hover ? th.accent : th.panel2);
+		gx.draw_text(lang::t(key), fc, r, hover ? th.accent_text : th.text);
+	};
+	button(L.record_copy, "record.copy", app.record_hover_ == 1);
+	button(L.record_paste, "record.paste", app.record_hover_ == 2);
+}
+
 void draw_graph(App &app, const Theme &th)
 {
 	Gfx &gx = app.gfx_;
@@ -868,6 +892,7 @@ void draw_panel(App &app)
 	const float cy = (L.splitter.top + L.splitter.bottom) / 2;
 	gx.dc()->DrawLine({L.splitter.left + 40 * L.scale, cy}, {L.splitter.right - 40 * L.scale, cy}, gx.brush(th.line),
 	                  2.0f * L.scale);
+	draw_record_box(app, th);
 	draw_graph(app, th);
 }
 

@@ -284,6 +284,22 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		if (v != *flag) on_command(c == "pv" ? cmd::PvOnBoard : c == "precision" ? cmd::PrecisionOn : c == "openingmarks" ? cmd::OpeningMarks : cmd::BookmarksShow);
 		return true;
 	}
+	if (c == "recordbox") {
+		bool v = record_box_;
+		if (!on_off(&v)) return bad("script.on_off");
+		if (v != record_box_) on_command(cmd::RecordBoxShow);
+		return true;
+	}
+	if (c == "uppermoves") {
+		bool v = upper_moves_;
+		if (!on_off(&v)) return bad("script.on_off");
+		if (v != upper_moves_) on_command(cmd::UpperMoves);
+		return true;
+	}
+	if (c == "recordtext") {
+		if (!record_take(rest_after(line, 1))) return bad("script.bad_moves");
+		return true;
+	}
 	if (c == "analysis") {
 		if (a1 == "backward") on_command(cmd::Backward);
 		else if (a1 == "forward") on_command(cmd::Forward);

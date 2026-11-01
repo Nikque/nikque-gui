@@ -230,9 +230,23 @@ void App::estimate_without_book(const Position &target)
 
 // ---- positions as text
 
-void App::copy_text(const std::wstring &text)
+namespace {
+
+// other programs hold the clipboard for a moment, right after it changed for one
+bool open_clipboard(HWND hwnd)
 {
-	if (!OpenClipboard(hwnd_)) return;
+	for (int i = 0; i < 20; ++i) {
+		if (OpenClipboard(hwnd)) return true;
+		Sleep(10);
+	}
+	return false;
+}
+
+}  // namespace
+
+bool App::copy_text(const std::wstring &text)
+{
+	if (!open_clipboard(hwnd_)) return false;
 	EmptyClipboard();
 	if (HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (text.size() + 1) * sizeof(wchar_t))) {
 		std::copy_n(text.c_str(), text.size() + 1, static_cast<wchar_t *>(GlobalLock(h)));
@@ -240,12 +254,13 @@ void App::copy_text(const std::wstring &text)
 		SetClipboardData(CF_UNICODETEXT, h);
 	}
 	CloseClipboard();
+	return true;
 }
 
 std::wstring App::clipboard_text()
 {
 	std::wstring text;
-	if (OpenClipboard(hwnd_)) {
+	if (open_clipboard(hwnd_)) {
 		if (HANDLE h = GetClipboardData(CF_UNICODETEXT)) {
 			if (const wchar_t *p = static_cast<const wchar_t *>(GlobalLock(h))) text = p;
 			GlobalUnlock(h);

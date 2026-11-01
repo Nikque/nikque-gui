@@ -236,6 +236,7 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 {
 	const float fx = static_cast<float>(x), fy = static_cast<float>(y);
 	if (edit_field_ && !inside(lay_.fx.box, fx, fy) && !inside(lay_.fy.box, fx, fy)) commit_edit();
+	if (record_edit_ && GetFocus() == record_edit_) SetFocus(hwnd_);  // the keys go back to the board
 	const int sq = lay_.square_at(fx, fy);
 	if (editing_ && sq != kNoMove) {
 		edit_click(sq, right);
@@ -280,6 +281,14 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 	}
 	if (inside(lay_.splitter, fx, fy)) {
 		drag_ = Drag::Graph;
+		return;
+	}
+	if (inside(lay_.record_copy, fx, fy)) {
+		copy_moves();
+		return;
+	}
+	if (inside(lay_.record_paste, fx, fy)) {
+		record_take(narrow(clipboard_text()));
 		return;
 	}
 	for (auto &[i, r] : tab_rects_)
@@ -405,7 +414,8 @@ void App::on_mouse_move(int x, int y)
 		return;
 	case Drag::Graph: {
 		const float top = lay_.range.bottom, bottom = lay_.graph.bottom;
-		graph_ratio_ = std::clamp((bottom - fy) / std::max(1.0f, bottom - top), 0.1f, 0.9f);
+		const float rec_h = lay_.record.bottom - lay_.record.top;
+		graph_ratio_ = std::clamp((bottom - fy - rec_h) / std::max(1.0f, bottom - top), 0.1f, 0.9f);
 		layout();
 		invalidate();
 		return;
@@ -433,6 +443,11 @@ void App::on_mouse_move(int x, int y)
 			if (inside(r, fx, fy)) sq = s;
 	bool redraw = hs != hover_stage_;
 	hover_stage_ = hs;
+	const int rec_hover = inside(lay_.record_copy, fx, fy) ? 1 : inside(lay_.record_paste, fx, fy) ? 2 : 0;
+	if (rec_hover != record_hover_) {
+		record_hover_ = rec_hover;
+		redraw = true;
+	}
 	if (sq != hover_sq_) {
 		hover_sq_ = sq;
 		redraw = true;
@@ -508,15 +523,8 @@ void App::on_wheel(int x, int y, int delta)
 
 void App::copy_moves()
 {
-	const std::wstring text = widen(game_.to_text(true));
-	if (!OpenClipboard(hwnd_)) return;
-	EmptyClipboard();
-	if (HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (text.size() + 1) * sizeof(wchar_t))) {
-		std::copy_n(text.c_str(), text.size() + 1, static_cast<wchar_t *>(GlobalLock(h)));
-		GlobalUnlock(h);
-		SetClipboardData(CF_UNICODETEXT, h);
-	}
-	CloseClipboard();
+	const std::wstring text = record_text();
+	if (!copy_text(text)) return;
 	set_status(lang::f("status.copied", {std::to_wstring(text.size() / 2)}));
 }
 
@@ -768,6 +776,17 @@ void App::on_command(int id)
 		bookmarks_shown_ = !bookmarks_shown_;
 		update_menu();
 		layout();
+		invalidate();
+		break;
+	case cmd::RecordBoxShow:
+		record_box_ = !record_box_;
+		update_menu();
+		layout();
+		invalidate();
+		break;
+	case cmd::UpperMoves:
+		upper_moves_ = !upper_moves_;
+		update_menu();
 		invalidate();
 		break;
 	case cmd::DesignToggle: on_command(design_ == Design::Paw ? cmd::DesignStandard : cmd::DesignPaw); break;

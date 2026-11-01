@@ -123,7 +123,7 @@ int App::run(HINSTANCE inst, int show)
 	const int sdpi = static_cast<int>(GetDpiForSystem());
 	const int w = ini_.get_int("window", "w", MulDiv(1280, sdpi, 96), 400, 16000);
 	const int h = ini_.get_int("window", "h", MulDiv(820, sdpi, 96), 300, 16000);
-	CreateWindowExW(0, wc.lpszClassName, lang::t("app.title").c_str(), WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
+	CreateWindowExW(0, wc.lpszClassName, lang::t("app.title").c_str(), WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT,
 	                CW_USEDEFAULT, w, h, nullptr, nullptr, inst, this);
 	if (!hwnd_) return 1;
 	if (x != CW_USEDEFAULT && y != CW_USEDEFAULT) {
@@ -135,6 +135,7 @@ int App::run(HINSTANCE inst, int show)
 		return 1;
 	}
 	DragAcceptFiles(hwnd_, TRUE);
+	create_record_box();
 	build_menu();
 	set_window_icon();
 	gfx_.resize();
@@ -262,7 +263,7 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 			LPCWSTR c = IDC_ARROW;
 			if (drag_ == Drag::Panel || (!panel_hidden_ && !lay_.panel_below && in(lay_.panel_split))) c = IDC_SIZEWE;
 			else if (drag_ == Drag::Graph || (!panel_hidden_ && in(lay_.splitter))) c = IDC_SIZENS;
-			else if (!panel_hidden_ && (in(lay_.fx.box) || in(lay_.fy.box))) c = IDC_IBEAM;
+			else if (!panel_hidden_ && (in(lay_.fx.box) || in(lay_.fy.box) || in(lay_.record_text))) c = IDC_IBEAM;
 			SetCursor(LoadCursorW(nullptr, c));
 			return TRUE;
 		}
@@ -276,8 +277,11 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		return 0;
 	}
 	case WM_COMMAND:
-		on_command(LOWORD(wp));
+		if (!lp) on_command(LOWORD(wp));  // (not the notes of the text box)
 		return 0;
+	case WM_CTLCOLOREDIT:
+	case WM_CTLCOLORSTATIC:  // (the text box while it is disabled)
+		return record_color(reinterpret_cast<HDC>(wp));
 	case WM_ENGINE:
 		on_engine(wp, lp != 0);
 		return 0;
@@ -339,6 +343,8 @@ void App::load_config()
 	precision_ = ini_.get_bool("analysis", "precision", true);
 	pv_on_board_ = ini_.get_bool("view", "pv", false);
 	opening_marks_ = ini_.get_bool("view", "opening_marks", true);
+	record_box_ = ini_.get_bool("view", "record_box", true);
+	upper_moves_ = ini_.get_bool("view", "upper_moves", false);
 	bookmarks_shown_ = ini_.get_bool("window", "bookmarks", true);
 	anim_fps_ = ini_.get_int("view", "fps", 20, 5, 60);
 	font_px_ = ini_.get_int("view", "font", 0, 0, 72);
@@ -436,6 +442,8 @@ void App::save_config()
 	ini_.set_int("analysis", "precision", precision_);
 	ini_.set_int("view", "pv", pv_on_board_);
 	ini_.set_int("view", "opening_marks", opening_marks_);
+	ini_.set_int("view", "record_box", record_box_);
+	ini_.set_int("view", "upper_moves", upper_moves_);
 	ini_.set_int("window", "bookmarks", bookmarks_shown_);
 	ini_.set("engine", "kind", engine_section(kind_));
 	ini_.set_int("engine", "search", search_engine_);
@@ -637,6 +645,7 @@ void App::build_menu()
 	HMENU io = CreatePopupMenu();
 	item(io, cmd::CopyMoves, t("menu.io.copy"), keys_.describe(Action::CopyMoves));
 	item(io, cmd::PasteMoves, t("menu.io.paste"), keys_.describe(Action::PasteMoves));
+	item(io, cmd::UpperMoves, t("menu.io.upper"));
 	item(io, cmd::FixRecord, t("menu.io.fix"));
 	HMENU pos = CreatePopupMenu();
 	item(pos, cmd::CopyBoardText, t("menu.io.copy_board"));
@@ -738,6 +747,7 @@ void App::build_menu()
 	item(view, cmd::TabRecord, t("menu.view.tab.record"));
 	item(view, cmd::TabList, t("menu.view.tab.list"));
 	item(view, cmd::TabTree, t("menu.view.tab.tree"));
+	item(view, cmd::RecordBoxShow, t("menu.view.record_box"));
 	HMENU kp = CreatePopupMenu();
 	item(kp, cmd::KeepNow, t("menu.kept.keep"), keys_.describe(Action::Keep));
 	item(kp, cmd::BookmarksShow, t("menu.kept.strip"));
@@ -797,6 +807,8 @@ void App::update_menu()
 	check(cmd::PvOnBoard, pv_on_board_);
 	check(cmd::OpeningMarks, opening_marks_);
 	check(cmd::BookmarksShow, bookmarks_shown_);
+	check(cmd::RecordBoxShow, record_box_);
+	check(cmd::UpperMoves, upper_moves_);
 	check(cmd::FixRecord, fixed_on_);
 	enable(cmd::LearnStop, learning_);
 	for (int id = cmd::LearnDeviate; id <= cmd::LearnJobLast; ++id) enable(id, !learning_);
@@ -957,13 +969,16 @@ void App::layout()
 	const float split_h = std::round(7 * L.scale);
 	// the row of the bookmarks, right above the graph
 	const float bm_h = bookmarks_shown_ ? std::round(L.row * 2.7f) : 0;
-	const float avail_h = std::max(0.0f, rest_h - bm_h);
+	// the row of the moves as text, right on the graph
+	const float rec_h = record_box_ && !panel_hidden_ ? std::round(L.row * 1.25f) : 0;
+	const float avail_h = std::max(0.0f, rest_h - bm_h - rec_h);
 	float gh = std::round(avail_h * graph_ratio_);
 	gh = std::clamp(gh, std::min(L.row * 3, avail_h * 0.5f), std::max(L.row * 3, avail_h - L.row * 4));
-	L.table = {P.left, rest_top, P.right, std::max(rest_top, P.bottom - gh - split_h - bm_h)};
+	L.table = {P.left, rest_top, P.right, std::max(rest_top, P.bottom - gh - split_h - bm_h - rec_h)};
 	L.bookmarks = {P.left, L.table.bottom, P.right, L.table.bottom + bm_h};
 	L.splitter = {P.left, L.bookmarks.bottom, P.right, L.bookmarks.bottom + split_h};
-	L.graph = {P.left, L.splitter.bottom, P.right, P.bottom};
+	L.record = {P.left, L.splitter.bottom, P.right, L.splitter.bottom + rec_h};
+	L.graph = {P.left, L.record.bottom, P.right, P.bottom};
 
 	// the range row: "label  X [ 2 ] ---o---  Y [ 4 ] ---o---"
 	IDWriteTextFormat *f = gfx_.text(L.font, false);
@@ -980,6 +995,19 @@ void App::layout()
 	x = L.fx.track.right + gap * 2 + ly + gap * 0.5f;
 	L.fy.box = {x, bt, x + box_w, bb};
 	L.fy.track = {x + box_w + gap, bt, x + box_w + gap + track_w, bb};
+
+	// the row of the moves: the text box, then the buttons
+	L.record_text = L.record_copy = L.record_paste = {};
+	if (rec_h > 0) {
+		IDWriteTextFormat *fb = gfx_.text(L.font_s, false);
+		const float rgap = std::round(4 * L.scale), rb = L.record.bottom - rgap;
+		const float paste_w = gfx_.text_width(lang::t("record.paste"), fb) + 2 * L.font_s;
+		const float copy_w = gfx_.text_width(lang::t("record.copy"), fb) + 2 * L.font_s;
+		L.record_paste = {L.record.right - paste_w, L.record.top, L.record.right, rb};
+		L.record_copy = {L.record_paste.left - rgap - copy_w, L.record.top, L.record_paste.left - rgap, rb};
+		L.record_text = {L.record.left, L.record.top, std::max(L.record.left, L.record_copy.left - rgap), rb};
+	}
+	place_record_box();
 }
 
 // ---- drawing
@@ -992,6 +1020,7 @@ double App::now_s() const
 void App::paint()
 {
 	measure::Frame mf(true);
+	sync_record_box();
 	compute_line();
 	prepare_glows();
 	if (!gfx_.begin_frame()) return;
