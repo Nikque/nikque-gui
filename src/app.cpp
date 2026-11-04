@@ -345,6 +345,7 @@ void App::load_config()
 	opening_marks_ = ini_.get_bool("view", "opening_marks", true);
 	record_box_ = ini_.get_bool("view", "record_box", true);
 	upper_moves_ = ini_.get_bool("view", "upper_moves", false);
+	graph_end_ = ini_.get_bool("view", "graph_end", true);
 	bookmarks_shown_ = ini_.get_bool("window", "bookmarks", true);
 	anim_fps_ = ini_.get_int("view", "fps", 20, 5, 60);
 	font_px_ = ini_.get_int("view", "font", 0, 0, 72);
@@ -443,6 +444,7 @@ void App::save_config()
 	ini_.set_int("view", "pv", pv_on_board_);
 	ini_.set_int("view", "opening_marks", opening_marks_);
 	ini_.set_int("view", "record_box", record_box_);
+	ini_.set_int("view", "graph_end", graph_end_);
 	ini_.set_int("view", "upper_moves", upper_moves_);
 	ini_.set_int("window", "bookmarks", bookmarks_shown_);
 	ini_.set("engine", "kind", engine_section(kind_));
@@ -567,6 +569,7 @@ void App::build_menu()
 	sub(book, show, t("menu.book.show"));
 	item(book, cmd::ExportMissing, t("menu.book.export_missing"));
 	item(book, cmd::ExportBest, t("menu.book.export_best"));
+	item(book, cmd::ExportDeviate, t("menu.book.export_deviate"));
 	sep(book);
 	HMENU keep = CreatePopupMenu();
 	item(keep, cmd::BookSave, t("menu.book.save"));
@@ -748,6 +751,7 @@ void App::build_menu()
 	item(view, cmd::TabList, t("menu.view.tab.list"));
 	item(view, cmd::TabTree, t("menu.view.tab.tree"));
 	item(view, cmd::RecordBoxShow, t("menu.view.record_box"));
+	item(view, cmd::GraphEndShow, t("menu.view.graph_end"));
 	HMENU kp = CreatePopupMenu();
 	item(kp, cmd::KeepNow, t("menu.kept.keep"), keys_.describe(Action::Keep));
 	item(kp, cmd::BookmarksShow, t("menu.kept.strip"));
@@ -808,6 +812,7 @@ void App::update_menu()
 	check(cmd::OpeningMarks, opening_marks_);
 	check(cmd::BookmarksShow, bookmarks_shown_);
 	check(cmd::RecordBoxShow, record_box_);
+	check(cmd::GraphEndShow, graph_end_);
 	check(cmd::UpperMoves, upper_moves_);
 	check(cmd::FixRecord, fixed_on_);
 	enable(cmd::LearnStop, learning_);
@@ -817,6 +822,7 @@ void App::update_menu()
 	for (int id : {cmd::ReloadBook, cmd::OpenBook, cmd::EngineNikque, cmd::EngineNewedax, cmd::RestartEngines}) enable(id, !learning_);
 	enable(cmd::LearnContinue, !learning_);
 	enable(cmd::ExportBest, !learning_);
+	enable(cmd::ExportDeviate, !learning_);
 	enable(cmd::ListFromBook, !learning_ && !task_busy_);
 	enable(cmd::QueueStart, !learning_ && !learn_queue_.empty());
 	enable(cmd::QueueClear, !learn_queue_.empty());

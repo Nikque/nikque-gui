@@ -42,6 +42,11 @@ Open it with Book → Tree of the book, or with the Tree tab. It shows the book 
 - Book → Write the best lines…:
   - From this position, writes the lines where both sides play best moves (or moves within a loss) up to their ends. One line per entry.
   - Options: the loss, the depth, whether to stop at solved positions, and which ends to write (all ends, or only the ends not solved).
+- Book → Write the lines deviate walks…:
+  - From this position, writes the lines that `book deviate`, `book deviate2` or `book deviate3` walks to a text file, without expanding the book. One position per line (the moves from the start).
+  - Options: the command, its two numbers, and the positions to write (those with a leaf to expand, the ends of the lines, or all the positions of the lines).
+  - A position reached by several lines is written once. The numbers and the choice of the lines are those of the engine (`book deviate ... export` in its manual).
+  - Main engines before nikque.26, eval2.14 and newedax.11 do not have it.
 - Input/Output → Game list → Book lines into the list…: puts the same lines into the game list instead of a file.
 
 ## Book contents to the log

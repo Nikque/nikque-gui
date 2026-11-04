@@ -147,13 +147,15 @@ void App::start_learning_at(const std::string &command, const Position &start, c
 		if (ch == '\n') ch = '/';  // several commands on one line
 	learn_progress_.clear();
 	learn_t0_ = std::chrono::steady_clock::now();
-	std::string one_line = narrow(engine_text(command));  // a line of config.ini (UTF-8): the lines joined by '|'
-	for (auto &ch : one_line)
-		if (ch == '\n') ch = '|';
-	ini_.set("learn", "last_command", one_line);
-	ini_.set("learn", "last_start", start.to_board_string());
-	ini_.set("learn", "last_moves", moves);
-	log(lang::f("learn.started", {engine_text(command)}));
+	if (!learn_keeps_book_) {  // (a command that changes the book: the learning to go on with)
+		std::string one_line = narrow(engine_text(command));  // a line of config.ini (UTF-8): the lines joined by '|'
+		for (auto &ch : one_line)
+			if (ch == '\n') ch = '|';
+		ini_.set("learn", "last_command", one_line);
+		ini_.set("learn", "last_start", start.to_board_string());
+		ini_.set("learn", "last_moves", moves);
+	}
+	log(lang::f(learn_keeps_book_ ? "devexp.started" : "learn.started", {engine_text(command)}));
 	send(0, out);
 	update_menu();
 	invalidate();
@@ -161,6 +163,21 @@ void App::start_learning_at(const std::string &command, const Position &start, c
 
 void App::learning_line(const std::string &line)
 {
+	// the result of book deviate ... export: "Book deviate2 2 4 export ends...finished: 7 lines written (lines.txt)"
+	if (line.starts_with("Book deviate") && line.find(" export ") != std::string::npos && line.find("finished:") != std::string::npos) {
+		long long n = 0;
+		const size_t at = line.find("finished:");
+		learn_progress_.clear();
+		if (line.find("not in the book", at) != std::string::npos) log(lang::f("devexp.notinbook", {devexp_file_}));
+		else if (sscanf_s(line.c_str() + at, "finished: %lld lines written", &n) == 1)
+			log(lang::f("devexp.written", {lang::number(n), devexp_file_}));
+		else log(engine_text(line));
+		return;
+	}
+	if (line.starts_with("ERROR: book deviate") && line.find(" export") != std::string::npos) {
+		log(lang::f("devexp.failed", {devexp_file_}) + L"（" + engine_text(line) + L"）");
+		return;
+	}
 	// the result of book reduce: "Book reduce 2 4: 19 positions kept, 25184 removed"
 	{
 		int x = 0, y = 0;
@@ -192,12 +209,14 @@ void App::learning_ended()
 	const auto s = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - learn_t0_).count();
 	learning_ = false;
 	learn_end_id_ = 0;
-	log(lang::f("learn.ended", {engine_text(learn_cmd_), std::to_wstring(s / 60), std::to_wstring(s % 60)}));
+	log(lang::f(learn_keeps_book_ ? "devexp.ended" : "learn.ended", {engine_text(learn_cmd_), std::to_wstring(s / 60), std::to_wstring(s % 60)}));
 	finish_moves(0);
 	learn_progress_.clear();
-	// the book has changed: its analyses again
-	cache_.clear_book();
-	missing_ = MissingList{};
+	if (!learn_keeps_book_) {  // the book has changed: its analyses again
+		cache_.clear_book();
+		missing_ = MissingList{};
+	}
+	learn_keeps_book_ = false;
 	eng_[0].board.reset();
 	update_menu();
 	if (queue_running_) {

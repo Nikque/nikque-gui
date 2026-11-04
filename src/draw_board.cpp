@@ -182,7 +182,11 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 		gx.fill_shape(s, gl);
 
 		// bands of light crossing the number
-		const D2D1_GRADIENT_STOP band[3] = {{0, rgb(0xffffff, 0)}, {0.5f, rgb(0xffffff, 0.8f)}, {1, rgb(0xffffff, 0)}};
+		// (stage 4: bands of its own light color, a white one would make it pale)
+		const D2D1_COLOR_F bc = stage_band(th, k);
+		const float bp = k == 4 ? 0.9f : 0.8f;
+		const D2D1_GRADIENT_STOP band[3] = {{0, D2D1_COLOR_F{bc.r, bc.g, bc.b, 0}}, {0.5f, D2D1_COLOR_F{bc.r, bc.g, bc.b, bp}},
+		                                    {1, D2D1_COLOR_F{bc.r, bc.g, bc.b, 0}}};
 		const D2D1_GRADIENT_STOP rainbow[8] = {
 			{0, rgb(0xff6467, 0)},      {0.18f, rgb(0xff6467, 0.6f)}, {0.32f, rgb(0xffdf20, 0.6f)},
 			{0.46f, rgb(0x7bf1a8, 0.6f)}, {0.6f, rgb(0x53eafd, 0.6f)}, {0.74f, rgb(0x8ec5ff, 0.6f)},
@@ -191,7 +195,7 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 		const int bands = k == 3 ? 1 : 2;
 		for (int i = 0; i < bands; ++i) {
 			const bool rb = k == 6 && i == 1;
-			auto *g = rb ? gx.gradient(202, rainbow, 8) : gx.gradient(201, band, 3);
+			auto *g = rb ? gx.gradient(202, rainbow, 8) : gx.gradient(k == 4 ? 203 : 201, band, 3);
 			const float ph = frac(t / period[k] + i * 0.5);
 			const float bx = s.bounds.left - w * 0.6f + ph * w * 2.2f, bw = w * (rb ? 0.4f : 0.22f);
 			g->SetStartPoint({bx - bw, s.bounds.top});

@@ -235,6 +235,19 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 			wait(ScriptWait::Reduce);
 			return true;
 		}
+		if (a1 == "deviate" || a1 == "deviate2" || a1 == "deviate3") {  // book deviate.. X Y export <file> [leaf|ends|all]
+			const auto x = w.size() > 2 ? number(w[2]) : std::nullopt, y = w.size() > 3 ? number(w[3]) : std::nullopt;
+			if (!x || !y || *x < 0 || *x > 129 || *y < 0 || *y > (a1 == "deviate" ? 65 : 254)) return bad("script.bad_number");
+			const std::string which = w.size() > 6 ? lower(w[6]) : "leaf";
+			if (w.size() < 6 || w.size() > 7 || lower(w[4]) != "export" || (which != "leaf" && which != "ends" && which != "all"))
+				return bad("script.bad_word");
+			if (!eng_[0].alive) return bad("learn.no_engine");
+			if (!eng_[0].exports) return bad("devexp.old_engine");
+			if (learning_) return bad("learn.busy");
+			if (!start_deviate_export(a1, *x, *y, which, path(w[5]))) return bad("learn.busy");
+			wait(ScriptWait::Learn);
+			return true;
+		}
 		bool v = use_book_;
 		if (!on_off(&v)) return bad("script.on_off");
 		if (v != use_book_) on_command(cmd::UseBook);
@@ -258,6 +271,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		level_ = *n;
 		update_menu();
 		request_analysis();
+		invalidate();  // (the ranges of the level on the graph)
 		return true;
 	}
 	if (c == "umi") {
@@ -288,6 +302,12 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		bool v = record_box_;
 		if (!on_off(&v)) return bad("script.on_off");
 		if (v != record_box_) on_command(cmd::RecordBoxShow);
+		return true;
+	}
+	if (c == "graphend") {
+		bool v = graph_end_;
+		if (!on_off(&v)) return bad("script.on_off");
+		if (v != graph_end_) on_command(cmd::GraphEndShow);
 		return true;
 	}
 	if (c == "uppermoves") {

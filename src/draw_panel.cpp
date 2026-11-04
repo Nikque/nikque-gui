@@ -836,6 +836,19 @@ void draw_graph(App &app, const Theme &th)
 	auto X = [&](int i) { return P.left + (P.right - P.left) * app.game_.at(i).ply() / 60.0f; };
 	auto Y = [&](int v) { return (P.top + P.bottom) / 2 - (P.bottom - P.top) / 2 * v / static_cast<float>(range); };
 
+	// the ranges the level of the analysis reads to the end: a band each, darker for a surer reading
+	const std::vector<EndRange> ends = app.graph_end_ ? end_ranges(app.level_) : std::vector<EndRange>{};
+	auto end_x = [&](size_t i) {
+		const int e = i < ends.size() ? ends[i].empties : 0;
+		return P.left + (P.right - P.left) * (60 - e) / 60.0f;
+	};
+	auto end_strength = [&](size_t i) { return (ends[i].percent - 73) / 27.0f; };
+	for (size_t i = 0; i < ends.size(); ++i) {
+		auto *b = gx.brush(th.exact);
+		b->SetOpacity(0.08f + 0.2f * end_strength(i));
+		dc->FillRectangle(D2D1::RectF(end_x(i), P.top, end_x(i + 1), P.bottom), b);
+	}
+
 	IDWriteTextFormat *fl = gx.text(L.font_s, false, DWRITE_TEXT_ALIGNMENT_TRAILING, Face::Number);
 	IDWriteTextFormat *fc = gx.text(L.font_s, false, DWRITE_TEXT_ALIGNMENT_CENTER, Face::Number);
 	for (int v : {-range, -range / 2, 0, range / 2, range}) {
@@ -847,6 +860,25 @@ void draw_graph(App &app, const Theme &th)
 		const float x = P.left + (P.right - P.left) * k / 60.0f;
 		dc->DrawLine({x, P.top}, {x, P.bottom}, gx.brush(th.line), 1.0f);
 		gx.draw_text(std::to_wstring(k), fc, D2D1::RectF(x - 20, P.bottom, x + 20, G.bottom), th.text_dim, false);
+	}
+	// a line where each range starts, with its probability ("to the end" for 100 %): on the first of two rows with room
+	IDWriteTextFormat *fe = gx.text(L.font_s, false, DWRITE_TEXT_ALIGNMENT_LEADING);
+	const float lh = std::round(L.font_s * 1.4f);
+	float free_x[2] = {P.left, P.left};
+	for (size_t i = 0; i < ends.size(); ++i) {
+		const float x = end_x(i);
+		auto *b = gx.brush(th.exact);
+		b->SetOpacity(0.45f + 0.55f * end_strength(i));
+		dc->DrawLine({x, P.top}, {x, P.bottom}, b, (ends[i].percent == 100 ? 2.0f : 1.0f) * L.scale);
+		const std::wstring s = ends[i].percent == 100 ? lang::t("graph.exact") : std::to_wstring(ends[i].percent) + L"%";
+		const float tw = gx.text_width(s, fe);
+		for (int row = 0; row < 2; ++row) {
+			if (x + 3 < free_x[row] || x + 3 + tw > P.right || P.top + lh * (row + 1) > P.bottom) continue;
+			const float y = P.top + lh * row;
+			gx.draw_text(s, fe, D2D1::RectF(x + 3, y, x + 3 + tw + 2, y + lh), th.exact, false);
+			free_x[row] = x + 3 + tw + 4;
+			break;
+		}
 	}
 	// the place shown
 	const float cx = X(app.game_.cursor());
@@ -1009,7 +1041,7 @@ void draw_log(App &app)
 		right = r.left - 10 * L.scale;
 	}
 	if (app.learning_) {
-		std::wstring txt = lang::f("learn.bar", {widen(app.learn_cmd_), app.learn_progress_, elapsed(app.learn_t0_)});
+		std::wstring txt = lang::f(app.learn_keeps_book_ ? "devexp.bar" : "learn.bar", {widen(app.learn_cmd_), app.learn_progress_, elapsed(app.learn_t0_)});
 		if (app.queue_running_) txt += L"　" + lang::f("queue.left", {std::to_wstring(app.learn_queue_.size())});
 		const float tw = std::min(gx.text_width(txt, f) + 4, (L.log.right - L.log.left) * 0.6f);
 		const D2D1_RECT_F r{right - tw, L.log.bottom - rh - 2 * L.scale, right, L.log.bottom - 2 * L.scale};

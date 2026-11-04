@@ -499,4 +499,44 @@ std::optional<MissingLine> parse_missing_line(const Fields &f)
 	return ml;
 }
 
+std::vector<EndRange> end_ranges(int level)
+{
+	// each row: the largest number of empty squares read at 73, 87, 95, 98, 99 and 100 % (0: not read at it)
+	struct Row {
+		int lo, hi;
+		int at[6];
+	};
+	static constexpr int kPercent[6] = {73, 87, 95, 98, 99, 100};
+	static constexpr Row kRows[] = {
+		{11, 12, {0, 0, 0, 24, 0, 21}},  {13, 18, {0, 27, 0, 24, 0, 21}},  {19, 21, {0, 30, 0, 27, 0, 24}},
+		{22, 24, {33, 0, 30, 0, 27, 24}}, {25, 27, {0, 33, 0, 30, 0, 27}},  {28, 29, {36, 0, 33, 0, 30, 27}},
+		{30, 31, {0, 36, 0, 33, 0, 30}},  {32, 33, {39, 0, 36, 0, 33, 30}}, {34, 35, {0, 39, 0, 36, 33, 30}},
+	};
+	int at[6] = {};
+	if (level <= 0) return {};
+	if (level <= 10) {
+		at[5] = 2 * level;
+	} else if (level >= 60) {
+		at[5] = 60;
+	} else if (level >= 36) {
+		for (int i = 0; i < 6; ++i) at[i] = level + 9 - 3 * i;
+	} else {
+		for (const Row &r : kRows)
+			if (r.lo <= level && level <= r.hi) std::copy(std::begin(r.at), std::end(r.at), at);
+	}
+	std::vector<EndRange> out;
+	// from the most empty squares: a range keeps only the part on the board (at most 60 empty squares)
+	for (int i = 0; i < 6; ++i) {
+		if (at[i] == 0) continue;
+		const int next = [&] {
+			for (int j = i + 1; j < 6; ++j)
+				if (at[j]) return at[j];
+			return 0;
+		}();
+		if (next >= 60) continue;
+		out.push_back({std::min(at[i], 60), kPercent[i]});
+	}
+	return out;
+}
+
 }  // namespace ng

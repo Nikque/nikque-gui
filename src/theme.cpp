@@ -11,10 +11,10 @@ constexpr std::array<StageStyle, 8> kStages = {{
 	{rgb(0xffffff), rgb(0xffffff), rgb(0xffffff), kOutline, rgb(0xffffff, 0), false},  // 0 white
 	{rgb(0x53eafd), rgb(0x53eafd), rgb(0x53eafd), kOutline, rgb(0x53eafd, 0), false},  // 1 cyan-300
 	{rgb(0x9de504), rgb(0x9de504), rgb(0x9de504), kOutline, rgb(0x9de504, 0), false},  // 2 lime-400
-	// 3 rose quartz: pink-100 -> pink-300 -> pink-400
-	{rgb(0xfce7f3), rgb(0xfda5d5), rgb(0xfb64b6), kOutline, rgb(0xfda5d5), true},
-	// 4 amethyst: purple-200 -> purple-500 -> purple-600
-	{rgb(0xe9d5fe), rgb(0xaa4eff), rgb(0x9810fa), kOutline, rgb(0xc27aff), true},
+	// 3 sapphire: blue-300 -> blue-600 -> blue-700 (darker than the cyan of stage 1)
+	{rgb(0x8ec5ff), rgb(0x155dfc), rgb(0x1447e6), kOutline, rgb(0x51a2ff), true},
+	// 4 topaz: orange-300 -> orange-500 -> orange-700
+	{rgb(0xffb86a), rgb(0xff6900), rgb(0xca3500), kOutline, rgb(0xff8904), true},
 	// 5 ruby: rose-200 -> rose-500 -> rose-600
 	{rgb(0xfecdd3), rgb(0xfe2657), rgb(0xec003f), kOutline, rgb(0xff637e), true},
 	// 6 gold: yellow-100 -> amber-300 -> amber-400
@@ -106,6 +106,12 @@ const Theme kPaw = [] {
 const Theme &theme(Design d)
 {
 	return d == Design::Paw ? kPaw : kStandard;
+}
+
+D2D1_COLOR_F stage_band(const Theme &th, int stage)
+{
+	// stage 4 has two bands: white ones would cover much of its orange
+	return stage == 4 ? th.stage[4].top : rgb(0xffffff);
 }
 
 }  // namespace ng

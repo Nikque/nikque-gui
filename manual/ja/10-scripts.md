@@ -11,7 +11,7 @@
 書き方の決まり：
 
 - `#` で始まる行はコメントです。
-- 処理を始めるコマンド（`list load`・`search`・`learn start`・`edax`・`tool`・`estimate`・`wait`・`book reduce` など）は、終わるまで次の行に進みません。
+- 処理を始めるコマンド（`list load`・`search`・`learn start`・`edax`・`tool`・`estimate`・`wait`・`book reduce`・`book deviate ... export` など）は、終わるまで次の行に進みません。
 - `wait`・`waitgame` が時間切れで終わったときは、ログにそう出ます。
 - 相対パスは、スクリプトのファイルがあるフォルダを基準にします。
 - 誤りのある行があると、ログに出してスクリプトを止めます。
@@ -35,7 +35,9 @@
 | `recordbox on\|off` | 棋譜の欄を表示する・しない |
 | `recordtext <文字>` | 棋譜の欄に文字を入れて Enter を押すのと同じ（読み込めないときはエラー） |
 | `uppermoves on\|off` | 棋譜を大文字で出力する・しない |
+| `graphend on\|off` | グラフに読み切りの範囲（今の Lv）を表示する・しない |
 | `book reload` | book を読み込み直す（メインエンジンを再起動） |
+| `book deviate\|deviate2\|deviate3 <X> <Y> export <ファイル> [leaf\|ends\|all]` | 今の局面からたどる進行をファイルに書き出す（book は広げない。leaf：広げる leaf の局面、ends：進行の端、all：進行の局面すべて。省くと leaf） |
 | `book reduce <X> <Y> [here]` | book を軽くする（初期局面から。`here` は今の局面から）。数えてから、確かめずに行う |
 | `engine nikque\|newedax` | エンジンの系列 |
 | `design standard\|paw\|toggle` / `effects on\|subdued\|off` | デザイン（`toggle` で切り替え）・効果 |

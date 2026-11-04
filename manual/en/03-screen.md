@@ -116,6 +116,8 @@ The graph at the lower right shows the value at each position of the game.
 
 - The vertical line marks the current position.
 - Click the graph to go to the nearest position of the game.
+- The purple bands and lines are the moves the current Lv searches to the end. A line is where the search changes, with its probability (87%, 98%...) or "to the end" on top; a darker band is a surer search. At Lv 21, for instance: 87% from move 30, 98% from move 33, to the end from move 36.
+- View > "Show the ranges searched to the end on the graph (the current Lv)" shows or hides them.
 
 ## Log
 

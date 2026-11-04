@@ -30,7 +30,7 @@ The GUI also writes the file when it closes. Close the GUI before editing the fi
 | `[nikque]`, `[newedax]` | `dir` (engine folder), `exe` (`auto` or the file name), `eval`, `book` |
 | `[analysis]` | `level`, `threads` (0: all), `hash` (bits of the hash table; 0: the engine's), `umi`, `x`, `y`, `base`, `stages`, `precision` (1: compute the book accuracy), `backward`, `forward` (the order of the search of the game), `compare` |
 | `[play]` | `level`, `opening` (`search\|best\|wide`), `width`, `until`, `clock`, `ponder`, `end_keep`, `end_list` |
-| `[view]` | `design`, `effects`, `language`, `numbers`, `opening_marks` (0: no marks on the lines of the openings), `record_box` (0: no box of the moves), `upper_moves` (1: the game written in capitals), `pv` (1: the expected line on the board), `cell_info`, `fps`, `font`, `opening_file`, `screenshot_dir` |
+| `[view]` | `design`, `effects`, `language`, `numbers`, `opening_marks` (0: no marks on the lines of the openings), `record_box` (0: no box of the moves), `upper_moves` (1: the game written in capitals), `graph_end` (0: no ranges searched to the end on the graph), `pv` (1: the expected line on the board), `cell_info`, `fps`, `font`, `opening_file`, `screenshot_dir` |
 | `[window]` | size and place, `tab`, `panel_w`, `bookmarks` (1: the row of bookmarks) |
 | `[list]` | `start_ply` (the move to open games of the list at; -1: the last) |
 | `[learn]` | the last learning command and its position (for Continue from the file saved on the way) |

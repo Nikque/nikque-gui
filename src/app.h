@@ -84,6 +84,7 @@ enum : int {
 	OpenBook,
 	ExportMissing,
 	ExportBest,
+	ExportDeviate,
 	RecentBook0 = 1250,  // + index of the recent books (up to 8)
 	LearnDeviate = 1300,
 	LearnDeviate2,
@@ -189,6 +190,7 @@ enum : int {
 	BookmarksShow,
 	RecordBoxShow,
 	UpperMoves,
+	GraphEndShow,
 	Rotate0 = 1640,  // + symmetry 0..7
 	CellInfoNone = 1650,
 	CellInfoPositions,
@@ -303,6 +305,7 @@ struct EngineSlot {
 	std::wstring version;              // from "Edax version ..."
 	int probe_id = 0;                  // "stop id=<n>" sent first, not answered yet ("@cancel id=<n>": the book analyses are known)
 	bool old = false;                  // the version came before that answer: an engine without the book analyses
+	bool exports = false;              // that answer has "export=1": book deviate ... export (an older engine would expand the book)
 	std::wstring error;
 	std::string open;                  // the first part of a line cut by an analysis line, waiting for its rest
 	std::wstring book_arg;             // the book name given to the engine (it names its files saved on the way after it)
@@ -376,6 +379,9 @@ public:
 	bool bookmarks_shown_ = true;     // the row of the pictures of the bookmarks (kept lines) above the graph
 	bool record_box_ = true;          // the row of the moves as text above the graph
 	bool upper_moves_ = false;        // the moves given out as text in capitals (F5D6)
+	bool learn_keeps_book_ = false;   // the command of the main engine does not change the book (book deviate ... export)
+	std::wstring devexp_file_;        // the file of the last export of the lines of book deviate
+	bool graph_end_ = true;           // the graph shows the ranges the level reads to the end (lines and bands)
 	HWND record_edit_ = nullptr;      // its text box, a child of the window
 	WNDPROC record_edit_proc_ = nullptr;  // the window procedure of the text box before ours
 	std::wstring record_shown_;       // the moves the text box was given last
@@ -652,6 +658,9 @@ public:
 	void switch_book(const std::wstring &path);
 	void export_missing();
 	void export_best();
+	void export_deviate();  // the window of the lines of book deviate, deviate2, deviate3 to a file
+	// book deviate|deviate2|deviate3 <x> <y> export <file> <leaf|ends|all> on the main engine, from the position shown
+	bool start_deviate_export(const std::string &base, int x, int y, const std::string &which, const std::wstring &file);
 	// app_settings.cpp
 	void open_range_settings();
 	void open_learn_settings();

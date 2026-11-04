@@ -45,5 +45,7 @@ struct Theme {
 };
 
 const Theme &theme(Design d);
+// the light of the bands crossing a number of a stage (3..)
+D2D1_COLOR_F stage_band(const Theme &th, int stage);
 
 }  // namespace ng

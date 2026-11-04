@@ -303,6 +303,7 @@ void App::start_engines()
 			continue;
 		}
 		s.old = false;
+		s.exports = false;
 		s.probe_id = 0;
 		if (role == 0) {
 			// first: an engine with the book analyses answers "@cancel id=<n> state=none" at once, before the version;
@@ -718,6 +719,7 @@ void App::on_engine(WPARAM tag, bool ended)
 			if (role == 1) continue;  // the search engine is asked no book analysis
 			if (s.probe_id && id == s.probe_id) {
 				s.probe_id = 0;  // the book analyses are known
+				if (f.num("export").value_or(0) != 0) s.exports = true;  // and book deviate ... export
 				loaded_now();
 				continue;
 			}

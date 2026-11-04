@@ -14,8 +14,8 @@ Contents of the folder:
 | `nikque-gui.exe` | the GUI |
 | `config.ini` | settings ([11. Settings](11-settings.md)) |
 | `lang\*.txt` | the words of the screen (Japanese, English, Simplified and Traditional Chinese) |
-| `engines\nikque` | Edax v4.5.5-nikque.25, C version |
-| `engines\newedax` | newedax.10, C++ version |
+| `engines\nikque` | Edax v4.5.5-nikque.26, C version |
+| `engines\newedax` | newedax.11, C++ version |
 | `readme.txt` | short notes |
 
 - Each engine folder contains:

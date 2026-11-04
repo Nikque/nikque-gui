@@ -134,6 +134,53 @@ static void test_reduce_script()
 	a->learning_ = false;
 }
 
+// "book deviate2 2 4 export <file> ends" of a script (as the window of the book menu): the command goes to the main
+// engine from the position shown, its result line gives the number of lines in the log, and the analyses of the book
+// stay (the book does not change). The words are checked first.
+static void test_deviate_export()
+{
+	auto a = make_app();
+	start_engine(*a);
+	a->game_.play(parse_square("f5"));
+	std::wstring err;
+	const std::wstring file = a->temp_dir_ + L"\\ng-export.txt";
+	// a main engine that has not said it has the export (an older one would expand the book): nothing is sent
+	CHECK(!a->eng_[0].exports);
+	CHECK(!a->script_command("book deviate2 2 4 export " + narrow(file) + " ends", 1, &err) && !a->learning_);
+	// the answer to the first "stop id=<n>" says it: "@cancel id=<n> state=none export=1"
+	a->eng_[0].probe_id = 42;
+	a->eng_[0].proc.send("!@cancel id=42 state=none export=1\n");
+	for (const ULONGLONG end = GetTickCount64() + 10000; a->eng_[0].probe_id && GetTickCount64() < end; Sleep(1)) {
+		MSG m{};
+		while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a->on_engine(m.wParam, m.lParam != 0);
+	}
+	CHECK(a->eng_[0].probe_id == 0 && a->eng_[0].exports);
+	CHECK(a->script_command("book deviate2 2 4 export " + narrow(file) + " ends", 1, &err));
+	CHECK(a->learning_ && a->learn_cmd_.starts_with("book deviate2 2 4 export ") && a->learn_cmd_.ends_with(" ends"));
+	CHECK(a->ini_.get("learn", "last_command").empty());  // (not a learning to go on with)
+	a->cache_.get(a->game_.now()).values_done = true;
+	feed(*a, "!Book deviate2 2 4 export ends...finished: 7 lines written (x)\n!echo: \"M" + std::to_string(a->learn_end_id_) +
+	             "\" is not on or off; ignored\n");
+	CHECK(!a->learning_);
+	CHECK(logged(*a, lang::f("devexp.written", {L"7", file})));
+	CHECK(logged(*a, lang::t("devexp.ended").substr(0, 5)) && !logged(*a, lang::t("learn.ended").substr(0, 5)));  // (not "learning")
+	CHECK(a->cache_.get(a->game_.now()).values_done);
+
+	// leaf when the kind is left out; a position out of the book
+	CHECK(a->script_command("book deviate 1 2 export " + narrow(file), 1, &err));
+	CHECK(a->learning_ && a->learn_cmd_.starts_with("book deviate 1 2 export ") && a->learn_cmd_.ends_with(" leaf"));
+	feed(*a, "!Book deviate 1 2 export leaf...finished: the position is not in the book, 0 lines written (x)\n!echo: \"M" +
+	             std::to_string(a->learn_end_id_) + "\" is not on or off; ignored\n");
+	CHECK(!a->learning_);
+	CHECK(logged(*a, lang::f("devexp.notinbook", {file})));
+
+	for (const char *bad : {"book deviate4 2 4 export x.txt", "book deviate2 2 4 export x.txt some", "book deviate2 2 export x.txt",
+	                        "book deviate 2 70 export x.txt", "book deviate2 2 255 export x.txt", "book deviate2 2 4 export",
+	                        "book deviate2 2 4 expand x.txt"})
+		CHECK(!a->script_command(bad, 1, &err));
+	CHECK(!a->learning_);
+}
+
 // An engine without book reduce (v4.5.5-nikque.19, newedax.4) answers the count with a warning: nothing is done, and
 // the log says which engines have it. A position out of the book is not reduced either.
 static void test_reduce_unknown()
@@ -869,6 +916,59 @@ static void test_opening_marks()
 
 // The row above the graph: the text box shows the moves up to the position, what is typed stays until Enter or Esc,
 // Enter loads it; it goes away with the setting and with the panel, and takes room from the table and the graph.
+// The colors of the stages 3 (blue) and 4 (orange), and the light of the bands crossing the numbers: white, but the
+// color of the number itself on stage 4 (white bands made its color pale)
+static void test_stage_colors()
+{
+	auto same = [](const D2D1_COLOR_F &c, std::uint32_t hex) {
+		const D2D1_COLOR_F e = rgb(hex);
+		return std::abs(c.r - e.r) < 1e-4f && std::abs(c.g - e.g) < 1e-4f && std::abs(c.b - e.b) < 1e-4f;
+	};
+	for (const Design d : {Design::Standard, Design::Paw}) {
+		const Theme &th = theme(d);
+		CHECK(same(th.stage[3].top, 0x8ec5ff) && same(th.stage[3].mid, 0x155dfc) && same(th.stage[3].bottom, 0x1447e6));
+		CHECK(same(th.stage[3].glow, 0x51a2ff));
+		CHECK(same(th.stage[4].top, 0xffb86a) && same(th.stage[4].mid, 0xff6900) && same(th.stage[4].bottom, 0xca3500));
+		CHECK(same(th.stage[4].glow, 0xff8904));
+		CHECK(same(stage_band(th, 4), 0xffb86a));
+		for (int k : {3, 5, 6, 7}) CHECK(same(stage_band(th, k), 0xffffff));
+	}
+}
+
+// The ranges of the empty squares the levels of the engine read to the end (from the most empty squares, with the
+// probability of each), and the switch of their lines on the graph
+static void test_end_ranges()
+{
+	auto is = [](int level, const std::vector<EndRange> &want) { return end_ranges(level) == want; };
+	CHECK(is(0, {}));
+	CHECK(is(1, {{2, 100}}));
+	CHECK(is(10, {{20, 100}}));
+	CHECK(is(12, {{24, 98}, {21, 100}}));
+	CHECK(is(18, {{27, 87}, {24, 98}, {21, 100}}));
+	CHECK(is(21, {{30, 87}, {27, 98}, {24, 100}}));
+	CHECK(is(24, {{33, 73}, {30, 95}, {27, 99}, {24, 100}}));
+	CHECK(is(27, {{33, 87}, {30, 98}, {27, 100}}));
+	CHECK(is(29, {{36, 73}, {33, 95}, {30, 99}, {27, 100}}));
+	CHECK(is(31, {{36, 87}, {33, 98}, {30, 100}}));
+	CHECK(is(33, {{39, 73}, {36, 95}, {33, 99}, {30, 100}}));
+	CHECK(is(35, {{39, 87}, {36, 98}, {33, 99}, {30, 100}}));
+	CHECK(is(40, {{49, 73}, {46, 87}, {43, 95}, {40, 98}, {37, 99}, {34, 100}}));
+	CHECK(is(52, {{60, 73}, {58, 87}, {55, 95}, {52, 98}, {49, 99}, {46, 100}}));
+	CHECK(is(55, {{60, 87}, {58, 95}, {55, 98}, {52, 99}, {49, 100}}));
+	CHECK(is(60, {{60, 100}}));
+
+	auto a = make_app();
+	std::wstring err;
+	CHECK(a->graph_end_);
+	a->on_command(cmd::GraphEndShow);
+	CHECK(!a->graph_end_);
+	a->save_config();
+	CHECK(a->ini_.get("view", "graph_end") == "0");
+	CHECK(a->script_command("graphend on", 1, &err) && a->graph_end_);
+	CHECK(a->script_command("graphend off", 1, &err) && !a->graph_end_);
+	CHECK(!a->script_command("graphend 2", 1, &err));
+}
+
 static void test_record_box()
 {
 	auto a = make_app();
@@ -1446,6 +1546,8 @@ int main(int argc, char **argv)
 	test_recompute();
 	std::printf("%s\n", "test_reduce_script");
 	test_reduce_script();
+	std::printf("%s\n", "test_deviate_export");
+	test_deviate_export();
 	std::printf("%s\n", "test_reduce_unknown");
 	test_reduce_unknown();
 	std::printf("%s\n", "test_reduce_stopped");
@@ -1470,6 +1572,10 @@ int main(int argc, char **argv)
 	test_values_not_held_back();
 	std::printf("%s\n", "test_opening_marks");
 	test_opening_marks();
+	std::printf("%s\n", "test_stage_colors");
+	test_stage_colors();
+	std::printf("%s\n", "test_end_ranges");
+	test_end_ranges();
 	std::printf("%s\n", "test_record_box");
 	test_record_box();
 	std::printf("%s\n", "test_levels");

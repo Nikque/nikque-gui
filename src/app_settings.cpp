@@ -245,6 +245,76 @@ void App::open_learn_settings()
 	log(t("learnopt.sent"));
 }
 
+// The lines that book deviate, deviate2, deviate3 walks from the position shown, to a text file without expanding the
+// book (book deviate ... export): the command, its numbers and the positions written, then the file.
+void App::export_deviate()
+{
+	using lang::t;
+	if (!eng_[0].alive || learning_) return;
+	if (!eng_[0].exports) {
+		message(t("devexp.old_engine"), MB_ICONWARNING);
+		return;
+	}
+	static const char *const bases[] = {"deviate", "deviate2", "deviate3"}, *const whiches[] = {"leaf", "ends", "all"};
+	std::vector<FormField> f(4);
+	f[0].kind = FormField::Choice;
+	f[0].label = t("devexp.base");
+	f[0].choices = {L"book deviate", L"book deviate2", L"book deviate3"};
+	const std::string b = ini_.get("devexport", "base", base_);
+	f[0].choice = b == "deviate3" ? 2 : b == "deviate2" ? 1 : 0;
+	f[1].kind = FormField::Number;
+	f[1].label = t("devexp.x");
+	f[1].text = std::to_wstring(ini_.get_int("devexport", "x", loss_x_, 0, 129));
+	f[1].lo = 0;
+	f[1].hi = 129;
+	f[1].note = t("devexp.x.note");
+	f[2].kind = FormField::Number;
+	f[2].label = t("devexp.y");
+	f[2].text = std::to_wstring(ini_.get_int("devexport", "y", loss_y_, 0, 254));
+	f[2].lo = 0;
+	f[2].hi = 254;
+	f[2].note = t("devexp.y.note");
+	f[3].kind = FormField::Choice;
+	f[3].label = t("devexp.which");
+	f[3].choices = {t("devexp.which.leaf"), t("devexp.which.ends"), t("devexp.which.all")};
+	const std::string wh = ini_.get("devexport", "which", "leaf");
+	f[3].choice = wh == "all" ? 2 : wh == "ends" ? 1 : 0;
+	if (!run_form(hwnd_, t("devexp.window"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return;
+	const int x = std::stoi(f[1].text), y = std::stoi(f[2].text);
+	if (f[0].choice == 0 && y > 65) {  // (the absolute error of book deviate)
+		message(t("devexp.y_deviate"), MB_ICONWARNING);
+		return;
+	}
+	ini_.set("devexport", "base", bases[f[0].choice]);
+	ini_.set("devexport", "x", std::to_string(x));
+	ini_.set("devexport", "y", std::to_string(y));
+	ini_.set("devexport", "which", whiches[f[3].choice]);
+	save_config();
+
+	wchar_t file[MAX_PATH] = L"deviate-lines.txt";
+	OPENFILENAMEW of{sizeof of};
+	of.hwndOwner = hwnd_;
+	of.lpstrFilter = L"*.txt\0*.txt\0*.*\0*.*\0";
+	of.lpstrFile = file;
+	of.nMaxFile = MAX_PATH;
+	of.lpstrDefExt = L"txt";
+	of.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+	if (!GetSaveFileNameW(&of)) return;
+	start_deviate_export(bases[f[0].choice], x, y, whiches[f[3].choice], file);
+}
+
+bool App::start_deviate_export(const std::string &base, int x, int y, const std::string &which, const std::wstring &file)
+{
+	if (!eng_[0].alive || learning_ || !eng_[0].exports) return false;  // (an engine without it would expand the book)
+	auto p = engine_path_or_say(file, FileUse::Write, 0);  // (a name the engine cannot open goes through the temporary folder)
+	if (!p) return false;
+	devexp_file_ = file;
+	learn_keeps_book_ = true;
+	start_learning_at("book " + base + " " + std::to_string(x) + " " + std::to_string(y) + " export " + *p + " " + which,
+	                  game_.start(), moves_to_cursor());
+	return true;
+}
+
 // The lines of best moves from the position shown (book bestlines): the conditions, then the file. The engine
 // writes the file itself (one line a end position, the moves from the start of the game).
 void App::export_best()

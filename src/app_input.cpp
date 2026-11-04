@@ -784,6 +784,11 @@ void App::on_command(int id)
 		layout();
 		invalidate();
 		break;
+	case cmd::GraphEndShow:
+		graph_end_ = !graph_end_;
+		update_menu();
+		invalidate();
+		break;
 	case cmd::UpperMoves:
 		upper_moves_ = !upper_moves_;
 		update_menu();
@@ -844,6 +849,7 @@ void App::on_command(int id)
 	}
 	case cmd::ExportMissing: export_missing(); break;
 	case cmd::ExportBest: export_best(); break;
+	case cmd::ExportDeviate: export_deviate(); break;
 	case cmd::FixRecord:
 		fixed_on_ = !fixed_on_;
 		if (fixed_on_) {

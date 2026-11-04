@@ -209,4 +209,14 @@ bool shown_value(const MoveEval &m, bool use_book, int *value);
 // the "Lv" shown for a value that is not from the book (search depth, or the leaf's level)
 int shown_level(const MoveEval &m, bool use_book);
 
+// A range of empty squares that a level of the engine reads to the end: the positions with at most `empties` and more
+// than the next range's empty squares, read with the probability `percent` (73 to 100)
+struct EndRange {
+	int empties;
+	int percent;
+	bool operator==(const EndRange &) const = default;
+};
+// the ranges of a level (0..60), from the most empty squares (the levels of Edax: nikque and newedax)
+std::vector<EndRange> end_ranges(int level);
+
 }  // namespace ng

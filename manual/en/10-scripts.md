@@ -11,7 +11,7 @@ A command script is a UTF-8 text file with one command per line.
 Rules:
 
 - Lines starting with `#` are comments.
-- A command that starts work (`list load`, `search`, `learn start`, `edax`, `tool`, `estimate`, `wait`, `book reduce` and so on) waits until the work finishes before the next line runs.
+- A command that starts work (`list load`, `search`, `learn start`, `edax`, `tool`, `estimate`, `wait`, `book reduce`, `book deviate ... export` and so on) waits until the work finishes before the next line runs.
 - When `wait` or `waitgame` ends because its time ran out, the log says so.
 - Relative paths are relative to the folder of the script.
 - If a line has an error, it is written to the log and the script stops.
@@ -35,7 +35,9 @@ Rules:
 | `recordbox on\|off` | the box of the moves, or not |
 | `recordtext <text>` | as typing the text in the box of the moves and pressing Enter (an error when it cannot be read) |
 | `uppermoves on\|off` | write the game in capitals, or not |
+| `graphend on\|off` | the ranges searched to the end (the current Lv) on the graph, or not |
 | `book reload` | reads the book again (restarts the main engine) |
+| `book deviate\|deviate2\|deviate3 <X> <Y> export <file> [leaf\|ends\|all]` | writes the lines walked from the position shown to a file, without expanding the book (leaf: positions with a leaf to expand, ends: the ends of the lines, all: all their positions; leaf when left out) |
 | `book reduce <X> <Y> [here]` | makes the book lighter (from the initial position; `here`: from the position shown); counted, then done without asking |
 | `engine nikque\|newedax` | kind of engine |
 | `design standard\|paw\|toggle` / `effects on\|subdued\|off` | design (`toggle` switches it), effects |
