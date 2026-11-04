@@ -11,6 +11,7 @@
   - umigame numbers (how many line ends you must memorize to know every line after the move)
   - the positions by level
   - the number of best lines, and writing them to a file
+  - writing the lines that the `book deviate` family walks to a file (without expanding the book)
   - a tree of the book lines
 - **Book learning and maintenance**:
   - Runs the learning commands (deviate, enhance, fill and others) from the current position.

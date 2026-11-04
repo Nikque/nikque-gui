@@ -50,12 +50,14 @@ The work starts again when the position changes. To keep it stopped, do one of t
 
 For each move, the stage shows how complete the book is after that move. Hover over the dots in the top bar to see the colors and their meanings.
 
-| Stage | Meaning |
-|---|---|
-| 0 | a move not in the book (search value) |
-| 1 | in the book, but the best line does not reach a position solved to the end |
-| 2 | the best line reaches the end, but leaves near the best remain |
-| 3 to 7 | `book deviate x y` from the position after the move would add nothing (by default 3 is 1/1, 4 is 2/2 … 7 is 5/5) |
+| Stage | Number color | Meaning |
+|---|---|---|
+| 0 | white | a move not in the book (search value) |
+| 1 | light blue | in the book, but the best line does not reach a position solved to the end |
+| 2 | yellow-green | the best line reaches the end, but leaves near the best remain |
+| 3 to 7 | 3 dark blue, 4 orange, 5 red, 6 gold, 7 black (white outline) | `book deviate x y` from the position after the move would add nothing (by default 3 is 1/1, 4 is 2/2 … 7 is 5/5) |
+
+Among the values of stage 0, a value searched to the end is a purple number marked "E". The light bands of the effect of stage 4 are orange, not white (to tell it from the other colors).
 
 - Book → Accuracy based on selects the base command: deviate, deviate2 or deviate3.
 - The ranges (x/y) of stages 3 to 7 are set in Settings → Range….
