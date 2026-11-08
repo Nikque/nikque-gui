@@ -94,9 +94,59 @@ LRESULT CALLBACK form_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 
 }  // namespace
 
-bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fields, const std::wstring &ok,
-              const std::wstring &cancel, const std::wstring &bad_number)
+FormField number_field(const std::wstring &label, int value, int lo, int hi, const std::wstring &note)
 {
+	FormField f;
+	f.kind = FormField::Number;
+	f.label = label;
+	f.text = std::to_wstring(value);
+	f.lo = lo;
+	f.hi = hi;
+	f.note = note;
+	return f;
+}
+
+FormField slider_field(const std::wstring &label, int value, int lo, int hi, const std::wstring &note)
+{
+	FormField f = number_field(label, value, lo, hi, note);
+	f.kind = FormField::Slider;
+	return f;
+}
+
+FormField text_field(const std::wstring &label, const std::wstring &text, const std::wstring &note)
+{
+	FormField f;
+	f.kind = FormField::Text;
+	f.label = label;
+	f.text = text;
+	f.note = note;
+	return f;
+}
+
+FormField choice_field(const std::wstring &label, std::vector<std::wstring> choices, int choice, const std::wstring &note)
+{
+	FormField f;
+	f.kind = FormField::Choice;
+	f.label = label;
+	f.choices = std::move(choices);
+	f.choice = choice;
+	f.note = note;
+	return f;
+}
+
+FormField check_field(const std::wstring &label, bool checked, const std::wstring &note)
+{
+	FormField f;
+	f.kind = FormField::Check;
+	f.label = label;
+	f.checked = checked;
+	f.note = note;
+	return f;
+}
+
+bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fields)
+{
+	const std::wstring &ok = lang::t("form.ok"), &cancel = lang::t("form.cancel"), &bad_number = lang::t("form.bad_number");
 	static bool registered = false;
 	HINSTANCE inst = GetModuleHandleW(nullptr);
 	if (!registered) {
@@ -219,8 +269,16 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 	EnableWindow(owner, FALSE);
 	ShowWindow(hwnd, SW_SHOW);
 	if (first) SetFocus(first);
-	MSG m;
-	while (!st.done && GetMessageW(&m, nullptr, 0, 0) > 0) {
+	MSG m{};
+	// the end of the program asked while the form is open (the main window closed by "quit" of a script, which goes
+	// on in this loop): WM_QUIT is posted again after the form, for the loop under it
+	bool quit = false;
+	while (!st.done) {
+		const BOOL got = GetMessageW(&m, nullptr, 0, 0);
+		if (got <= 0) {
+			quit = got == 0;  // (-1: no message, as with an error)
+			break;
+		}
 		if (m.message == WM_KEYDOWN && m.wParam == VK_ESCAPE) {
 			st.done = true;
 			continue;
@@ -236,6 +294,7 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 	DeleteObject(font);
 	DeleteObject(bold);
 	for (auto &f : fields) f.control = f.slider = nullptr;
+	if (quit) PostQuitMessage(static_cast<int>(m.wParam));
 	return st.accepted;
 }
 

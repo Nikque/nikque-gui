@@ -104,7 +104,7 @@ The text box just above the graph shows the game up to the current position as c
 - With Input/Output → Write the game in capitals (F5D6…), the box and the copied game are in capitals. Games are read in either case.
 - Press Enter to read what you typed in the box.
 - When it cannot be read, the bottom row says so and the game stays. What you typed stays too, so you can correct it and press Enter.
-- Esc or a click outside the box takes back what you typed. So does moving to another window.
+- Esc or a click outside the box takes back what you typed. Moving to another window keeps it: when you come back, you can go on typing.
 - After a click in the box, the arrow keys and other keys work in the box. Click outside the box (the board, for example) or press Esc to move the position with the keys again. The same comes after reading a game.
 - The forms read are the same as for Paste a game ([8. Games, lists and bookmarks](08-games.md)).
 - Nothing is read while a position is set up.

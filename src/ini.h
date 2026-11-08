@@ -35,6 +35,10 @@ private:
 
 std::string trim(std::string_view s);
 bool iequals(std::string_view a, std::string_view b) noexcept;
+std::string lower(std::string s);  // A to Z as a to z
+bool read_file(const std::wstring &path, std::string *out);  // all its bytes (false: it cannot be opened)
+// all of `data` as the file: written to "<path>.tmp", then put in its place (false: the file is as it was)
+bool write_file(const std::wstring &path, std::string_view data);
 std::wstring widen(std::string_view utf8);
 std::string narrow(std::wstring_view wide);
 

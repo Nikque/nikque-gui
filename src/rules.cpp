@@ -91,17 +91,8 @@ int Position::empties() const noexcept
 Position Position::play(int sq) const noexcept
 {
 	Position next = *this;
-	if (sq != kPass) {
-		const u64 turned = flips(me(), opp(), sq) | (1ULL << sq);
-		if (side == kBlack) {
-			next.black |= turned;
-			next.white &= ~turned;
-		} else {
-			next.white |= turned;
-			next.black &= ~turned;
-		}
-	}
-	next.side = side ^ 1;
+	if (sq == kPass) next.side ^= 1;
+	else next.put(sq, flips(me(), opp(), sq));
 	return next;
 }
 
@@ -133,10 +124,6 @@ int parse_square(std::string_view s) noexcept
 	if (c < 'a' || c > 'h' || r < '1' || r > '8') return kNoMove;
 	return (r - '1') * 8 + (c - 'a');
 }
-
-}  // namespace ng
-
-namespace ng {
 
 namespace {
 

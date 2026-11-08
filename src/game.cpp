@@ -152,10 +152,6 @@ int replay(Game &game, const Position &start, const std::vector<int> &moves)
 	return n;
 }
 
-}  // namespace ng
-
-namespace ng {
-
 std::optional<Position> parse_board_text(std::string_view text)
 {
 	size_t start = text.find("board:");
@@ -246,10 +242,6 @@ std::optional<std::vector<int>> parse_param_lines(std::string_view text)
 	return moves;
 }
 
-}  // namespace ng
-
-namespace ng {
-
 Game transformed(const Game &g, int s)
 {
 	Game out;
@@ -307,6 +299,13 @@ std::optional<u64> number_token(std::string_view t)
 	return v;
 }
 
+// a character between the numbers and the side
+bool separator(char c)
+{
+	return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == ',' || c == ';' || c == ':' || c == '=' || c == '(' ||
+	       c == ')' || c == '[' || c == ']';
+}
+
 // 1 black, 2 white, 0 not a side
 int side_token(std::string_view t)
 {
@@ -326,20 +325,12 @@ std::optional<Position> parse_bitboards(std::string_view text, bool ntest)
 	int side = 0;
 	size_t i = 0;
 	while (i < text.size()) {
-		const unsigned char c = static_cast<unsigned char>(text[i]);
-		if (c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == ',' || c == ';' || c == ':' || c == '=' ||
-		    c == '(' || c == ')' || c == '[' || c == ']') {
+		if (separator(text[i])) {
 			++i;
 			continue;
 		}
 		size_t e = i;
-		while (e < text.size()) {
-			const char d = text[e];
-			if (d == ' ' || d == '\t' || d == '\r' || d == '\n' || d == ',' || d == ';' || d == ':' || d == '=' ||
-			    d == '(' || d == ')' || d == '[' || d == ']')
-				break;
-			++e;
-		}
+		while (e < text.size() && !separator(text[e])) ++e;
 		const std::string_view t = text.substr(i, e - i);
 		i = e;
 		if (nums.size() < 2) {

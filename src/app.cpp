@@ -19,10 +19,6 @@ namespace ng {
 
 namespace {
 
-constexpr UINT_PTR kTimerAnim = 1;
-constexpr UINT_PTR kTimerWatch = 2;  // the engines are watched every 5 seconds
-constexpr UINT_PTR kTimerScript = 3; // a script waiting for the analysis of the position looks again
-
 LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 {
 	App *app = reinterpret_cast<App *>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
@@ -33,13 +29,6 @@ LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	}
 	if (app) return app->proc(hwnd, msg, wp, lp);
 	return DefWindowProcW(hwnd, msg, wp, lp);
-}
-
-std::string lower(std::string s)
-{
-	for (auto &c : s)
-		if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
-	return s;
 }
 
 // 974, 12.3K, 974K, 1.2M, 3.4G
@@ -150,7 +139,7 @@ int App::run(HINSTANCE inst, int show)
 	SetTimer(hwnd_, kTimerWatch, 5000, nullptr);
 	// the commands to run at the start (config.ini [script] startup)
 	if (const std::string st = ini_.get("script", "startup"); !st.empty())
-		run_script_file(st.size() > 1 && st[1] == ':' ? widen(st) : exe_dir_ + L"\\" + widen(st), 0);
+		run_script_file(from_exe_dir(st), 0);
 
 	MSG m;
 	while (GetMessageW(&m, nullptr, 0, 0) > 0) {
@@ -202,6 +191,7 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		if (wp == kTimerAnim) paint_animation();
 		else if (wp == kTimerWatch) watch_engines();
 		else if (wp == kTimerScript) pump_script();
+		else if (wp == kTimerSave) watch_save();
 		else play_timer(*this, wp);
 		return 0;
 	case WM_TASK:
@@ -220,6 +210,9 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		active_ = wp != 0;
 		update_animation_timer();
 		return 0;
+	case WM_SETFOCUS:  // (given by the activation of the window too)
+		if (record_resumes()) SetFocus(record_edit_);
+		break;
 	case WM_KEYDOWN:
 	case WM_SYSKEYDOWN:
 		if (msg == WM_SYSKEYDOWN && wp != VK_LEFT && wp != VK_RIGHT && wp != VK_UP && wp != VK_DOWN) break;
@@ -257,13 +250,10 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 			POINT p;
 			GetCursorPos(&p);
 			ScreenToClient(hwnd, &p);
-			const auto in = [&](const D2D1_RECT_F &r) {
-				return p.x >= r.left && p.x < r.right && p.y >= r.top && p.y < r.bottom;
-			};
 			LPCWSTR c = IDC_ARROW;
-			if (drag_ == Drag::Panel || (!panel_hidden_ && !lay_.panel_below && in(lay_.panel_split))) c = IDC_SIZEWE;
-			else if (drag_ == Drag::Graph || (!panel_hidden_ && in(lay_.splitter))) c = IDC_SIZENS;
-			else if (!panel_hidden_ && (in(lay_.fx.box) || in(lay_.fy.box) || in(lay_.record_text))) c = IDC_IBEAM;
+			if (drag_ == Drag::Panel || (!panel_hidden_ && !lay_.panel_below && inside(lay_.panel_split, p))) c = IDC_SIZEWE;
+			else if (drag_ == Drag::Graph || (!panel_hidden_ && inside(lay_.splitter, p))) c = IDC_SIZENS;
+			else if (!panel_hidden_ && (inside(lay_.fx.box, p) || inside(lay_.fy.box, p) || inside(lay_.record_text, p))) c = IDC_IBEAM;
 			SetCursor(LoadCursorW(nullptr, c));
 			return TRUE;
 		}
@@ -286,17 +276,7 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		on_engine(wp, lp != 0);
 		return 0;
 	case WM_CLOSE:
-		save_config();
-		KillTimer(hwnd, kTimerAnim);
-		KillTimer(hwnd, kTimerWatch);
-		KillTimer(hwnd, kTimerScript);
-		script_.clear();
-		if (task_.joinable()) {
-			task_.request_stop();
-			task_.join();
-		}
-		stop_engines();
-		DestroyWindow(hwnd);
+		close_window();
 		return 0;
 	case WM_DESTROY: {
 		// the temporary folder of this run (empty books, files given to the engines)
@@ -309,23 +289,63 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
+// The window closes (its button, Alt+F4, "quit" of a script). The main engine may save its book as it ends: the window
+// then closes after it and answers meanwhile; closed again then, it asks whether to end the engine now (not when a
+// script closes it).
+void App::close_window()
+{
+	if (closing_) {
+		if (!script_quit_) ask_cut_save();
+		return;
+	}
+	closing_ = true;
+	// (the log goes with the window: said in a box, but not to a script that ends the program, which nobody may watch)
+	const bool saved = save_config();
+	if (!saved && !script_quit_) message(lang::f("config.save_failed", {ini_path_}), MB_ICONWARNING);
+	KillTimer(hwnd_, kTimerAnim);
+	KillTimer(hwnd_, kTimerWatch);
+	KillTimer(hwnd_, kTimerScript);
+	script_.clear();
+	auto stop_task = [this] {
+		if (task_.joinable()) {
+			task_.request_stop();
+			task_.join();
+		}
+	};
+	stop_task();
+	stop_engines([this, saved, stop_task] {
+		// what was started while the book was saved (the window answers meanwhile) goes before the window, and what was
+		// changed is saved (a failure said once)
+		stop_task();
+		for (int role = 1; role < 5; ++role) eng_[role].proc.close();
+		if (!save_config() && saved && !script_quit_) message(lang::f("config.save_failed", {ini_path_}), MB_ICONWARNING);
+		DestroyWindow(hwnd_);
+	});
+}
+
 // ---- config
+
+std::wstring App::from_exe_dir(const std::string &name) const
+{
+	return absolute(exe_dir_, name);
+}
 
 void App::load_config()
 {
 	ini_.load(ini_path_);
-	const std::string d = lower(ini_.get("view", "design", "standard"));
-	design_ = d == "paw" ? Design::Paw : Design::Standard;
-	const std::string e = lower(ini_.get("view", "effects", "on"));
-	effects_ = e == "off" ? Effects::Off : e == "subdued" ? Effects::Subdued : Effects::On;
-	const std::string te = lower(ini_.get("view", "top_effect", "normal"));
-	top_effect_ = te == "strong" ? TopEffect::Strong : te == "weak" ? TopEffect::Weak : TopEffect::Normal;
+	// a setting given by its name (in any case); another name gives `def`
+	auto named = [&]<typename E, size_t N>(const char *section, const char *key, const char *const (&names)[N], E def) {
+		const int k = name_index(names, lower(ini_.get(section, key, names[static_cast<int>(def)])));
+		return k >= 0 ? static_cast<E>(k) : def;
+	};
+	design_ = named("view", "design", kDesignNames, Design::Standard);
+	effects_ = named("view", "effects", kEffectsNames, Effects::On);
+	top_effect_ = named("view", "top_effect", kTopEffectNames, TopEffect::Normal);
 	show_eval_ = ini_.get_bool("analysis", "show", true);
 	use_book_ = ini_.get_bool("analysis", "book", true);
 	level_ = ini_.get_int("analysis", "level", 21, 0, 60);
 	threads_ = ini_.get_int("analysis", "threads", 0, 0, 1024);
-	const std::string u = lower(ini_.get("analysis", "umi", "best"));
-	umi_ = u == "loss" ? UmiMode::Loss : u == "off" ? UmiMode::Off : u == "range" ? UmiMode::Range : UmiMode::Best;
+	umi_ = named("analysis", "umi", kUmiNames, UmiMode::Best);
 	umi_lo_ = ini_.get_int("analysis", "umi_lo", -64, -64, 64);
 	umi_hi_ = ini_.get_int("analysis", "umi_hi", 64, -64, 64);
 	umi_depth_ = ini_.get_int("analysis", "umi_depth", 60, 1, 60);
@@ -356,20 +376,14 @@ void App::load_config()
 	graph_ratio_ = ini_.get_int("window", "graph", 34, 10, 90) / 100.0f;
 	log_open_ = ini_.get_bool("window", "log", false);
 	panel_hidden_ = ini_.get_bool("window", "panel_hidden", false);
-	const std::string t = lower(ini_.get("window", "tab", "moves"));
-	tab_ = t == "book" ? Tab::Book : t == "record" ? Tab::Record : t == "list" ? Tab::List : t == "tree" ? Tab::Tree : Tab::Moves;
+	tab_ = named("window", "tab", kTabNames, Tab::Moves);
 	hash_bits_ = ini_.get_int("analysis", "hash", 0, 0, 30);
 	if (hash_bits_ > 0 && hash_bits_ < 10) hash_bits_ = 10;
 	move_numbers_ = ini_.get_bool("view", "numbers", false);
-	const std::string ci = lower(ini_.get("view", "cell_info", "none"));
-	cell_info_ = ci == "positions" ? CellInfo::Positions : ci == "level" ? CellInfo::Level : ci == "stage" ? CellInfo::Stage
-	           : ci == "umi" ? CellInfo::Umi : CellInfo::None;
+	cell_info_ = named("view", "cell_info", kCellInfoNames, CellInfo::None);
 	list_start_ply_ = ini_.get_int("list", "start_ply", -1, -1, 60);
 	com_level_ = ini_.get_int("play", "level", 21, 1, 60);
-	{
-		const std::string o = lower(ini_.get("play", "opening", "best"));
-		opening_ = o == "search" ? Opening::Search : o == "wide" ? Opening::BookWide : Opening::BookBest;
-	}
+	opening_ = named("play", "opening", kOpeningNames, Opening::BookBest);
 	opening_width_ = ini_.get_int("play", "width", 2, 0, 64);
 	opening_until_ = ini_.get_int("play", "until", 60, 0, 60);
 	clock_minutes_ = ini_.get_int("play", "clock", 0, 0, 600);
@@ -378,7 +392,7 @@ void App::load_config()
 	end_list_ = ini_.get_bool("play", "end_list", false);
 	compare_ = ini_.get_bool("analysis", "compare", false);
 	lang_ = ini_.get("view", "language", "ja");
-	if (lang_ != "en" && lang_ != "zh-Hans" && lang_ != "zh-Hant") lang_ = "ja";
+	if (name_index(kLanguages, lang_) < 0) lang_ = "ja";
 	// listed even when empty, so that config.ini shows them
 	if (ini_.section("script").empty()) ini_.set("script", "startup", "");
 	keys_.load(ini_);
@@ -393,27 +407,22 @@ void App::load_config()
 	lang::load(exe_dir_, lang_);
 	// opening names: a file next to the exe unless set
 	const std::string of = ini_.get("view", "opening_file");
-	const std::wstring opath = of.empty() ? exe_dir_ + L"\\opening.ini"
-	                                      : (of.size() > 1 && of[1] == ':' ? widen(of) : exe_dir_ + L"\\" + widen(of));
-	openings_.load(opath);
+	openings_.load(of.empty() ? exe_dir_ + L"\\opening.ini" : from_exe_dir(of));
 	show_opening_ = ini_.get_bool("view", "opening", true);
 }
 
-void App::save_config()
+bool App::save_config()
 {
-	ini_.set("view", "design", design_ == Design::Paw ? "paw" : "standard");
-	ini_.set("view", "effects", effects_ == Effects::Off ? "off" : effects_ == Effects::Subdued ? "subdued" : "on");
-	ini_.set("view", "top_effect", top_effect_ == TopEffect::Strong ? "strong" : top_effect_ == TopEffect::Weak ? "weak" : "normal");
+	ini_.set("view", "design", kDesignNames[static_cast<int>(design_)]);
+	ini_.set("view", "effects", kEffectsNames[static_cast<int>(effects_)]);
+	ini_.set("view", "top_effect", kTopEffectNames[static_cast<int>(top_effect_)]);
 	ini_.set("view", "language", lang_);
 	ini_.set_int("view", "numbers", move_numbers_);
-	{
-		const char *names[] = {"none", "positions", "level", "stage", "umi"};
-		ini_.set("view", "cell_info", names[static_cast<int>(cell_info_)]);
-	}
+	ini_.set("view", "cell_info", kCellInfoNames[static_cast<int>(cell_info_)]);
 	ini_.set_int("analysis", "hash", hash_bits_);
 	ini_.set_int("analysis", "compare", compare_);
 	ini_.set_int("play", "level", com_level_);
-	ini_.set("play", "opening", opening_ == Opening::Search ? "search" : opening_ == Opening::BookWide ? "wide" : "best");
+	ini_.set("play", "opening", kOpeningNames[static_cast<int>(opening_)]);
 	ini_.set_int("play", "width", opening_width_);
 	ini_.set_int("play", "until", opening_until_);
 	ini_.set_int("play", "clock", clock_minutes_);
@@ -429,7 +438,7 @@ void App::save_config()
 	ini_.set_int("analysis", "book", use_book_);
 	ini_.set_int("analysis", "level", level_);
 	ini_.set_int("analysis", "threads", threads_);
-	ini_.set("analysis", "umi", umi_ == UmiMode::Loss ? "loss" : umi_ == UmiMode::Off ? "off" : umi_ == UmiMode::Range ? "range" : "best");
+	ini_.set("analysis", "umi", kUmiNames[static_cast<int>(umi_)]);
 	ini_.set_int("analysis", "umi_lo", umi_lo_);
 	ini_.set_int("analysis", "umi_hi", umi_hi_);
 	ini_.set_int("analysis", "umi_depth", umi_depth_);
@@ -462,11 +471,10 @@ void App::save_config()
 	ini_.set_int("window", "graph", static_cast<int>(std::lround(graph_ratio_ * 100)));
 	ini_.set_int("window", "log", log_open_);
 	ini_.set_int("window", "panel_hidden", panel_hidden_);
-	{
-		const char *names[] = {"moves", "book", "record", "list", "tree"};
-		ini_.set("window", "tab", names[static_cast<int>(tab_)]);
-	}
-	if (ini_.dirty()) ini_.save(ini_path_);
+	ini_.set("window", "tab", kTabNames[static_cast<int>(tab_)]);
+	if (!ini_.dirty() || ini_.save(ini_path_)) return true;
+	log(lang::f("config.save_failed", {ini_path_}));  // (config.ini stays as it was; the settings are kept to be saved)
+	return false;
 }
 
 // ---- menu
@@ -803,8 +811,10 @@ void App::update_menu()
 		for (int i = 0, n = GetMenuItemCount(parent); i < n; ++i)
 			if (GetSubMenu(parent, i) == child) EnableMenuItem(parent, static_cast<UINT>(i), MF_BYPOSITION | (on ? MF_ENABLED : MF_GRAYED));
 	};
-	enable_popup(book_menu_, keep_menu_, !learning_);
-	enable_popup(learn_menu_, leaf_menu_, !learning_);
+	// the book commands of the main engine: not while it learns, nor while it saves its book as it ends
+	const bool book_free = !learning_ && !book_saving_;
+	enable_popup(book_menu_, keep_menu_, book_free);
+	enable_popup(learn_menu_, leaf_menu_, book_free);
 	check(cmd::ShowEval, show_eval_);
 	radio(cmd::Backward, cmd::BackgroundOff, backward_ ? cmd::Backward : forward_ ? cmd::Forward : cmd::BackgroundOff);
 	check(cmd::PrecisionOn, precision_);
@@ -816,15 +826,15 @@ void App::update_menu()
 	check(cmd::UpperMoves, upper_moves_);
 	check(cmd::FixRecord, fixed_on_);
 	enable(cmd::LearnStop, learning_);
-	for (int id = cmd::LearnDeviate; id <= cmd::LearnJobLast; ++id) enable(id, !learning_);
-	enable(cmd::LearnReduce, !learning_ && reduce_.state == ReduceJob::None);
+	for (int id = cmd::LearnDeviate; id <= cmd::LearnJobLast; ++id) enable(id, book_free);
+	enable(cmd::LearnReduce, book_free && reduce_.state == ReduceJob::None);
 	// these close the main engine (a learning command takes no input to stop)
-	for (int id : {cmd::ReloadBook, cmd::OpenBook, cmd::EngineNikque, cmd::EngineNewedax, cmd::RestartEngines}) enable(id, !learning_);
-	enable(cmd::LearnContinue, !learning_);
-	enable(cmd::ExportBest, !learning_);
-	enable(cmd::ExportDeviate, !learning_);
-	enable(cmd::ListFromBook, !learning_ && !task_busy_);
-	enable(cmd::QueueStart, !learning_ && !learn_queue_.empty());
+	for (int id : {cmd::ReloadBook, cmd::OpenBook, cmd::EngineNikque, cmd::EngineNewedax, cmd::RestartEngines}) enable(id, book_free);
+	enable(cmd::LearnContinue, book_free);
+	enable(cmd::ExportBest, book_free);
+	enable(cmd::ExportDeviate, book_free);
+	enable(cmd::ListFromBook, book_free && !task_busy_);
+	enable(cmd::QueueStart, book_free && !learn_queue_.empty());
 	enable(cmd::QueueClear, !learn_queue_.empty());
 	for (int id = cmd::ToolSolve; id < cmd::ToolStop; ++id) enable(id, !tool_busy_);
 	for (int id = cmd::BaseConvert; id <= cmd::BaseTofen; ++id) enable(id, !tool_busy_);
@@ -871,8 +881,7 @@ void App::update_menu()
 	radio(cmd::TabMoves, cmd::TabTree, cmd::TabMoves + static_cast<int>(tab_));
 	radio(cmd::Rotate0, cmd::Rotate0 + 7, cmd::Rotate0 + orient_);
 	radio(cmd::CellInfoNone, cmd::CellInfoUmi, cmd::CellInfoNone + static_cast<int>(cell_info_));
-	const int lang_id = lang_ == "en" ? cmd::LangEn : lang_ == "zh-Hans" ? cmd::LangZhHans : lang_ == "zh-Hant" ? cmd::LangZhHant : cmd::LangJa;
-	radio(cmd::LangJa, cmd::LangZhHant, lang_id);
+	radio(cmd::LangJa, cmd::LangZhHant, cmd::LangJa + std::max(0, name_index(kLanguages, lang_)));
 }
 
 void App::set_language(const std::string &code)
@@ -978,6 +987,7 @@ void App::layout()
 	// the row of the moves as text, right on the graph
 	const float rec_h = record_box_ && !panel_hidden_ ? std::round(L.row * 1.25f) : 0;
 	const float avail_h = std::max(0.0f, rest_h - bm_h - rec_h);
+	L.graph_room = avail_h;
 	float gh = std::round(avail_h * graph_ratio_);
 	gh = std::clamp(gh, std::min(L.row * 3, avail_h * 0.5f), std::max(L.row * 3, avail_h - L.row * 4));
 	L.table = {P.left, rest_top, P.right, std::max(rest_top, P.bottom - gh - split_h - bm_h - rec_h)};
@@ -1200,6 +1210,7 @@ void App::log(const std::wstring &line)
 
 int App::message(const std::wstring &text, UINT flags)
 {
+	if (message_hook_) return message_hook_(text, flags);
 	return MessageBoxW(hwnd_, text.c_str(), lang::t("app.title").c_str(), flags);
 }
 
@@ -1209,10 +1220,6 @@ void App::set_status(const std::wstring &s)
 	status_ = s;
 	invalidate();
 }
-
-}  // namespace ng
-
-namespace ng {
 
 void App::compute_line()
 {

@@ -16,6 +16,9 @@ constexpr D2D1_COLOR_F rgb(std::uint32_t hex, float a = 1.0f)
 	return {((hex >> 16) & 0xff) / 255.0f, ((hex >> 8) & 0xff) / 255.0f, (hex & 0xff) / 255.0f, a};
 }
 
+// the same color with another opacity
+constexpr D2D1_COLOR_F with_alpha(const D2D1_COLOR_F &c, float a) { return {c.r, c.g, c.b, a}; }
+
 // the colors of a number by stage: a flat color for 0..2, a gem (top, middle, bottom) from 3
 struct StageStyle {
 	D2D1_COLOR_F top, mid, bottom;

@@ -92,6 +92,18 @@ static void test_codepage()
 	CHECK(!to_codepage(L"\x65E5\x672C.txt", 1252));
 }
 
+// The commands for the engines are in the code page of the system (typed as UTF-8): an empty command stays empty, a
+// text that is no UTF-8 is refused; the lines of the engines are read in that code page.
+static void test_engine_text()
+{
+	CHECK(engine_command("") && engine_command("")->empty());
+	CHECK(engine_command("book save") == std::optional<std::string>("book save"));
+	CHECK(engine_command("book store \xE6\x97\xA5\xE6\x9C\xAC.txt") == acp(L"book store \x65E5\x672C.txt"));
+	CHECK(!engine_command("book \xFF\xFE"));
+	CHECK(engine_text("") == L"" && engine_text("Edax version 4.5.5") == L"Edax version 4.5.5");
+	if (const auto j = acp(L"\x65E5\x672C \x2460")) CHECK(engine_text(*j) == L"\x65E5\x672C \x2460");
+}
+
 // WideCharToMultiByte as its documentation tells for UTF-8 (the code page of the system when Windows is set to use
 // UTF-8): the flags of the other code pages make it fail (some versions of Windows take them)
 static int __stdcall documented_convert(unsigned cp, unsigned long flags, const wchar_t *w, int wn, char *s, int sn,
@@ -205,6 +217,7 @@ int main(int argc, char **argv)
 	std::printf("code page of the engines: %u\n", engine_code_page());
 	test_codepage();
 	test_codepage_utf8();
+	test_engine_text();
 	try_in(std::filesystem::temp_directory_path());
 	test_arg_path(std::filesystem::temp_directory_path());
 	for (int i = 1; i < argc; ++i) {

@@ -4,6 +4,7 @@
 #include <array>
 #include <bit>
 #include <cstring>
+#include <iterator>
 
 namespace ng {
 
@@ -13,6 +14,7 @@ constexpr size_t kHeader = 42;       // form 1: "XADEKOOB", version, release, da
 constexpr size_t kFixed = 40;        // of a position: the board, the counts, the values, the number of moves, the level
 constexpr size_t kHeader2 = 64;      // form 2: "NEDXBOOK", the smallest header (its size is in it), and 16 bytes after the positions
 constexpr size_t kTrailer2 = 16;
+constexpr size_t kMaxHeader2 = 1 << 16;  // the largest header of form 2 (its size is in 2 bytes)
 constexpr size_t kFixed2 = 23;       // of a position: the board, the number of moves, the level, the values, the leaf
 constexpr int kNoMoveInFile = 65;
 constexpr int kMaxMoves = 33;
@@ -123,6 +125,16 @@ bool parse_row(const unsigned char *p, size_t n, int form, Row *r) noexcept
 	return true;
 }
 
+// the position read is as a book holds it (the smallest of its 8 symmetries)
+bool held_as_book(const Row &r) noexcept
+{
+	Position q;
+	q.black = r.player;
+	q.white = r.opponent;
+	const BookBoard b = book_board(q);
+	return b.player == r.player && b.opponent == r.opponent;
+}
+
 u32 buckets_for(u64 positions) noexcept
 {
 	u64 b = 1 << 16;
@@ -183,12 +195,13 @@ bool BookFile::read(u64 at, unsigned char *out, size_t size, size_t *got)
 bool BookFile::open(const std::wstring &path)
 {
 	close();
-	// (the engine may save its book over the file: this handle does not keep it from that)
+	// (shared with the engine, which reads the file and may give it another name; but while this handle is open no file
+	// can be put in its place, as the engine saves its book: the app closes it before that)
 	file_ = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
 	                    FILE_FLAG_RANDOM_ACCESS, nullptr);
 	if (file_ == INVALID_HANDLE_VALUE) return false;
 	LARGE_INTEGER size{};
-	std::vector<unsigned char> head((1 << 16) + kSample);
+	std::vector<unsigned char> head(kMaxHeader2 + kSample);
 	size_t got = 0;
 	if (!GetFileSizeEx(file_, &size) || !read(0, head.data(), head.size(), &got) || got < kHeader2) {
 		close();
@@ -196,15 +209,15 @@ bool BookFile::open(const std::wstring &path)
 	}
 	u64 count = 0;
 	end_ = static_cast<u64>(size.QuadPart);
+	const size_t header2 = take<unsigned short>(head.data() + 10);  // (the size of the header of form 2)
 	if (std::memcmp(head.data(), "XADEKOOB", 8) == 0 && head[8] == 4) {
 		form_ = 1;
 		start_ = kHeader;
 		count = take<u32>(head.data() + 38);
-	} else if (std::memcmp(head.data(), "NEDXBOOK", 8) == 0 && take<unsigned short>(head.data() + 8) == 2 &&
-	           take<unsigned short>(head.data() + 10) >= kHeader2 && take<u32>(head.data() + 12) == 0 && head[18] == 1 &&
-	           end_ >= take<unsigned short>(head.data() + 10) + kTrailer2) {
+	} else if (std::memcmp(head.data(), "NEDXBOOK", 8) == 0 && take<unsigned short>(head.data() + 8) == 2 && header2 >= kHeader2 &&
+	           take<u32>(head.data() + 12) == 0 && head[18] == 1 && end_ >= header2 + kTrailer2) {
 		form_ = 2;
-		start_ = take<unsigned short>(head.data() + 10);
+		start_ = header2;
 		count = take<u64>(head.data() + 48);
 		end_ -= kTrailer2;
 	} else {
@@ -218,11 +231,7 @@ bool BookFile::open(const std::wstring &path)
 	while (hash.size() < count) {
 		Row r;
 		if (at > end || !parse_row(head.data() + at, end - at, form_, &r)) break;
-		Position q;
-		q.black = r.player;
-		q.white = r.opponent;
-		const BookBoard b = book_board(q);
-		if (b.player != r.player || b.opponent != r.opponent) {
+		if (!held_as_book(r)) {
 			close();
 			return false;
 		}
@@ -260,14 +269,15 @@ bool BookFile::find_bounds(u32 target, u64 *from)
 {
 	u64 lo = start_, hi = end_;
 	u32 lo_bucket = 0, hi_bucket = buckets_;
-	if (auto it = marks_.lower_bound(target); it != marks_.end()) {
-		hi = it->second;
-		hi_bucket = it->first;
+	const auto above = marks_.lower_bound(target);
+	if (above != marks_.end()) {
+		hi = above->second;
+		hi_bucket = above->first;
 	}
-	if (auto it = marks_.lower_bound(target); it != marks_.begin()) {
-		--it;
-		lo = it->second;
-		lo_bucket = it->first;
+	if (above != marks_.begin()) {
+		const auto below = std::prev(above);
+		lo = below->second;
+		lo_bucket = below->first;
 	}
 	for (int round = 0; hi > lo && hi - lo > kNear; ++round) {
 		if (round > 200) return false;
@@ -291,12 +301,7 @@ bool BookFile::find_bounds(u32 target, u64 *from)
 			int chain = 0;
 			for (; chain < kChain; ++chain) {
 				Row r;
-				if (!parse_row(block_.data() + at, got - at, form_, &r)) break;
-				Position q;
-				q.black = r.player;
-				q.white = r.opponent;
-				const BookBoard board = book_board(q);
-				if (board.player != r.player || board.opponent != r.opponent) break;
+				if (!parse_row(block_.data() + at, got - at, form_, &r) || !held_as_book(r)) break;
 				const u32 b = bucket(r.player, r.opponent);
 				if (chain && (b < last || b - last > gap_)) break;
 				if (chain == 1) {
@@ -381,9 +386,7 @@ BookPeekAnswer book_peek_moves(BookFile &file, const Position &p, const std::ato
 	a.in_book = here.has_value();
 	u64 m = p.moves();
 	std::vector<int> moves;
-	if (m == 0) {
-		if (!p.game_over()) moves.push_back(kPass);
-	}
+	if (m == 0 && !p.game_over()) moves.push_back(kPass);
 	for (; m; m &= m - 1) moves.push_back(std::countr_zero(m));
 	for (const int sq : moves) {
 		if (stop && *stop) break;
@@ -408,9 +411,13 @@ void BookPeek::start(const std::wstring &path, HWND notify, UINT msg, unsigned g
 {
 	stop();
 	quit_ = false;
+	ended_ = false;
 	wanted_.clear();
 	answers_.clear();
-	thread_ = std::thread([this, path, notify, msg, generation] { run(path, notify, msg, generation); });
+	thread_ = std::thread([this, path, notify, msg, generation] {
+		run(path, notify, msg, generation);
+		ended_ = true;
+	});
 }
 
 void BookPeek::stop()

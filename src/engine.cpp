@@ -12,7 +12,9 @@ bool EngineProcess::start(const std::wstring &exe, const std::wstring &args, con
 
 	SECURITY_ATTRIBUTES sa{sizeof sa, nullptr, TRUE};
 	HANDLE in_read = nullptr, out_write = nullptr;
-	if (!CreatePipe(&in_read, &in_write_, &sa, 0) || !CreatePipe(&out_read_, &out_write, &sa, 1 << 16)) {
+	// send() writes on the thread of the window and waits while the pipe is full: a megabyte for the commands (with
+	// the default, some 4 KB, an engine that stopped reading held the window after a few positions, and its close)
+	if (!CreatePipe(&in_read, &in_write_, &sa, 1 << 20) || !CreatePipe(&out_read_, &out_write, &sa, 1 << 16)) {
 		if (error) *error = L"CreatePipe";
 		close();
 		return false;
@@ -67,6 +69,7 @@ bool EngineProcess::start(const std::wstring &exe, const std::wstring &args, con
 	ResumeThread(pi.hThread);
 	CloseHandle(pi.hThread);
 	process_ = pi.hProcess;
+	read_ended_ = false;
 	reader_ = std::thread([this] { read_loop(); });
 	return true;
 }
@@ -126,25 +129,32 @@ void EngineProcess::read_loop()
 			if (was_empty && notify_) PostMessageW(notify_, msg_, tag_, 0);
 		}
 	}
+	read_ended_ = true;
 	if (notify_) PostMessageW(notify_, msg_, tag_, 1);  // the output has ended
+}
+
+void EngineProcess::quit()
+{
+	if (process_ && in_write_ && WaitForSingleObject(process_, 0) == WAIT_TIMEOUT) send("quit\n");
+	if (in_write_) {
+		CloseHandle(in_write_);
+		in_write_ = nullptr;
+	}
+}
+
+bool EngineProcess::exited() const
+{
+	if (!process_) return true;
+	// (its last lines may be still in the pipe a moment after its end)
+	return WaitForSingleObject(process_, 0) != WAIT_TIMEOUT && (read_ended_ || !reader_.joinable());
 }
 
 void EngineProcess::close(DWORD wait_ms)
 {
-	if (process_) {
-		if (in_write_ && WaitForSingleObject(process_, 0) == WAIT_TIMEOUT) send("quit\n");
-		if (in_write_) {
-			CloseHandle(in_write_);
-			in_write_ = nullptr;
-		}
-		if (WaitForSingleObject(process_, wait_ms) == WAIT_TIMEOUT) {
-			TerminateProcess(process_, 1);
-			WaitForSingleObject(process_, 5000);
-		}
-	}
-	if (in_write_) {
-		CloseHandle(in_write_);
-		in_write_ = nullptr;
+	quit();
+	if (process_ && WaitForSingleObject(process_, wait_ms) == WAIT_TIMEOUT) {
+		TerminateProcess(process_, 1);
+		WaitForSingleObject(process_, 5000);
 	}
 	if (reader_.joinable()) {
 		// the pipe closes when the process ends; the thread then stops

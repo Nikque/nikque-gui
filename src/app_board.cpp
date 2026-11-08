@@ -248,13 +248,17 @@ bool App::copy_text(const std::wstring &text)
 {
 	if (!open_clipboard(hwnd_)) return false;
 	EmptyClipboard();
+	bool ok = false;
 	if (HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (text.size() + 1) * sizeof(wchar_t))) {
-		std::copy_n(text.c_str(), text.size() + 1, static_cast<wchar_t *>(GlobalLock(h)));
-		GlobalUnlock(h);
-		SetClipboardData(CF_UNICODETEXT, h);
+		if (wchar_t *p = static_cast<wchar_t *>(GlobalLock(h))) {
+			std::copy_n(text.c_str(), text.size() + 1, p);
+			GlobalUnlock(h);
+			ok = SetClipboardData(CF_UNICODETEXT, h) != nullptr;
+		}
+		if (!ok) GlobalFree(h);  // (the clipboard owns it only when it took it)
 	}
 	CloseClipboard();
-	return true;
+	return ok;
 }
 
 std::wstring App::clipboard_text()
@@ -282,7 +286,10 @@ void App::copy_position(int id)
 	case cmd::CopyBitNtest: s = bitboard_text(p, BitForm::Ntest); break;
 	default: return;
 	}
-	copy_text(widen(s));
+	if (!copy_text(widen(s))) {
+		set_status(lang::t("status.copy_failed"));
+		return;
+	}
 	log(lang::f("status.position_copied", {widen(s)}));
 }
 
@@ -291,11 +298,16 @@ bool App::take_position_text(const std::string &text)
 	std::optional<Position> p = parse_board_text(text);  // the board string, or a line of a problem file
 	if (!p) p = parse_bitboards(text, false);
 	if (!p) return false;
+	set_position(*p);
+	return true;
+}
+
+void App::set_position(const Position &p)
+{
 	Game g;
-	g.reset(*p);
+	g.reset(p);
 	set_game(g, true);
 	log(lang::t("status.pasted_board"));
-	return true;
 }
 
 void App::import_position()
@@ -310,14 +322,11 @@ void App::import_position()
 	f[1].kind = FormField::Choice;
 	f[1].label = t("import.form");
 	f[1].choices = {t("import.form.auto"), t("import.form.ntest")};
-	if (!run_form(hwnd_, t("menu.io.import"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return;
+	if (!run_form(hwnd_, t("menu.io.import"), f)) return;
 	const std::string s = narrow(f[0].text);
 	if (f[1].choice == 1) {
 		if (auto p = parse_bitboards(s, true)) {
-			Game g;
-			g.reset(*p);
-			set_game(g, true);
-			log(lang::t("status.pasted_board"));
+			set_position(*p);
 			return;
 		}
 	} else if (take_position_text(s)) {
@@ -332,8 +341,7 @@ void App::import_position()
 std::wstring App::images_dir() const
 {
 	const std::string d = ini_.get("view", "screenshot_dir");
-	std::wstring dir = d.empty() ? exe_dir_ + L"\\screenshots"
-	                             : (d.size() > 1 && d[1] == ':' ? widen(d) : exe_dir_ + L"\\" + widen(d));
+	std::wstring dir = d.empty() ? exe_dir_ + L"\\screenshots" : from_exe_dir(d);
 	CreateDirectoryW(dir.c_str(), nullptr);
 	return dir;
 }

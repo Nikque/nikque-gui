@@ -228,10 +228,12 @@ ID2D1LinearGradientBrush *Gfx::gradient(int id, const D2D1_GRADIENT_STOP *stops,
 {
 	auto it = gradients_.find(id);
 	if (it != gradients_.end()) return it->second.Get();
+	// (one that cannot be made is null, and not kept: it is made again the next time)
 	ComPtr<ID2D1GradientStopCollection> sc;
-	dc_->CreateGradientStopCollection(stops, n, &sc);
+	if (FAILED(dc_->CreateGradientStopCollection(stops, n, &sc)) || !sc) return nullptr;
 	ComPtr<ID2D1LinearGradientBrush> b;
-	dc_->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties({0, 0}, {0, 1}), sc.Get(), &b);
+	if (FAILED(dc_->CreateLinearGradientBrush(D2D1::LinearGradientBrushProperties({0, 0}, {0, 1}), sc.Get(), &b)) || !b)
+		return nullptr;
 	return (gradients_[id] = b).Get();
 }
 
@@ -241,10 +243,13 @@ IDWriteTextFormat *Gfx::text(float px, bool bold, DWRITE_TEXT_ALIGNMENT align, F
 	                         std::to_wstring(static_cast<int>(align)) + (face == Face::Number ? L"N" : L"U");
 	auto it = formats_.find(key);
 	if (it != formats_.end()) return it->second.Get();
+	// (one that cannot be made, as of a size not over 0, is null and not kept: draw_text and text_width pass it by)
 	ComPtr<IDWriteTextFormat> f;
-	dwrite_->CreateTextFormat(face == Face::Number ? L"Segoe UI" : lang::ui_font(), nullptr,
-	                          bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
-	                          DWRITE_FONT_STRETCH_NORMAL, px, lang::locale(), &f);
+	if (FAILED(dwrite_->CreateTextFormat(face == Face::Number ? L"Segoe UI" : lang::ui_font(), nullptr,
+	                                     bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
+	                                     DWRITE_FONT_STRETCH_NORMAL, px, lang::locale(), &f)) ||
+	    !f)
+		return nullptr;
 	f->SetTextAlignment(align);
 	f->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 	f->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
@@ -254,7 +259,7 @@ IDWriteTextFormat *Gfx::text(float px, bool bold, DWRITE_TEXT_ALIGNMENT align, F
 float Gfx::text_width(std::wstring_view s, IDWriteTextFormat *f)
 {
 	ComPtr<IDWriteTextLayout> l;
-	if (FAILED(dwrite_->CreateTextLayout(s.data(), static_cast<UINT32>(s.size()), f, 10000.0f, 1000.0f, &l)))
+	if (!f || FAILED(dwrite_->CreateTextLayout(s.data(), static_cast<UINT32>(s.size()), f, 10000.0f, 1000.0f, &l)))
 		return 0;
 	DWRITE_TEXT_METRICS m{};
 	l->GetMetrics(&m);
@@ -263,27 +268,31 @@ float Gfx::text_width(std::wstring_view s, IDWriteTextFormat *f)
 
 void Gfx::draw_text(std::wstring_view s, IDWriteTextFormat *f, const D2D1_RECT_F &r, const D2D1_COLOR_F &c, bool clip)
 {
+	if (!f) return;
 	dc_->DrawText(s.data(), static_cast<UINT32>(s.size()), f, r, brush(c),
 	              clip ? D2D1_DRAW_TEXT_OPTIONS_CLIP : D2D1_DRAW_TEXT_OPTIONS_NONE);
 }
 
+// (null when it cannot be had, and not kept: had again the next time)
 ComPtr<IDWriteFontFace> Gfx::font_face(Face face)
 {
 	ComPtr<IDWriteFontFace> &slot = face == Face::Number ? number_face_ : ui_face_;
 	if (slot) return slot;
 	ComPtr<IDWriteFontCollection> fc;
-	dwrite_->GetSystemFontCollection(&fc);
+	if (FAILED(dwrite_->GetSystemFontCollection(&fc)) || !fc) return nullptr;
 	UINT32 index = 0;
 	BOOL exists = FALSE;
-	fc->FindFamilyName(face == Face::Number ? L"Segoe UI" : lang::ui_font(), &index, &exists);
-	if (!exists) fc->FindFamilyName(L"Segoe UI", &index, &exists);
+	if (FAILED(fc->FindFamilyName(face == Face::Number ? L"Segoe UI" : lang::ui_font(), &index, &exists))) exists = FALSE;
+	if (!exists && FAILED(fc->FindFamilyName(L"Segoe UI", &index, &exists))) exists = FALSE;
 	if (!exists) index = 0;
 	ComPtr<IDWriteFontFamily> fam;
-	fc->GetFontFamily(index, &fam);
 	ComPtr<IDWriteFont> font;
-	fam->GetFirstMatchingFont(DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL, &font);
-	font->CreateFontFace(&slot);
-	return slot;
+	ComPtr<IDWriteFontFace> ff;
+	if (index >= fc->GetFontFamilyCount() || FAILED(fc->GetFontFamily(index, &fam)) || !fam ||
+	    FAILED(fam->GetFirstMatchingFont(DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_NORMAL, &font)) ||
+	    !font || FAILED(font->CreateFontFace(&ff)) || !ff)
+		return nullptr;
+	return slot = ff;
 }
 
 std::wstring Gfx::shape_key(std::wstring_view text, float em, Face face) const
@@ -297,7 +306,10 @@ const NumberShape &Gfx::shape(std::wstring_view text, float em, Face face)
 	auto it = shapes_.find(key);
 	if (it != shapes_.end()) return it->second;
 
+	// (without the font or the geometry: a shape of nothing, not kept, which is drawn as nothing)
+	static const NumberShape kNone{};
 	ComPtr<IDWriteFontFace> ff = font_face(face);
+	if (!ff) return kNone;
 	std::vector<UINT32> cps;
 	for (size_t i = 0; i < text.size(); ++i) {
 		UINT32 c = text[i];
@@ -309,8 +321,10 @@ const NumberShape &Gfx::shape(std::wstring_view text, float em, Face face)
 	if (face == Face::Number) {
 		for (UINT16 g : glyphs)
 			if (g == 0) {  // not in the number font: the UI font
-				ff = font_face(Face::Ui);
-				ff->GetGlyphIndices(cps.data(), static_cast<UINT32>(cps.size()), glyphs.data());
+				if (ComPtr<IDWriteFontFace> ui = font_face(Face::Ui)) {
+					ff = ui;
+					ff->GetGlyphIndices(cps.data(), static_cast<UINT32>(cps.size()), glyphs.data());
+				}
 				break;
 			}
 	}
@@ -322,9 +336,8 @@ const NumberShape &Gfx::shape(std::wstring_view text, float em, Face face)
 	for (size_t i = 0; i < glyphs.size(); ++i) adv[i] = gm[i].advanceWidth * em / fm.designUnitsPerEm;
 
 	NumberShape s;
-	factory_->CreatePathGeometry(&s.geom);
 	ComPtr<ID2D1GeometrySink> sink;
-	s.geom->Open(&sink);
+	if (FAILED(factory_->CreatePathGeometry(&s.geom)) || !s.geom || FAILED(s.geom->Open(&sink)) || !sink) return kNone;
 	sink->SetFillMode(D2D1_FILL_MODE_WINDING);
 	ff->GetGlyphRunOutline(em, glyphs.data(), adv.data(), nullptr, static_cast<UINT32>(glyphs.size()), FALSE, FALSE,
 	                       sink.Get());
@@ -348,6 +361,7 @@ void Gfx::prepare_glow(std::wstring_view text, float em, const D2D1_COLOR_F &col
 	const std::wstring key = glow_key(shape_key(text, em, face), color, radius);
 	if (glows_.count(key)) return;
 	const NumberShape &s = shape(text, em, face);
+	if (!s.geom) return;  // (no outline: no glow)
 	const float pad = std::ceil(radius * 3.0f) + 2.0f;
 	const D2D1_SIZE_U size{static_cast<UINT32>(std::ceil(s.bounds.right - s.bounds.left + 2 * pad)),
 	                       static_cast<UINT32>(std::ceil(s.bounds.bottom - s.bounds.top + 2 * pad))};
@@ -404,10 +418,6 @@ void Gfx::clear_fonts()
 	clear_shapes();
 }
 
-}  // namespace ng
-
-namespace ng {
-
 // the realizations are made for scales up to 1.1 (the pulse of the stages 6 and 7)
 static float tolerance()
 {
@@ -416,6 +426,7 @@ static float tolerance()
 
 void Gfx::fill_shape(const NumberShape &s, ID2D1Brush *b)
 {
+	if (!s.geom) return;
 	if (dc1_ && !s.fill_real) dc1_->CreateFilledGeometryRealization(s.geom.Get(), tolerance(), &s.fill_real);
 	if (s.fill_real) dc1_->DrawGeometryRealization(s.fill_real.Get(), b);
 	else dc_->FillGeometry(s.geom.Get(), b);
@@ -423,6 +434,7 @@ void Gfx::fill_shape(const NumberShape &s, ID2D1Brush *b)
 
 void Gfx::stroke_shape(const NumberShape &s, ID2D1Brush *b, float stroke_w)
 {
+	if (!s.geom) return;
 	if (dc1_ && (!s.stroke_real || s.stroke_w != stroke_w)) {
 		s.stroke_real.Reset();
 		dc1_->CreateStrokedGeometryRealization(s.geom.Get(), tolerance(), stroke_w, round_join_.Get(), &s.stroke_real);
@@ -431,10 +443,6 @@ void Gfx::stroke_shape(const NumberShape &s, ID2D1Brush *b, float stroke_w)
 	if (s.stroke_real) dc1_->DrawGeometryRealization(s.stroke_real.Get(), b);
 	else dc_->DrawGeometry(s.geom.Get(), b, stroke_w, round_join_.Get());
 }
-
-}  // namespace ng
-
-namespace ng {
 
 bool Gfx::save_png(const std::wstring &path, const D2D1_RECT_U &crop, const std::function<void()> &draw)
 {

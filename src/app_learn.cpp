@@ -2,8 +2,6 @@
 // file saved on the way. The search engine keeps giving values meanwhile.
 #include <windows.h>
 
-#include <commdlg.h>
-
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
@@ -52,29 +50,41 @@ std::wstring local_time(std::filesystem::file_time_type t)
 	return b;
 }
 
-std::wstring pick_file(HWND owner)
+// where book reduce counts from, in the words of the log
+std::wstring reduce_place(bool initial)
 {
-	wchar_t file[MAX_PATH * 4] = L"";
-	OPENFILENAMEW of{sizeof of};
-	of.hwndOwner = owner;
-	of.lpstrFilter = L"*.txt;*.ggf;*.sgf;*.pgn;*.wtb;*.edx\0*.txt;*.ggf;*.sgf;*.pgn;*.wtb;*.edx\0*.*\0*.*\0";
-	of.lpstrFile = file;
-	of.nMaxFile = static_cast<DWORD>(std::size(file));
-	of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-	return GetOpenFileNameW(&of) ? std::wstring(file) : std::wstring();
+	return lang::t(initial ? "reduce.at.initial" : "reduce.at.here");
 }
 
 }  // namespace
+
+bool replaces_book_file(std::string_view commands)
+{
+	for (size_t at = 0; at <= commands.size();) {
+		const size_t end = std::min(commands.find('\n', at), commands.size());
+		std::string_view line = commands.substr(at, end - at);
+		at = end + 1;
+		// the first two words of the line, in small letters as the engine reads them
+		std::string w[2];
+		for (std::string &word : w) {
+			const size_t b = line.find_first_not_of(" \t\r");
+			if (b == std::string_view::npos) break;
+			const size_t e = std::min(line.find_first_of(" \t\r", b), line.size());
+			word = lower(std::string(line.substr(b, e - b)));
+			line.remove_prefix(e);
+		}
+		if (((w[0] == "book" || w[0] == "b") && w[1] == "save") || w[0] == "quit" || w[0] == "q" || w[0] == "exit" || w[0] == "eof")
+			return true;
+	}
+	return false;
+}
 
 std::wstring App::book_file() const
 {
 	const char *sec = engine_section(kind_);
 	const std::string bk = ini_.get(sec, "book");
 	const std::wstring dir = engine_dir();
-	if (bk.empty()) return dir + L"\\data\\book.dat";
-	const std::wstring w = widen(bk);
-	if (w.size() >= 2 && (w[1] == L':' || (w[0] == L'\\' && w[1] == L'\\'))) return w;
-	return dir + L"\\" + w;
+	return bk.empty() ? dir + L"\\data\\book.dat" : absolute(dir, bk);
 }
 
 std::wstring App::saved_base() const
@@ -84,7 +94,7 @@ std::wstring App::saved_base() const
 
 void App::learn_command(int id)
 {
-	if (refuse_while_learning()) return;
+	if (refuse_while_book_busy()) return;
 	if (!eng_[0].alive) {
 		set_status(lang::t("learn.no_engine"));
 		return;
@@ -108,7 +118,7 @@ void App::learn_command(int id)
 	case cmd::LearnAdd:
 	case cmd::LearnLearn:
 	case cmd::LearnCheck: {
-		const std::wstring f = pick_file(hwnd_);
+		const std::wstring f = pick_open(L"*.txt;*.ggf;*.sgf;*.pgn;*.wtb;*.edx\0*.txt;*.ggf;*.sgf;*.pgn;*.wtb;*.edx\0*.*\0*.*\0");
 		if (f.empty()) return;
 		const auto p = engine_path_or_say(f, FileUse::Read, 0);  // the engine reads the name up to a space
 		if (!p) return;
@@ -133,8 +143,10 @@ void App::start_learning(const std::string &command)
 }
 
 // the commands (one or more lines) from the position after `moves` from `start`
-void App::start_learning_at(const std::string &command, const Position &start, const std::string &moves)
+void App::start_learning_at(const std::string &command, const Position &start, const std::string &moves, bool keeps_book)
 {
+	// (set for each command: a command that ended another way than by its end marker leaves nothing for the next one)
+	learn_keeps_book_ = keeps_book;
 	// the analyses of the main engine stop here (the engine also stops them before a command changing the book)
 	std::string out = stop_main_analyses() + line_commands(start, moves);
 	eng_[0].board.reset();
@@ -142,6 +154,11 @@ void App::start_learning_at(const std::string &command, const Position &start, c
 	learn_end_id_ = new_id();
 	out += "echo M" + std::to_string(learn_end_id_) + "\n";  // answered when the command has ended
 	learning_ = true;
+	// a command that may replace the book file: the file is closed before the engine reads it (a handle on the file, even
+	// one that shares it all, makes the replacing fail), and it is not looked up again until the command has ended
+	learn_replaces_book_ = replaces_book_file(command);
+	if (learn_replaces_book_) book_peek_.stop();
+	if (!keeps_book) eng_[0].book_changed = true;  // (it saves the book as it ends: closing it waits for that)
 	learn_cmd_ = command;
 	for (auto &ch : learn_cmd_)
 		if (ch == '\n') ch = '/';  // several commands on one line
@@ -219,6 +236,11 @@ void App::learning_ended()
 	learn_keeps_book_ = false;
 	eng_[0].board.reset();
 	update_menu();
+	if (learn_options_waiting_) {  // the learning settings changed while it learned (before the next job of the queue)
+		learn_options_waiting_ = false;
+		send_learn_options();
+		log(lang::t("learnopt.sent"));
+	}
 	if (queue_running_) {
 		next_in_queue();  // the next job of the queue (or its end)
 		if (learning_) return;
@@ -293,33 +315,15 @@ void App::continue_learning()
 	start_learning(*last);
 }
 
-}  // namespace ng
-
-namespace ng {
-
 // book reduce: the window of the menu
 void App::reduce_command()
 {
 	using lang::t;
 	std::vector<FormField> f(3);
-	f[0].kind = FormField::Number;
-	f[0].label = t("reduce.x");
-	f[0].text = std::to_wstring(std::clamp(loss_x_, 0, 129));
-	f[0].lo = 0;
-	f[0].hi = 129;
-	f[0].note = t("reduce.x.note");
-	f[1].kind = FormField::Number;
-	f[1].label = t("reduce.y");
-	f[1].text = std::to_wstring(std::clamp(loss_y_, 0, 254));
-	f[1].lo = 0;
-	f[1].hi = 254;
-	f[1].note = t("reduce.y.note");
-	f[2].kind = FormField::Choice;
-	f[2].label = t("reduce.from");
-	f[2].choices = {t("reduce.from.initial"), t("reduce.from.here")};
-	f[2].choice = 0;
-	f[2].note = t("reduce.from.note");
-	if (!run_form(hwnd_, t("reduce.window"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return;
+	f[0] = number_field(t("reduce.x"), std::clamp(loss_x_, 0, 129), 0, 129, t("reduce.x.note"));
+	f[1] = number_field(t("reduce.y"), std::clamp(loss_y_, 0, 254), 0, 254, t("reduce.y.note"));
+	f[2] = choice_field(t("reduce.from"), {t("reduce.from.initial"), t("reduce.from.here")}, 0, t("reduce.from.note"));
+	if (!run_form(hwnd_, t("reduce.window"), f)) return;
 	reduce_book(std::stoi(f[0].text), std::stoi(f[1].text), f[2].choice == 0, true);
 }
 
@@ -343,12 +347,9 @@ bool App::reduce_book(int x, int y, bool initial, bool ask)
 	reduce_.moves = initial ? std::string() : moves_to_cursor();
 	const Position p = initial ? Position{} : game_.now();
 	std::string out;
-	board_to(0, out, p);
-	reduce_.id = new_id();
-	out += "book reducecount id=" + std::to_string(reduce_.id) + " x=" + std::to_string(x) + " y=" + std::to_string(y) + "\n";
-	requests_[reduce_.id] = {Request::ReduceCount, key_of(p)};
+	reduce_.id = ask_main(out, p, Request::ReduceCount, "book reducecount", "x=" + std::to_string(x) + " y=" + std::to_string(y));
 	reduce_.state = ReduceJob::Counting;
-	log(lang::f("reduce.counting", {lang::t(initial ? "reduce.at.initial" : "reduce.at.here"), std::to_wstring(x), std::to_wstring(y)}));
+	log(lang::f("reduce.counting", {reduce_place(initial), std::to_wstring(x), std::to_wstring(y)}));
 	send(0, out);
 	update_menu();
 	return true;
@@ -379,7 +380,7 @@ void App::reduce_counted()
 		if (r.ask) message(text, MB_ICONINFORMATION);
 		schedule_script();
 	};
-	const std::wstring from = t(r.initial ? "reduce.at.initial" : "reduce.at.here");
+	const std::wstring from = reduce_place(r.initial);
 	switch (r.state) {
 	case ReduceJob::Unknown: say(t("reduce.unknown")); return;
 	case ReduceJob::NotInBook: say(lang::f("reduce.notinbook", {from})); return;
@@ -404,8 +405,8 @@ void App::reduce_counted()
 			return;
 		}
 	}
-	if (learning_ || !eng_[0].alive) {
-		schedule_script();
+	if (learning_ || !eng_[0].alive) {  // (started meanwhile, or the engine has gone)
+		say(lang::f("reduce.not_run", {t(!eng_[0].alive ? "learn.no_engine" : "learn.busy")}));
 		return;
 	}
 	start_learning_at("book reduce " + std::to_string(r.x) + " " + std::to_string(r.y), r.start, r.moves);
@@ -415,22 +416,19 @@ void App::reduce_counted()
 // the stage base with X and Y.
 void App::queue_missing()
 {
-	if (missing_.lines.empty()) {
+	if (!missing_here()) {
 		set_status(lang::t("status.missing_none"));
 		return;
 	}
 	const std::string head = moves_to_cursor();
-	const std::string command = "book store\nbook " + base_ + " " + std::to_string(loss_x_) + " " + std::to_string(loss_y_);
+	const std::string stage = "book " + base_ + " " + std::to_string(loss_x_) + " " + std::to_string(loss_y_);
+	const std::string command = "book store\n" + stage;
 	for (const auto &ml : missing_.lines) {
-		LearnJob j;
-		j.start = game_.start();
-		j.moves = head;
+		LearnJob j{game_.start(), head, command};
 		for (int mv : ml.moves) j.moves += square_name(mv);
-		j.command = command;
 		learn_queue_.push_back(std::move(j));
 	}
-	log(lang::f("queue.added", {std::to_wstring(missing_.lines.size()), std::to_wstring(learn_queue_.size()),
-	                            widen(command.substr(command.find('\n') + 1))}));
+	log(lang::f("queue.added", {std::to_wstring(missing_.lines.size()), std::to_wstring(learn_queue_.size()), widen(stage)}));
 	invalidate();
 }
 
@@ -440,6 +438,12 @@ void App::next_in_queue()
 	if (learn_queue_.empty()) {
 		queue_running_ = false;
 		log(lang::t("queue.done"));
+		return;
+	}
+	// (the commands could not be sent: it would be learning without an end, the job gone; the jobs stay)
+	if (!eng_[0].alive) {
+		queue_running_ = false;
+		log(lang::t("learn.no_engine"));
 		return;
 	}
 	LearnJob j = std::move(learn_queue_.front());

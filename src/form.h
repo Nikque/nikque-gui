@@ -22,8 +22,19 @@ struct FormField {
 	HWND slider = nullptr;              // Slider: the slider beside the number
 };
 
-// Shows the window; returns true when OK was pressed (and every number is in its range).
-bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fields, const std::wstring &ok,
-              const std::wstring &cancel, const std::wstring &bad_number);
+// a field of a number from lo to hi (the note: a hint on the right)
+FormField number_field(const std::wstring &label, int value, int lo, int hi, const std::wstring &note = {});
+// a number from lo to hi with a slider beside it
+FormField slider_field(const std::wstring &label, int value, int lo, int hi, const std::wstring &note = {});
+// a text
+FormField text_field(const std::wstring &label, const std::wstring &text, const std::wstring &note = {});
+// one of `choices`, `choice` chosen at first
+FormField choice_field(const std::wstring &label, std::vector<std::wstring> choices, int choice, const std::wstring &note = {});
+// a check box
+FormField check_field(const std::wstring &label, bool checked, const std::wstring &note = {});
+
+// Shows the window; returns true when OK was pressed (and every number is in its range). The buttons and the warning
+// of a number out of its range are in the language of the app.
+bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fields);
 
 }  // namespace ng

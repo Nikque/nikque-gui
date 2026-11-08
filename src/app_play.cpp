@@ -17,9 +17,6 @@ namespace ng {
 
 namespace {
 
-constexpr UINT_PTR kTimerCom = 4;       // a book move after a short wait, or the book analysis waited for
-constexpr UINT_PTR kTimerClock = 5;     // the time of the game, every second
-constexpr UINT_PTR kTimerNextGame = 6;  // the next game of the computer against itself
 constexpr UINT kBookMoveDelayMs = 400;
 constexpr UINT kBookWaitMs = 3000;      // the book analysis not there by then: the move is searched
 
@@ -27,6 +24,13 @@ std::mt19937_64 &rng()
 {
 	static std::mt19937_64 r{std::random_device{}()};
 	return r;
+}
+
+// who plays, for the log and the bar
+const std::wstring &play_mode_name(PlayMode m)
+{
+	const char *names[] = {"play.free", "play.human_black", "play.human_white", "play.engines"};
+	return lang::t(names[static_cast<int>(m)]);
 }
 
 std::wstring clock_text(long long ms)
@@ -44,11 +48,8 @@ bool App::start_play_engine()
 {
 	EngineSlot &s = eng_[3];
 	if (s.alive && s.proc.running()) return true;
+	if (!engine_files_ok(kind_)) return false;
 	const std::wstring exe = engine_exe();
-	if (exe.empty() || GetFileAttributesW(exe.c_str()) == INVALID_FILE_ATTRIBUTES) {
-		log(lang::f("log.no_exe", {exe.empty() ? engine_dir() : exe}));
-		return false;
-	}
 	const auto nb = nobook_args(L"nobook-play.dat");
 	if (!nb) {
 		log(lang::f("err.engine_name", {temp_dir_}));
@@ -58,6 +59,7 @@ bool App::start_play_engine()
 	if (!common) return false;
 	const std::wstring args = *common + *nb;
 	++s.generation;
+	s.lost = false;
 	std::wstring err;
 	s.alive = s.proc.start(exe, args, engine_dir(), hwnd_, WM_ENGINE, engine_tag(3, s.generation), &err);
 	if (!s.alive) {
@@ -224,6 +226,15 @@ bool App::take_back()
 	return true;
 }
 
+void App::new_play_game(bool keep_old)
+{
+	clock_left_ms_[0] = clock_left_ms_[1] = static_cast<long long>(clock_minutes_) * 60000;
+	game_clock_ = clock_minutes_ > 0;
+	clock_side_ = -1;
+	set_game(Game{}, keep_old);
+	clock_switch();
+}
+
 void App::set_play_mode(PlayMode m, int games)
 {
 	com_stop();
@@ -232,15 +243,9 @@ void App::set_play_mode(PlayMode m, int games)
 	engine_games_left_ = m == PlayMode::Engines ? std::max(0, games - 1) : 0;
 	game_end_done_ = false;
 	if (m != PlayMode::Free) {
-		// a new game from the start position (the game before is kept)
-		clock_left_ms_[0] = clock_left_ms_[1] = static_cast<long long>(clock_minutes_) * 60000;
-		game_clock_ = clock_minutes_ > 0;
-		clock_side_ = -1;
 		list_index_ = -1;
-		set_game(Game{}, true);
-		clock_switch();
-		const char *names[] = {"play.free", "play.human_black", "play.human_white", "play.engines"};
-		log(lang::f("play.started", {lang::t(names[static_cast<int>(m)]), std::to_wstring(com_level_)}));
+		new_play_game(true);  // (the game before is kept)
+		log(lang::f("play.started", {play_mode_name(m), std::to_wstring(com_level_)}));
 	} else {
 		clock_side_ = -1;
 		KillTimer(hwnd_, kTimerClock);
@@ -309,12 +314,7 @@ void App::game_end_check()
 	const int b = std::popcount(p.black), w = std::popcount(p.white);
 	log(lang::f(b > w ? "play.won_black" : b < w ? "play.won_white" : "play.draw", {std::to_wstring(b), std::to_wstring(w)}));
 	if (end_keep_) keep_now(true);
-	if (end_list_ && !task_busy_) {
-		std::vector<std::uint8_t> mv;
-		for (const int m : game_.moves())
-			if (m != kPass) mv.push_back(static_cast<std::uint8_t>(m));
-		list_.add(game_.start(), mv);
-	}
+	if (end_list_ && !task_busy_) list_add_game();
 	// the count goes down when the next game starts, so a script waiting for the games waits for that one too
 	if (play_mode_ == PlayMode::Engines && engine_games_left_ > 0) SetTimer(hwnd_, kTimerNextGame, 1500, nullptr);
 }
@@ -322,16 +322,8 @@ void App::game_end_check()
 void App::play_command(int id)
 {
 	using lang::t;
-	auto number = [&](const char *title, const char *label, int value, int lo, int hi, const char *note) -> std::optional<int> {
-		std::vector<FormField> f(1);
-		f[0].kind = FormField::Number;
-		f[0].label = t(label);
-		f[0].text = std::to_wstring(value);
-		f[0].lo = lo;
-		f[0].hi = hi;
-		if (note) f[0].note = t(note);
-		if (!run_form(hwnd_, t(title), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return std::nullopt;
-		return std::stoi(f[0].text);
+	auto number = [&](const char *title, const char *label, int value, int lo, int hi, const char *note) {
+		return ask_number(hwnd_, t(title), t(label), value, lo, hi, t(note));
 	};
 	switch (id) {
 	case cmd::PlayFree: set_play_mode(PlayMode::Free); break;
@@ -357,19 +349,9 @@ void App::play_command(int id)
 	case cmd::OpeningWide: opening_ = Opening::BookWide; break;
 	case cmd::OpeningSettings: {
 		std::vector<FormField> f(2);
-		f[0].kind = FormField::Number;
-		f[0].label = t("opening.width");
-		f[0].text = std::to_wstring(opening_width_);
-		f[0].lo = 0;
-		f[0].hi = 64;
-		f[0].note = t("opening.width.note");
-		f[1].kind = FormField::Number;
-		f[1].label = t("opening.until");
-		f[1].text = std::to_wstring(opening_until_);
-		f[1].lo = 0;
-		f[1].hi = 60;
-		f[1].note = t("opening.until.note");
-		if (!run_form(hwnd_, t("menu.opening.settings"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) break;
+		f[0] = number_field(t("opening.width"), opening_width_, 0, 64, t("opening.width.note"));
+		f[1] = number_field(t("opening.until"), opening_until_, 0, 60, t("opening.until.note"));
+		if (!run_form(hwnd_, t("menu.opening.settings"), f)) break;
 		opening_width_ = std::stoi(f[0].text);
 		opening_until_ = std::stoi(f[1].text);
 		break;
@@ -393,7 +375,7 @@ void App::play_command(int id)
 		f[1].kind = FormField::Check;
 		f[1].label = t("play.end.list");
 		f[1].checked = end_list_;
-		if (!run_form(hwnd_, t("menu.play.end"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) break;
+		if (!run_form(hwnd_, t("menu.play.end"), f)) break;
 		end_keep_ = f[0].checked;
 		end_list_ = f[1].checked;
 		break;
@@ -417,9 +399,7 @@ void App::set_compare(bool on)
 	} else if (!s.alive || !s.proc.running()) {
 		const EngineKind k = other_kind();
 		const std::wstring exe = engine_exe(k);
-		if (exe.empty() || GetFileAttributesW(exe.c_str()) == INVALID_FILE_ATTRIBUTES ||
-		    GetFileAttributesW(engine_eval(k).c_str()) == INVALID_FILE_ATTRIBUTES) {
-			log(lang::f("log.no_exe", {exe.empty() ? engine_dir(k) : exe}));
+		if (!engine_files_ok(k)) {
 			compare_ = false;
 		} else if (const auto nb = nobook_args(L"nobook-cmp.dat"); !nb) {
 			log(lang::f("err.engine_name", {temp_dir_}));
@@ -429,6 +409,7 @@ void App::set_compare(bool on)
 		} else {
 			const std::wstring args = *common + *nb;
 			++s.generation;
+			s.lost = false;
 			std::wstring err;
 			s.alive = s.proc.start(exe, args, engine_dir(k), hwnd_, WM_ENGINE, engine_tag(4, s.generation), &err);
 			if (!s.alive) {
@@ -491,7 +472,7 @@ void App::compare_line(const std::string &line)
 		if (mark == cmp_marker_id_) {
 			cmp_accept_ = true;
 		} else if (mark == cmp_end_id_ && cmp_busy_) {
-			PosInfo &info = cache_.get(Position{cmp_pos_.black, cmp_pos_.white, cmp_pos_.side});
+			PosInfo &info = cache_.get(position_of(cmp_pos_));
 			info.cmp_done = true;
 			info.cmp_level = cmp_level_;
 			cmp_busy_ = cmp_accept_ = false;
@@ -501,7 +482,7 @@ void App::compare_line(const std::string &line)
 	}
 	if (!cmp_accept_) return;
 	if (auto h = parse_hint_line(line); h && !h->book && !h->pv.empty()) {
-		PosInfo &info = cache_.get(Position{cmp_pos_.black, cmp_pos_.white, cmp_pos_.side});
+		PosInfo &info = cache_.get(position_of(cmp_pos_));
 		if (MoveEval *m = info.find(h->pv[0])) {
 			m->cmp_searched = true;
 			m->cmp_score = h->score;
@@ -512,10 +493,6 @@ void App::compare_line(const std::string &line)
 		if (cmp_pos_ == key_of(game_.now())) invalidate();
 	}
 }
-
-}  // namespace ng
-
-namespace ng {
 
 // the timers of this file (from the window's message loop)
 bool play_timer(App &app, UINT_PTR id)
@@ -528,11 +505,7 @@ bool play_timer(App &app, UINT_PTR id)
 		if (app.play_mode_ == PlayMode::Engines && app.engine_games_left_ > 0) {
 			--app.engine_games_left_;
 			app.game_end_done_ = false;
-			app.clock_left_ms_[0] = app.clock_left_ms_[1] = static_cast<long long>(app.clock_minutes_) * 60000;
-			app.game_clock_ = app.clock_minutes_ > 0;
-			app.clock_side_ = -1;
-			app.set_game(Game{}, false);
-			app.clock_switch();
+			app.new_play_game(false);
 			app.com_think();
 		}
 		return true;
@@ -544,8 +517,7 @@ bool play_timer(App &app, UINT_PTR id)
 std::wstring play_bar_text(const App &app)
 {
 	if (app.play_mode_ == PlayMode::Free) return {};
-	const char *names[] = {"play.free", "play.human_black", "play.human_white", "play.engines"};
-	std::wstring s = lang::t(names[static_cast<int>(app.play_mode_)]);
+	std::wstring s = play_mode_name(app.play_mode_);
 	if (app.com_thinking_ || app.com_book_move_ != kNoMove) s += L" " + lang::t("play.thinking");
 	if (app.game_clock_) {
 		long long left[2] = {app.clock_left_ms_[0], app.clock_left_ms_[1]};

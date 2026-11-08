@@ -35,10 +35,32 @@ inline constexpr UINT WM_ENGINE = WM_APP + 1;
 inline WPARAM engine_tag(int role, unsigned generation) { return static_cast<WPARAM>(role) | (static_cast<WPARAM>(generation) << 3); }
 // the commands that set a line on an engine: "setboard <start>", then "play <moves>" when there are moves
 std::string line_commands(const Position &start, const std::string &moves);
+// app_learn.cpp: whether the commands (one or more lines) may make the main engine put a new file in the place of its
+// book file: "book save" (to the book file or another; "b save", in any case) and its end ("quit", "q", "exit", "eof"),
+// where it saves the book when it has changed
+bool replaces_book_file(std::string_view commands);
+// app_tools.cpp: files and small windows
+bool file_exists(const std::wstring &p);       // a file (not a folder)
+std::wstring file_name(const std::wstring &p);  // the name without its folders
+// a name as it is with a drive or "\\" at its start, else in the folder `base`
+std::wstring absolute(const std::wstring &base, const std::string &name);
+// a filter of the file dialogs: the words, the patterns, then all files
+std::wstring file_filter(const char *key, const wchar_t *patterns);
+// one number from a small window (nullopt: cancelled)
+std::optional<int> ask_number(HWND owner, const std::wstring &title, const std::wstring &label, int value, int lo, int hi,
+                              const std::wstring &note = {});
 inline constexpr UINT WM_TASK = WM_APP + 2;  // a background job has ended
 inline constexpr UINT WM_SCRIPT = WM_APP + 3;  // the command script goes on (after the work that it waited for)
 inline constexpr UINT WM_REDUCE = WM_APP + 4;  // the count of book reduce has come (asked after the lines of the engine are read)
 inline constexpr UINT WM_BOOK_PEEK = WM_APP + 5;  // a position was looked up in the book file (the main engine is reading it)
+// the timers of the main window
+inline constexpr UINT_PTR kTimerAnim = 1;
+inline constexpr UINT_PTR kTimerWatch = 2;     // the engines are watched every 5 seconds
+inline constexpr UINT_PTR kTimerScript = 3;    // a script waiting for the analysis of the position looks again
+inline constexpr UINT_PTR kTimerCom = 4;       // a book move after a short wait, or the book analysis waited for
+inline constexpr UINT_PTR kTimerClock = 5;     // the time of the game, every second
+inline constexpr UINT_PTR kTimerNextGame = 6;  // the next game of the computer against itself
+inline constexpr UINT_PTR kTimerSave = 7;      // the end of the main engine saving its book is looked for (watch_save)
 
 // menu commands
 namespace cmd {
@@ -249,6 +271,25 @@ enum class PlayMode : int { Free = 0, HumanBlack, HumanWhite, Engines };
 // the opening moves of the computer: searched, the best book move, a book move drawn within a width
 enum class Opening : int { Search = 0, BookBest, BookWide };
 
+// the names of the settings in config.ini and in the script commands, in the order of their values
+inline constexpr const char *kDesignNames[] = {"standard", "paw"};
+inline constexpr const char *kEffectsNames[] = {"on", "subdued", "off"};
+inline constexpr const char *kTopEffectNames[] = {"strong", "normal", "weak"};
+inline constexpr const char *kTabNames[] = {"moves", "book", "record", "list", "tree"};
+inline constexpr const char *kCellInfoNames[] = {"none", "positions", "level", "stage", "umi"};
+inline constexpr const char *kUmiNames[] = {"best", "loss", "off", "range"};
+inline constexpr const char *kOpeningNames[] = {"search", "best", "wide"};
+inline constexpr const char *kLanguages[] = {"ja", "en", "zh-Hans", "zh-Hant"};  // the codes, in the order of the menu
+static_assert(std::size(kTabNames) == static_cast<size_t>(Tab::Count));
+// the place of `name` among `names` (-1: none)
+template <size_t N>
+int name_index(const char *const (&names)[N], std::string_view name)
+{
+	for (size_t k = 0; k < N; ++k)
+		if (name == names[k]) return static_cast<int>(k);
+	return -1;
+}
+
 struct Layout {
 	float scale = 1;
 	float font = 14, font_s = 11, row = 24;
@@ -260,6 +301,7 @@ struct Layout {
 	bool panel_below = false;
 	D2D1_RECT_F tabs{}, range{}, table{}, bookmarks{}, splitter{}, graph{}, panel_split{};
 	D2D1_RECT_F record{}, record_text{}, record_copy{}, record_paste{};  // the row of the moves as text, above the graph
+	float graph_room = 0;  // the height the table and the graph share (graph_ratio_ is of it)
 	struct Field {
 		D2D1_RECT_F box{}, track{};
 	} fx, fy;
@@ -272,6 +314,10 @@ struct Layout {
 	}
 	int square_at(float x, float y) const;
 };
+
+// a point in a rectangle of the layout (its left and top edges are in it, its right and bottom edges are not)
+inline bool inside(const D2D1_RECT_F &r, float x, float y) { return x >= r.left && x < r.right && y >= r.top && y < r.bottom; }
+inline bool inside(const D2D1_RECT_F &r, POINT p) { return inside(r, static_cast<float>(p.x), static_cast<float>(p.y)); }
 
 // what one square shows
 struct CellView {
@@ -297,6 +343,7 @@ struct CellView {
 struct EngineSlot {
 	EngineProcess proc;
 	bool alive = false;
+	bool lost = false;                 // a command could not be written (it has ended): its end is still taken when it comes
 	bool loaded = false;               // the first answer came (the book is read: an engine reads no command before)
 	std::optional<PosKey> board;       // the position the engine has (setboard)
 	unsigned generation = 0;           // counts the starts: messages of a process closed before are ignored
@@ -309,6 +356,7 @@ struct EngineSlot {
 	std::wstring error;
 	std::string open;                  // the first part of a line cut by an analysis line, waiting for its rest
 	std::wstring book_arg;             // the book name given to the engine (it names its files saved on the way after it)
+	bool book_changed = false;         // a command that may change the book was sent: the engine saves the book as it ends
 };
 
 struct MissingList {
@@ -329,8 +377,14 @@ struct Request {
 
 class App {
 public:
+	App() = default;
+	~App();  // (the window is gone by then)
+	App(const App &) = delete;
+	App &operator=(const App &) = delete;
 	int run(HINSTANCE inst, int show);
 	int message(const std::wstring &text, UINT flags);  // a message box with the title of the app (MessageBoxW)
+	// tests: the message boxes answered without being shown (the text and the flags of message(); its answer)
+	std::function<int(const std::wstring &, UINT)> message_hook_;
 	LRESULT proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
 	// ---- state (shared by the app_*.cpp files)
@@ -379,7 +433,7 @@ public:
 	bool bookmarks_shown_ = true;     // the row of the pictures of the bookmarks (kept lines) above the graph
 	bool record_box_ = true;          // the row of the moves as text above the graph
 	bool upper_moves_ = false;        // the moves given out as text in capitals (F5D6)
-	bool learn_keeps_book_ = false;   // the command of the main engine does not change the book (book deviate ... export)
+	bool learn_keeps_book_ = false;   // the command of the main engine does not change the book (book deviate ... export; set by start_learning_at)
 	std::wstring devexp_file_;        // the file of the last export of the lines of book deviate
 	bool graph_end_ = true;           // the graph shows the ranges the level reads to the end (lines and bands)
 	HWND record_edit_ = nullptr;      // its text box, a child of the window
@@ -390,10 +444,18 @@ public:
 	HBRUSH record_brush_ = nullptr;
 	COLORREF record_brush_color_ = 0;
 	int record_hover_ = 0;            // the button under the mouse: 1 copy, 2 paste
+	bool record_resume_ = false;      // it had the keys when they went to another window: they come back to it
 
 	// engines: [0] main (reads the book), [1] search only (no book), [2] tools (started for one job, no book),
 	// [3] play (the moves of the computer in a game, no book), [4] compare (the other engine, search only)
 	EngineSlot eng_[5];
+	// the main engine saving its book as it ends (close_main_engine): the window answers meanwhile, and what was asked
+	// (the window closed, the engines started again) is done after its end
+	bool book_saving_ = false;
+	std::chrono::steady_clock::time_point save_t0_{};
+	long long save_shown_s_ = -1;       // the seconds of the save shown in the log row
+	std::function<void()> after_save_;
+	bool closing_ = false;              // the window closes (WM_CLOSE): after the save of the book when there is one
 	BookPeek book_peek_;           // the book file looked up while the main engine reads it
 	unsigned book_peek_generation_ = 0;  // answers of a lookup started before are not taken
 	std::optional<u64> book_bytes_;      // the size of the book file when the main engine started (none: no file)
@@ -421,6 +483,9 @@ public:
 	// book learning on the main engine
 	bool learning_ = false;
 	int learn_end_id_ = 0;
+	bool learn_replaces_book_ = false;  // the command may replace the book file: the file is not looked up until it ends
+	bool learn_options_waiting_ = false;  // the learning settings changed while it learned: sent when it has ended
+	unsigned learn_options_sent_ = 0;     // those sent to the main engine since it started (a bit each, in the order of the window)
 	std::string learn_cmd_;
 	std::wstring learn_progress_;
 	std::chrono::steady_clock::time_point learn_t0_{};
@@ -524,7 +589,8 @@ public:
 	std::deque<ScriptLine> script_;
 	enum class ScriptWait { None, Task, Learn, Tool, Analysis, FindLine, BookLines, Game, Com, Reduce } script_wait_ = ScriptWait::None;
 	std::chrono::steady_clock::time_point script_until_{};
-	std::wstring script_dir_;
+	std::wstring script_dir_;  // relative names in a script are from its folder
+	bool script_quit_ = false;  // the window is closed by "quit" of a script
 
 	// a game against the computer (the play engine searches its moves; book moves come from the book analyses)
 	PlayMode play_mode_ = PlayMode::Free;
@@ -556,7 +622,7 @@ public:
 	bool compare_ = false;
 	int cmp_marker_id_ = 0, cmp_end_id_ = 0, cmp_level_ = 0;
 	bool cmp_busy_ = false, cmp_accept_ = false;
-	PosKey cmp_pos_{};     // relative names in a script are from its folder
+	PosKey cmp_pos_{};
 	std::string lang_ = "ja";
 
 	// interaction
@@ -591,7 +657,10 @@ public:
 
 	// ---- app.cpp
 	void load_config();
-	void save_config();
+	bool save_config();  // false: config.ini could not be written (the log says so)
+	// a name of a file or a folder in config.ini: as it is with a drive ("D:...") or "\\" at its start, else in the
+	// folder of the exe (absolute(), as the names of the engines and the book)
+	std::wstring from_exe_dir(const std::string &name) const;
 	void build_menu();
 	void update_menu();
 	void layout();
@@ -631,6 +700,9 @@ public:
 	void create_record_box();
 	void place_record_box();                   // after the layout
 	void sync_record_box(bool force = false);  // the text box follows the game, but not while it is typed in
+	void leave_record_box();                   // the keys go back to the board (when they were in the text box)
+	void record_focus_lost(HWND to);           // the keys leave the text box for `to`
+	bool record_resumes();                     // the keys go back to the text box, the window having them again (once)
 	bool record_take(const std::string &utf8); // as paste_text, from the row: the keys go back to the board after it
 	void record_key(WPARAM vk);                // Enter and Esc in the text box
 	LRESULT record_color(HDC dc);              // the colors of the text box
@@ -643,10 +715,21 @@ public:
 
 	// ---- app_engine.cpp
 	void start_engines();
-	void stop_engines();
+	// the engines closed; `then` is done when the main engine has ended (after the save of its book: close_main_engine)
+	void stop_engines(std::function<void()> then = {});
 	void restart_engines();
 	void restart_main_engine();    // the main engine alone (another book, the book read again)
-	bool refuse_while_learning();  // while the book learns: says so and returns true (the engine is not closed)
+	// the main engine closed ("quit"), then `then`; after a command that may change the book it saves the book as it
+	// ends: it is waited for without a limit and without holding the window (said in the log and the log row)
+	void close_main_engine(std::function<void()> then);
+	void watch_save();             // kTimerSave: the main engine has ended, then what was asked
+	void end_save(bool cut);       // the save of the book has ended (cut: the engine is ended now), then what was asked
+	void ask_cut_save();           // the window closed again meanwhile: whether to end the engine now
+	void close_window();           // WM_CLOSE: the settings saved, the engines closed, then the window
+	// while the book learns, or while the main engine saves its book as it ends: says so (a message box) and returns
+	// true (the main engine is then not used, closed nor started)
+	bool refuse_while_book_busy();
+	bool refuse_while_saving();    // while the main engine saves its book as it ends: says so and returns true
 	void on_engine(WPARAM tag, bool ended);
 	void request_analysis();
 	void pump_graph();
@@ -655,22 +738,34 @@ public:
 	void pump_search();
 	void request_missing(std::string &out, const Position &p);
 	int missing_target() const;
+	bool missing_here() const;  // missing lines are listed, of the position shown
 	void switch_book(const std::wstring &path);
 	void export_missing();
+	bool write_missing(const std::wstring &file);  // the missing lines listed, as games, to `file` (said in the log)
 	void export_best();
 	void export_deviate();  // the window of the lines of book deviate, deviate2, deviate3 to a file
+	// the main engine can take an export (deviate: book deviate ... export) now, before and after its windows; else said
+	// in a message box, false
+	bool export_ready(bool deviate);
 	// book deviate|deviate2|deviate3 <x> <y> export <file> <leaf|ends|all> on the main engine, from the position shown
 	bool start_deviate_export(const std::string &base, int x, int y, const std::string &which, const std::wstring &file);
+	// book bestlines loss=<loss> depth=<depth> solved=<follow|stop> which=<all|incomplete> file=<file> on the main engine,
+	// from the position shown (false: not sent)
+	bool start_best_export(int loss, int depth, const std::string &solved, const std::string &which, const std::wstring &file);
 	// app_settings.cpp
 	void open_range_settings();
 	void open_learn_settings();
+	// the texts of the window of the learning settings, in the order of the window: kept in config.ini, then sent
+	void apply_learn_options(const std::vector<std::wstring> &texts);
 	std::string learn_options_commands() const;
+	void send_learn_options();  // learn_options_commands() to the main engine (kept in learn_options_sent_)
 	// app_learn.cpp
 	std::wstring book_file() const;
 	std::wstring saved_base() const;  // the book name the engine names its files saved on the way after (".store", ...)
 	void learn_command(int id);
 	void start_learning(const std::string &command);
-	void start_learning_at(const std::string &command, const Position &start, const std::string &moves);
+	// `keeps_book`: the command does not change the book (book deviate ... export)
+	void start_learning_at(const std::string &command, const Position &start, const std::string &moves, bool keeps_book = false);
 	void queue_missing();
 	void next_in_queue();
 	void reduce_command();  // the menu: the window of X, Y and the position, then reduce_book
@@ -692,6 +787,10 @@ public:
 	void stop_request(std::string &out, int &id);  // "stop id=<id>" added to `out`, the answer dropped; id becomes 0
 	void cancel_reduce(std::string *out);  // the count of book reduce goes (its "stop id=" added to `out` if not null)
 	void board_to(int role, std::string &out, const Position &p);  // "setboard" when the engine has another position
+	// a request to the main engine at `p`, added to `out`: "<command> id=<n> <args>" after the position; its number,
+	// kept in requests_ with `params` (the book settings of Book and Graph)
+	int ask_main(std::string &out, const Position &p, Request::Kind kind, const char *command, const std::string &args = {},
+	             const std::string &params = {});
 	std::string moves_to_cursor() const;  // the moves of the game up to the place shown, for "play" (a pass "pa")
 	// the options of an engine without the book (an empty book of its own in the temporary folder); none when the
 	// engine could not open that name
@@ -708,6 +807,8 @@ public:
 	std::wstring engine_exe(EngineKind k) const;
 	std::wstring engine_eval(EngineKind k) const;
 	std::optional<std::wstring> engine_args(EngineKind k);
+	// the exe and the eval file of the engines of a kind are there (files, not folders); false: the log says which is not
+	bool engine_files_ok(EngineKind k);
 	void send(int role, const std::string &text);
 
 	// ---- app_tools.cpp: the tool engine, the book commands of the menus, the base commands, file dialogs
@@ -748,11 +849,12 @@ public:
 	void copy_position(int id);
 	void import_position();
 	bool take_position_text(const std::string &text);
+	void set_position(const Position &p);  // a game from the position (the game before kept), said in the log
 	void set_game(const Game &g, bool keep_old);
 	void screenshot(const std::wstring &file = {});
 	void save_board_image();
 	std::wstring images_dir() const;
-	bool copy_text(const std::wstring &text);  // false: the clipboard could not be opened
+	bool copy_text(const std::wstring &text);  // false: the clipboard could not be opened or did not take the text
 	std::wstring clipboard_text();
 	int move_number_at(int sq) const;
 
@@ -763,6 +865,9 @@ public:
 	void list_command(int id);
 	void list_load(const std::wstring &file, bool add);
 	void list_select(int index, bool from_hit = false, int hit = -1);
+	void clear_hits();     // the games found by the search of the position are not shown any more
+	void clear_list();     // no games in the list, none chosen nor found, and no file it is of
+	void list_add_game();  // the game on the board at the end of the list (its moves without the passes)
 	void list_search();
 	void keep_now(bool quiet = false);
 	void kept_command(int id);
@@ -775,7 +880,7 @@ public:
 	void tree_go(const std::vector<int> &path);
 	bool tree_command(const std::vector<std::string> &w, const std::string &rest);
 	void load_kept();
-	void save_kept() const;
+	void save_kept();
 	void list_from_book();
 	void list_book_written(bool add, bool ok);
 	bool ask_book_lines(int loss, int depth, int n, bool add);
@@ -783,6 +888,7 @@ public:
 
 	// ---- app_play.cpp: games against the computer, the compare mode
 	void set_play_mode(PlayMode m, int games = 0);
+	void new_play_game(bool keep_old);  // from the start position, the time of each side given again (and its clock)
 	bool com_turn() const;
 	void com_think();
 	void com_timer();

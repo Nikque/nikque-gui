@@ -42,13 +42,8 @@ int Openings::load(const std::wstring &path)
 {
 	names_.clear();
 	route_.clear();
-	FILE *f = nullptr;
-	if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return 0;
 	std::string all;
-	char buf[16384];
-	size_t n;
-	while ((n = fread(buf, 1, sizeof buf, f)) > 0) all.append(buf, n);
-	fclose(f);
+	if (!read_file(path, &all)) return 0;
 	const std::wstring text = decode(all);
 	int count = 0;
 	size_t i = 0;

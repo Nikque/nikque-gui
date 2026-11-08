@@ -46,22 +46,25 @@ void stage_dot(Gfx &gx, const Theme &th, int k, D2D1_POINT_2F p, float r)
 {
 	auto *dc = gx.dc();
 	const StageStyle &st = th.stage[std::clamp(k, 0, 7)];
-	if (k >= 3) {
-		const D2D1_GRADIENT_STOP stops[3] = {{0, st.top}, {0.5f, st.mid}, {1, st.bottom}};
-		auto *g = gx.gradient(300 + k, stops, 3);
+	const D2D1_GRADIENT_STOP stops[3] = {{0, st.top}, {0.5f, st.mid}, {1, st.bottom}};
+	if (auto *g = k >= 3 ? gx.gradient(300 + k, stops, 3) : nullptr) {
 		g->SetStartPoint({p.x, p.y - r});
 		g->SetEndPoint({p.x, p.y + r});
 		dc->FillEllipse(D2D1::Ellipse(p, r, r), g);
-	} else {
+	} else {  // (also when the gradient could not be made)
 		dc->FillEllipse(D2D1::Ellipse(p, r, r), gx.brush(st.mid));
 	}
 	dc->DrawEllipse(D2D1::Ellipse(p, r, r), gx.brush(k == 7 ? rgb(0xffffff) : rgb(0x09090b, 0.8f)), 1.0f);
 }
 
-std::wstring group(long long n)
+// a value with its sign: +3, 0, -2
+std::wstring signed_value(int v) { return (v > 0 ? L"+" : L"") + std::to_wstring(v); }
+
+// the umigame numbers of a move (black:white), "≦" before them while they are not exact
+std::wstring umi_text(const MoveEval &m)
 {
-	std::wstring s = std::to_wstring(n);
-	for (int i = static_cast<int>(s.size()) - 3; i > 0; i -= 3) s.insert(static_cast<size_t>(i), L",");
+	std::wstring s = m.umi_none ? lang::t("table.umi_none") : std::to_wstring(m.umi_black) + L":" + std::to_wstring(m.umi_white);
+	if (!m.umi_exact) s = L"≦" + s;
 	return s;
 }
 
@@ -101,14 +104,16 @@ int move_stage(const App &app, int i)
 	return m->stage;
 }
 
-bool inside_rect(const D2D1_RECT_F &r, POINT p)
-{
-	return p.x >= r.left && p.x < r.right && p.y >= r.top && p.y < r.bottom;
-}
-
 void rounded(Gfx &gx, const D2D1_RECT_F &r, float rad, const D2D1_COLOR_F &fill)
 {
 	gx.dc()->FillRoundedRectangle(D2D1::RoundedRect(r, rad, rad), gx.brush(fill));
+}
+
+// the background of a row of a table or a list: the row chosen, else the row under the mouse
+void row_back(App &app, const Theme &th, const D2D1_RECT_F &r, bool chosen, bool hover)
+{
+	if (chosen) rounded(app.gfx_, r, 4 * app.lay_.scale, with_alpha(th.accent, 0.25f));
+	else if (hover) rounded(app.gfx_, r, 4 * app.lay_.scale, with_alpha(th.text, 0.07f));
 }
 
 void draw_tabs(App &app, const Theme &th)
@@ -253,8 +258,7 @@ void draw_moves_table(App &app, const Theme &th)
 		const MoveEval &m = *rows[i];
 		const D2D1_RECT_F row{T.left, y, T.right, y + rh};
 		app.row_rects_.emplace_back(m.sq, row);
-		if (m.sq == app.selected_sq_) rounded(gx, row, 4 * L.scale, D2D1_COLOR_F{th.accent.r, th.accent.g, th.accent.b, 0.25f});
-		else if (m.sq == app.hover_sq_) rounded(gx, row, 4 * L.scale, D2D1_COLOR_F{th.text.r, th.text.g, th.text.b, 0.07f});
+		row_back(app, th, row, m.sq == app.selected_sq_, m.sq == app.hover_sq_);
 		int v = 0;
 		bool hv = shown_value(m, app.use_book_, &v);
 		// the move played next in the game: the value that came back from the next position
@@ -274,7 +278,7 @@ void draw_moves_table(App &app, const Theme &th)
 				break;
 			case Column::Value:
 				if (hv) {
-					std::wstring s = (v > 0 ? L"+" : L"") + std::to_wstring(v);
+					std::wstring s = signed_value(v);
 					if (!(app.use_book_ && m.in_book) && m.searched && m.bound) s.insert(s.begin(), static_cast<wchar_t>(m.bound));
 					gx.draw_text(s, f, r, th.text);
 				} else {
@@ -283,7 +287,7 @@ void draw_moves_table(App &app, const Theme &th)
 				break;
 			case Column::Compare:
 				if (m.cmp_searched) {
-					std::wstring s = (m.cmp_score > 0 ? L"+" : L"") + std::to_wstring(m.cmp_score);
+					std::wstring s = signed_value(m.cmp_score);
 					if (m.cmp_bound) s.insert(s.begin(), static_cast<wchar_t>(m.cmp_bound));
 					gx.draw_text(s, f, r, th.text);
 				} else if (app.cmp_busy_) {
@@ -305,28 +309,22 @@ void draw_moves_table(App &app, const Theme &th)
 				}
 				break;
 			case Column::Missing:
-				if (stage >= 1 && m.missing >= 0) gx.draw_text(group(m.missing), f, r, th.text);
+				if (stage >= 1 && m.missing >= 0) gx.draw_text(lang::number(m.missing), f, r, th.text);
 				break;
 			case Column::Positions:
-				if (m.positions >= 0) gx.draw_text(group(m.positions), f, r, th.text);
-				else if (m.lines >= 0) gx.draw_text(L"≈" + group(m.lines), f, r, th.text_dim);
+				if (m.positions >= 0) gx.draw_text(lang::number(m.positions), f, r, th.text);
+				else if (m.lines >= 0) gx.draw_text(L"≈" + lang::number(m.lines), f, r, th.text_dim);
 				break;
 			case Column::Level: {
 				const int lv = (app.use_book_ && m.in_book) ? m.book_level : shown_level(m, app.use_book_);
-				const bool exact = !(app.use_book_ && m.in_book) && m.searched && m.selectivity >= 100 &&
-				                   m.depth >= p.empties() - 1;
+				const bool exact = !(app.use_book_ && m.in_book) && move_exact(m, p);
 				std::wstring s = exact ? lang::t("cell.exact") : lv > 0 ? std::to_wstring(lv) : std::wstring();
 				if (improved) s += L"\x2605";
 				if (!s.empty()) gx.draw_text(s, gx.text(L.font, exact || improved, DWRITE_TEXT_ALIGNMENT_CENTER), r, th.text);
 				break;
 			}
 			case Column::Umi:
-				if (m.umi_known) {
-					std::wstring s = m.umi_none ? lang::t("table.umi_none")
-					                            : std::to_wstring(m.umi_black) + L":" + std::to_wstring(m.umi_white);
-					if (!m.umi_exact) s = L"≦" + s;
-					gx.draw_text(s, f, r, th.text);
-				}
+				if (m.umi_known) gx.draw_text(umi_text(m), f, r, th.text);
 				break;
 			default:
 				break;
@@ -367,8 +365,8 @@ void draw_book_tab(App &app, const Theme &th)
 		line(lang::t("book.levels") + L"：" + lang::t("book.counting"), th.text_dim);
 	} else {
 		std::wstring s = lang::t("book.levels") + L"：";
-		for (const auto &[lv, n] : info->levels) s += L" Lv" + std::to_wstring(lv) + L" " + group(n);
-		s += L"（" + lang::t("book.total") + L" " + group(info->levels_positions) + L"）";
+		for (const auto &[lv, n] : info->levels) s += L" Lv" + std::to_wstring(lv) + L" " + lang::number(n);
+		s += L"（" + lang::t("book.total") + L" " + lang::number(info->levels_positions) + L"）";
 		line(s, th.text);
 	}
 	// the lines of best moves (both sides) and their ends not solved yet
@@ -377,8 +375,8 @@ void draw_book_tab(App &app, const Theme &th)
 	} else if (info->best_error) {
 		line(lang::t("best.head") + L"：" + lang::t("best.too_many"), th.text_dim);
 	} else {
-		line(lang::f("best.count", {group(info->best_lines), group(info->best_ends), group(info->best_incomplete),
-		                            group(info->best_incomplete_ends)}),
+		line(lang::f("best.count", {lang::number(info->best_lines), lang::number(info->best_ends), lang::number(info->best_incomplete),
+		                            lang::number(info->best_incomplete_ends)}),
 		     th.text);
 	}
 	y += rh * 0.3f;
@@ -403,7 +401,7 @@ void draw_book_tab(App &app, const Theme &th)
 	for (int i = app.missing_scroll_; i < static_cast<int>(ms.lines.size()) && y < T.bottom; ++i, y += rh) {
 		const MissingLine &ml = ms.lines[i];
 		const D2D1_RECT_F r{T.left, y, T.right, y + rh};
-		if (inside_rect(r, app.mouse_)) rounded(gx, r, 4 * L.scale, D2D1_COLOR_F{th.text.r, th.text.g, th.text.b, 0.07f});
+		row_back(app, th, r, false, inside(r, app.mouse_));
 		std::wstring s = std::to_wstring(i + 1) + L". ";
 		for (int mv : ml.moves) s += widen(square_name(mv)) + L" ";
 		s += L"→ " + widen(square_name(ml.leaf)) + L"  ";
@@ -432,7 +430,7 @@ void draw_record_tab(App &app, const Theme &th)
 		if (r.bottom > T.bottom) break;
 		++shown;
 		const bool here = i + 1 == app.game_.cursor() || (mv == kPass && i + 2 == app.game_.cursor());
-		if (here) rounded(gx, r, 4 * L.scale, D2D1_COLOR_F{th.accent.r, th.accent.g, th.accent.b, 0.3f});
+		if (here) rounded(gx, r, 4 * L.scale, with_alpha(th.accent, 0.3f));
 		const bool after = i >= app.game_.cursor();
 		gx.draw_text(std::to_wstring(i + 1), fn, D2D1::RectF(r.left, r.top, r.left + cw * 0.38f, r.bottom), th.text_dim);
 		gx.draw_text(mv == kPass ? lang::t("record.pass") : widen(square_name(mv)), fm,
@@ -472,12 +470,12 @@ void draw_list_tab(App &app, const Theme &th)
 		if (!app.task_busy_) line(lang::t("list.empty"), th.text_dim);
 		return;
 	}
-	std::wstring head = lang::f("list.head", {group(static_cast<long long>(app.list_.size()))});
-	if (!app.list_file_.empty()) head += L"  " + app.list_file_.substr(app.list_file_.find_last_of(L"\\/") + 1);
-	if (app.list_index_ >= 0) head += L"  " + lang::f("list.at", {std::to_wstring(app.list_index_ + 1), group(static_cast<long long>(app.list_.size()))});
+	std::wstring head = lang::f("list.head", {lang::number(static_cast<long long>(app.list_.size()))});
+	if (!app.list_file_.empty()) head += L"  " + file_name(app.list_file_);
+	if (app.list_index_ >= 0) head += L"  " + lang::f("list.at", {std::to_wstring(app.list_index_ + 1), lang::number(static_cast<long long>(app.list_.size()))});
 	line(head, th.text);
 	const bool hits = app.hits_shown_;
-	if (hits) line(lang::f("list.hits", {group(static_cast<long long>(app.hits_.size()))}), th.text);
+	if (hits) line(lang::f("list.hits", {lang::number(static_cast<long long>(app.hits_.size()))}), th.text);
 	const int count = hits ? static_cast<int>(app.hits_.size()) : static_cast<int>(app.list_.size());
 	const int fit = std::max(1, static_cast<int>((T.bottom - y) / rh));
 	app.list_scroll_ = std::clamp(app.list_scroll_, 0, std::max(0, count - fit));
@@ -486,8 +484,7 @@ void draw_list_tab(App &app, const Theme &th)
 	for (int k = app.list_scroll_; k < count && y < T.bottom; ++k, y += rh) {
 		const int g = hits ? static_cast<int>(app.hits_[k].game) : k;
 		const D2D1_RECT_F r{T.left, y, T.right, y + rh};
-		if (g == app.list_index_) rounded(gx, r, 4 * L.scale, D2D1_COLOR_F{th.accent.r, th.accent.g, th.accent.b, 0.25f});
-		else if (inside_rect(r, app.mouse_)) rounded(gx, r, 4 * L.scale, D2D1_COLOR_F{th.text.r, th.text.g, th.text.b, 0.07f});
+		row_back(app, th, r, g == app.list_index_, inside(r, app.mouse_));
 		const auto mv = app.list_.moves(static_cast<size_t>(g));
 		std::wstring s = std::to_wstring(g + 1) + L". ";
 		if (hits) s += lang::f("list.hit_ply", {std::to_wstring(app.hits_[k].ply)}) + L"  ";
@@ -556,7 +553,7 @@ void draw_bookmarks(App &app, const Theme &th)
 		const std::wstring num = std::to_wstring(i + 1);
 		const float lw = std::max(size * 0.32f, gx.text_width(num, fn) + 6 * L.scale), lh = std::round(L.font_s * 1.15f);
 		const D2D1_RECT_F lr{r.left, r.top, r.left + lw, r.top + lh};
-		rounded(gx, lr, 3 * L.scale, D2D1_COLOR_F{th.panel.r, th.panel.g, th.panel.b, 0.85f});
+		rounded(gx, lr, 3 * L.scale, with_alpha(th.panel, 0.85f));
 		gx.draw_text(num, fn, lr, th.text);
 		const bool on = i == app.kept_sel_, hover = i == app.kept_hover_;
 		if (on || hover) {
@@ -735,8 +732,7 @@ void draw_tree_tab(App &app, const Theme &th)
 		}
 		const MoveEval &m = *l.m;
 		std::vector<int> moves = path_of(i);
-		if (moves == here) rounded(gx, row, 4 * L.scale, D2D1_COLOR_F{th.accent.r, th.accent.g, th.accent.b, 0.25f});
-		else if (inside_rect(row, app.mouse_)) rounded(gx, row, 4 * L.scale, D2D1_COLOR_F{th.text.r, th.text.g, th.text.b, 0.07f});
+		row_back(app, th, row, moves == here, inside(row, app.mouse_));
 		const D2D1_RECT_F arrow{lx, y, lx + indent, y + rh};
 		if (l.link) gx.draw_text(l.open ? L"\x25BE" : L"\x25B8", fn, arrow, th.text_dim);
 		// the disc of the side that plays the move
@@ -755,7 +751,7 @@ void draw_tree_tab(App &app, const Theme &th)
 			switch (col) {
 			case Column::Value: {
 				const int v = value_of(m);
-				gx.draw_text((v > 0 ? L"+" : L"") + std::to_wstring(v), fn, cr, ink);
+				gx.draw_text(signed_value(v), fn, cr, ink);
 				break;
 			}
 			case Column::Stage:
@@ -766,12 +762,7 @@ void draw_tree_tab(App &app, const Theme &th)
 				}
 				break;
 			case Column::Umi:
-				if (m.umi_known) {
-					std::wstring s = m.umi_none ? lang::t("table.umi_none")
-					                            : std::to_wstring(m.umi_black) + L":" + std::to_wstring(m.umi_white);
-					if (!m.umi_exact) s = L"≦" + s;
-					gx.draw_text(s, fn, cr, ink);
-				}
+				if (m.umi_known) gx.draw_text(umi_text(m), fn, cr, ink);
 				break;
 			case Column::Level: {
 				const int lv = m.in_book ? m.book_level : m.leaf_level;
@@ -853,7 +844,7 @@ void draw_graph(App &app, const Theme &th)
 	IDWriteTextFormat *fc = gx.text(L.font_s, false, DWRITE_TEXT_ALIGNMENT_CENTER, Face::Number);
 	for (int v : {-range, -range / 2, 0, range / 2, range}) {
 		dc->DrawLine({P.left, Y(v)}, {P.right, Y(v)}, gx.brush(v == 0 ? th.text_dim : th.line), v == 0 ? 1.5f : 1.0f);
-		gx.draw_text((v > 0 ? L"+" : L"") + std::to_wstring(v), fl, D2D1::RectF(G.left, Y(v) - L.font_s, P.left - 4, Y(v) + L.font_s),
+		gx.draw_text(signed_value(v), fl, D2D1::RectF(G.left, Y(v) - L.font_s, P.left - 4, Y(v) + L.font_s),
 		             th.text_dim, false);
 	}
 	for (int k = 0; k <= 60; k += 10) {
@@ -1029,8 +1020,9 @@ void draw_log(App &app)
 		swprintf(el, 32, L"%lld:%02lld", static_cast<long long>(s / 60), static_cast<long long>(s % 60));
 		return std::wstring(el);
 	};
-	std::wstring busy;  // the tool, the background job, the script
-	if (app.tool_busy_) busy += lang::f("tool.bar", {app.tool_label_, elapsed(app.tool_t0_)});
+	std::wstring busy;  // the save of the book, the tool, the background job, the script
+	if (app.book_saving_) busy += lang::f("save.bar", {elapsed(app.save_t0_)});
+	if (app.tool_busy_) busy += (busy.empty() ? L"" : L"　") + lang::f("tool.bar", {app.tool_label_, elapsed(app.tool_t0_)});
 	if (app.task_busy_) busy += (busy.empty() ? L"" : L"　") + lang::f("task.bar", {app.task_label_, elapsed(app.task_t0_)});
 	if (!app.script_.empty() || app.script_wait_ != App::ScriptWait::None)
 		busy += (busy.empty() ? L"" : L"　") + lang::f("script.bar", {std::to_wstring(app.script_.size())});

@@ -66,15 +66,7 @@ void load(const std::wstring &exe_dir, std::string_view code)
 		}
 	}
 	const std::wstring path = exe_dir + L"\\lang\\" + widen(code) + L".txt";
-	FILE *fp = nullptr;
-	if (_wfopen_s(&fp, path.c_str(), L"rb") == 0 && fp) {
-		std::string all;
-		char buf[16384];
-		size_t n;
-		while ((n = fread(buf, 1, sizeof buf, fp)) > 0) all.append(buf, n);
-		fclose(fp);
-		read_text(all);
-	}
+	if (std::string all; read_file(path, &all)) read_text(all);
 }
 
 const std::wstring &t(std::string_view key)
@@ -101,10 +93,6 @@ std::wstring f(std::string_view key, std::initializer_list<std::wstring_view> ar
 	return out;
 }
 
-}  // namespace ng::lang
-
-namespace ng::lang {
-
 const std::string &code()
 {
 	return loaded;
@@ -112,7 +100,9 @@ const std::string &code()
 
 std::wstring number(long long n)
 {
-	const std::wstring digits = std::to_wstring(n < 0 ? -n : n);
+	// (unsigned: -n of the smallest number is not a long long)
+	const unsigned long long u = static_cast<unsigned long long>(n);
+	const std::wstring digits = std::to_wstring(n < 0 ? 0 - u : u);
 	std::wstring out = n < 0 ? L"-" : L"";
 	for (size_t i = 0; i < digits.size(); ++i) {
 		if (i > 0 && (digits.size() - i) % 3 == 0) out += L',';

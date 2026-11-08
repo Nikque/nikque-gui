@@ -1,7 +1,6 @@
 // Keys, mouse and menu commands.
 #include <windows.h>
 
-#include <commdlg.h>
 #include <shellapi.h>
 
 #include <algorithm>
@@ -11,12 +10,6 @@
 #include "lang.h"
 
 namespace ng {
-
-namespace {
-
-bool inside(const D2D1_RECT_F &r, float x, float y) { return x >= r.left && x < r.right && y >= r.top && y < r.bottom; }
-
-}  // namespace
 
 std::vector<const MoveEval *> App::sorted_moves(const PosInfo &info) const
 {
@@ -182,7 +175,7 @@ void App::on_key(WPARAM vk)
 	}
 	if (editing_ && edit_key(vk)) return;
 	// the bookmarks: Delete takes the chosen one away (the mouse on their row)
-	if (vk == VK_DELETE && bookmarks_shown_ && !panel_hidden_ && inside(lay_.bookmarks, static_cast<float>(mouse_.x), static_cast<float>(mouse_.y))) {
+	if (vk == VK_DELETE && bookmarks_shown_ && !panel_hidden_ && inside(lay_.bookmarks, mouse_)) {
 		on_command(cmd::KeptDelete);
 		return;
 	}
@@ -236,7 +229,7 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 {
 	const float fx = static_cast<float>(x), fy = static_cast<float>(y);
 	if (edit_field_ && !inside(lay_.fx.box, fx, fy) && !inside(lay_.fy.box, fx, fy)) commit_edit();
-	if (record_edit_ && GetFocus() == record_edit_) SetFocus(hwnd_);  // the keys go back to the board
+	leave_record_box();
 	const int sq = lay_.square_at(fx, fy);
 	if (editing_ && sq != kNoMove) {
 		edit_click(sq, right);
@@ -401,7 +394,7 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 void App::on_mouse_move(int x, int y)
 {
 	const float fx = static_cast<float>(x), fy = static_cast<float>(y);
-	if (x >= 0 && (mouse_.x < 0 || true)) {
+	if (x >= 0) {  // (WM_MOUSELEAVE when it leaves the window)
 		TRACKMOUSEEVENT tme{sizeof tme, TME_LEAVE, hwnd_, 0};
 		TrackMouseEvent(&tme);
 	}
@@ -413,9 +406,9 @@ void App::on_mouse_move(int x, int y)
 		invalidate();
 		return;
 	case Drag::Graph: {
-		const float top = lay_.range.bottom, bottom = lay_.graph.bottom;
+		// the graph and the row of the moves under the mouse, of the height layout() shares
 		const float rec_h = lay_.record.bottom - lay_.record.top;
-		graph_ratio_ = std::clamp((bottom - fy - rec_h) / std::max(1.0f, bottom - top), 0.1f, 0.9f);
+		graph_ratio_ = std::clamp((lay_.graph.bottom - fy - rec_h) / std::max(1.0f, lay_.graph_room), 0.1f, 0.9f);
 		layout();
 		invalidate();
 		return;
@@ -499,24 +492,14 @@ void App::on_wheel(int x, int y, int delta)
 	const int step = delta > 0 ? 1 : -1;
 	if (inside(lay_.fx.box, fx, fy) || inside(lay_.fx.track, fx, fy)) set_loss(loss_x_ + step, loss_y_);
 	else if (inside(lay_.fy.box, fx, fy) || inside(lay_.fy.track, fx, fy)) set_loss(loss_x_, loss_y_ + step);
-	else if (inside(lay_.table, fx, fy) && tab_ == Tab::Book) {
-		missing_scroll_ = std::max(0, missing_scroll_ - step * 3);
-		invalidate();
-	}
-	else if (inside(lay_.table, fx, fy) && tab_ == Tab::List) {
-		list_scroll_ = std::max(0, list_scroll_ - step * 3);
+	else if (inside(lay_.table, fx, fy)) {
+		// the rows of the tab shown, three at a time
+		int &scroll = tab_ == Tab::Book ? missing_scroll_ : tab_ == Tab::List ? list_scroll_ : tab_ == Tab::Tree ? tree_scroll_ : table_scroll_;
+		scroll = std::max(0, scroll - step * 3);
 		invalidate();
 	}
 	else if (bookmarks_shown_ && inside(lay_.bookmarks, fx, fy)) {
 		kept_scroll_ = std::max(0, kept_scroll_ - step);
-		invalidate();
-	}
-	else if (inside(lay_.table, fx, fy) && tab_ == Tab::Tree) {
-		tree_scroll_ = std::max(0, tree_scroll_ - step * 3);
-		invalidate();
-	}
-	else if (inside(lay_.table, fx, fy)) {
-		table_scroll_ = std::max(0, table_scroll_ - step * 3);
 		invalidate();
 	}
 }
@@ -524,7 +507,10 @@ void App::on_wheel(int x, int y, int delta)
 void App::copy_moves()
 {
 	const std::wstring text = record_text();
-	if (!copy_text(text)) return;
+	if (!copy_text(text)) {
+		set_status(lang::t("status.copy_failed"));
+		return;
+	}
 	set_status(lang::f("status.copied", {std::to_wstring(text.size() / 2)}));
 }
 
@@ -561,6 +547,12 @@ bool App::paste_text(const std::string &u)
 
 void App::on_command(int id)
 {
+	// these use the main engine: not while it saves its book as it ends (said; the others that use it, close it or start
+	// it look for themselves: refuse_while_book_busy)
+	if (id == cmd::LearnContinue || id == cmd::QueueStart || id == cmd::OpenBook || id == cmd::ListFromBook ||
+	    id == cmd::EngineVersion || (id >= cmd::BookShowInfo && id <= cmd::BookShowPosition)) {
+		if (refuse_while_saving()) return;
+	}
 	if (id >= cmd::LearnDeviate && id <= cmd::LearnJobLast) {
 		learn_command(id);
 		return;
@@ -608,8 +600,7 @@ void App::on_command(int id)
 		return;
 	}
 	if (id >= cmd::LangJa && id <= cmd::LangZhHant) {
-		const char *codes[] = {"ja", "en", "zh-Hans", "zh-Hant"};
-		set_language(codes[id - cmd::LangJa]);
+		set_language(kLanguages[id - cmd::LangJa]);
 		return;
 	}
 	if (id == cmd::LearnStop) {
@@ -623,6 +614,10 @@ void App::on_command(int id)
 	}
 	if (id == cmd::QueueStart) {
 		if (learn_queue_.empty() || learning_) return;
+		if (!eng_[0].alive) {  // (as the learning commands: before asking)
+			set_status(lang::t("learn.no_engine"));
+			return;
+		}
 		if (message(lang::f("queue.ask", {std::to_wstring(learn_queue_.size()), book_file()}), MB_OKCANCEL | MB_ICONQUESTION) != IDOK) return;
 		queue_running_ = true;
 		next_in_queue();
@@ -651,6 +646,19 @@ void App::on_command(int id)
 		if (!r.empty()) switch_book(widen(r));
 		return;
 	}
+	// a setting of the view turned over (the layout made again when it takes room)
+	auto flip = [&](bool &v, bool relayout) {
+		v = !v;
+		update_menu();
+		if (relayout) layout();
+		invalidate();
+	};
+	// a setting of the analyses changed
+	auto analysis_changed = [&] {
+		update_menu();
+		request_analysis();
+		invalidate();
+	};
 	switch (id) {
 	case cmd::NewGame:
 		// in a game against the computer: the same kind of game again (the time and the clocks are set again)
@@ -702,15 +710,7 @@ void App::on_command(int id)
 	case cmd::Screenshot: screenshot(); break;
 	case cmd::SaveBoardImage: save_board_image(); break;
 	case cmd::RunScript: {
-		std::wstring flt = lang::t("filter.text") + L" (*.txt)";
-		flt += L'\0';
-		flt += L"*.txt";
-		flt += L'\0';
-		flt += lang::t("filter.all");
-		flt += L'\0';
-		flt += L"*.*";
-		flt += L'\0';
-		const std::wstring f = pick_open(flt.c_str(), lang::t("menu.io.script"));
+		const std::wstring f = pick_open(file_filter("filter.text", L"*.txt").c_str(), lang::t("menu.io.script"));
 		if (!f.empty()) run_script_file(f, 0);
 		break;
 	}
@@ -722,11 +722,7 @@ void App::on_command(int id)
 		}
 		update_menu();
 		break;
-	case cmd::MoveNumbers:
-		move_numbers_ = !move_numbers_;
-		update_menu();
-		invalidate();
-		break;
+	case cmd::MoveNumbers: flip(move_numbers_, false); break;
 	case cmd::RotateNext: orient_to((orient_ + 1) & 7); break;
 	case cmd::SaveLog: {
 		std::wstring flt = lang::t("filter.text") + L" (*.txt)";
@@ -751,49 +747,19 @@ void App::on_command(int id)
 	case cmd::BackgroundOff:
 		backward_ = id == cmd::Backward;
 		forward_ = id == cmd::Forward;
-		update_menu();
-		request_analysis();
-		invalidate();
+		analysis_changed();
 		break;
 	case cmd::PrecisionOn:
 		precision_ = !precision_;
-		update_menu();
-		request_analysis();
-		invalidate();
+		analysis_changed();
 		break;
 	case cmd::LevelChoose: choose_level(); break;
-	case cmd::PvOnBoard:
-		pv_on_board_ = !pv_on_board_;
-		update_menu();
-		invalidate();
-		break;
-	case cmd::OpeningMarks:
-		opening_marks_ = !opening_marks_;
-		update_menu();
-		invalidate();
-		break;
-	case cmd::BookmarksShow:
-		bookmarks_shown_ = !bookmarks_shown_;
-		update_menu();
-		layout();
-		invalidate();
-		break;
-	case cmd::RecordBoxShow:
-		record_box_ = !record_box_;
-		update_menu();
-		layout();
-		invalidate();
-		break;
-	case cmd::GraphEndShow:
-		graph_end_ = !graph_end_;
-		update_menu();
-		invalidate();
-		break;
-	case cmd::UpperMoves:
-		upper_moves_ = !upper_moves_;
-		update_menu();
-		invalidate();
-		break;
+	case cmd::PvOnBoard: flip(pv_on_board_, false); break;
+	case cmd::OpeningMarks: flip(opening_marks_, false); break;
+	case cmd::BookmarksShow: flip(bookmarks_shown_, true); break;
+	case cmd::RecordBoxShow: flip(record_box_, true); break;
+	case cmd::GraphEndShow: flip(graph_end_, false); break;
+	case cmd::UpperMoves: flip(upper_moves_, false); break;
 	case cmd::DesignToggle: on_command(design_ == Design::Paw ? cmd::DesignStandard : cmd::DesignPaw); break;
 	case cmd::Recompute:
 		// the analyses in progress stop first: the rest of their answers would come to the positions cleared
@@ -810,9 +776,7 @@ void App::on_command(int id)
 	case cmd::UmiLoss:
 	case cmd::UmiOff:
 		umi_ = id == cmd::UmiBest ? UmiMode::Best : id == cmd::UmiLoss ? UmiMode::Loss : UmiMode::Off;
-		update_menu();
-		request_analysis();
-		invalidate();
+		analysis_changed();
 		break;
 	case cmd::CountOn:
 		count_ = !count_;
@@ -825,26 +789,18 @@ void App::on_command(int id)
 		position_changed();
 		break;
 	case cmd::ReloadBook:
-		if (!refuse_while_learning()) restart_main_engine();
+		if (!refuse_while_book_busy()) restart_main_engine();
 		break;
 	case cmd::BaseDeviate:
 	case cmd::BaseDeviate2:
 	case cmd::BaseDeviate3:
 		base_ = id == cmd::BaseDeviate ? "deviate" : id == cmd::BaseDeviate2 ? "deviate2" : "deviate3";
-		update_menu();
-		request_analysis();
-		invalidate();
+		analysis_changed();
 		break;
 	case cmd::BookInfo: on_command(cmd::TabBook); break;
 	case cmd::OpenBook: {
-		wchar_t file[MAX_PATH * 4] = L"";
-		OPENFILENAMEW of{sizeof of};
-		of.hwndOwner = hwnd_;
-		of.lpstrFilter = L"book (*.dat;*.dev*;*.store)\0*.dat;*.dev*;*.store\0*.*\0*.*\0";
-		of.lpstrFile = file;
-		of.nMaxFile = static_cast<DWORD>(std::size(file));
-		of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-		if (GetOpenFileNameW(&of)) switch_book(file);
+		const std::wstring f = pick_open(file_filter("filter.books", L"*.dat;*.dev*;*.store").c_str());
+		if (!f.empty()) switch_book(f);
 		break;
 	}
 	case cmd::ExportMissing: export_missing(); break;
@@ -863,7 +819,7 @@ void App::on_command(int id)
 	case cmd::EngineNikque:
 	case cmd::EngineNewedax: {
 		const EngineKind k = id == cmd::EngineNewedax ? EngineKind::Newedax : EngineKind::Nikque18;
-		if (k == kind_ || refuse_while_learning()) break;
+		if (k == kind_ || refuse_while_book_busy()) break;
 		if (message(lang::t("ask.switch_engine"), MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
 			break;
 		kind_ = k;
@@ -905,18 +861,8 @@ void App::on_command(int id)
 		update_menu();
 		invalidate();
 		break;
-	case cmd::TogglePanel:
-		panel_hidden_ = !panel_hidden_;
-		update_menu();
-		layout();
-		invalidate();
-		break;
-	case cmd::ToggleLog:
-		log_open_ = !log_open_;
-		update_menu();
-		layout();
-		invalidate();
-		break;
+	case cmd::TogglePanel: flip(panel_hidden_, true); break;
+	case cmd::ToggleLog: flip(log_open_, true); break;
 	case cmd::TabMoves:
 	case cmd::TabBook:
 	case cmd::TabRecord:

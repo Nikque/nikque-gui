@@ -4,6 +4,7 @@
 
 #include <windows.h>
 
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -23,10 +24,15 @@ public:
 	bool start(const std::wstring &exe, const std::wstring &args, const std::wstring &dir, HWND notify, UINT msg,
 	           WPARAM tag, std::wstring *error);
 	bool running() const noexcept { return process_ != nullptr; }
-	// writes the text (lines ending with '\n') at once
+	// writes the text (lines ending with '\n') at once; waits only when the engine left a megabyte unread
 	bool send(std::string_view text);
 	// moves the lines read so far into `out` (appended)
 	void take_lines(std::vector<std::string> &out);
+	// "quit" and the end of its input, without waiting: the process stays kept here (and is ended with the GUI) until
+	// close(), which does not send "quit" again; exited() says when it has ended
+	void quit();
+	// the process has ended and its output has been read to its end: take_lines() has all of it (or there is none)
+	bool exited() const;
 	// "quit", waits up to `wait_ms`, then ends the process if it is still there
 	void close(DWORD wait_ms = 2000);
 
@@ -38,6 +44,7 @@ private:
 	HANDLE in_write_ = nullptr;
 	HANDLE out_read_ = nullptr;
 	std::thread reader_;
+	std::atomic<bool> read_ended_{false};  // the reader has read the output to its end (the lines are in lines_)
 	std::mutex mutex_;
 	std::vector<std::string> lines_;
 	std::string partial_;

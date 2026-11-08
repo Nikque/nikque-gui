@@ -24,6 +24,8 @@ Settings → Open config.ini opens it in Notepad.
 
 The GUI also writes the file when it closes. Close the GUI before editing the file by hand.
 
+When it cannot be written (a read-only folder, for example), the file stays as it was and the log says so. On closing, a message box says it (not when `quit` of a script closes the GUI).
+
 | Section | Main keys |
 |---|---|
 | `[engine]` | `kind=nikque\|newedax`, `search=1` (use the search engine) |

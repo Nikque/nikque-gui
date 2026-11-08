@@ -107,6 +107,7 @@ A bookmark stores a game and a position in it. Pictures of the bookmarked positi
   - setting up a position
   - finding the moves of a position
 - There is no limit on the number of bookmarks. They are stored in `kept.txt` next to the exe.
+- When `kept.txt` cannot be written (a read-only folder, for example), the log says so and the file stays as it was.
 - When the same game comes again, its automatic bookmark moves to the last position and remains a single bookmark.
 - A bookmark made with M does not move. A different position of the same game becomes a new bookmark (since 0.2.1).
 - Bookmarks in a `kept.txt` from 0.2.0 or earlier are read as automatic bookmarks.

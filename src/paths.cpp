@@ -6,6 +6,30 @@
 
 namespace ng {
 
+namespace {
+
+// the text in a code page as wide letters (none when it cannot be read with `flags`, or is empty)
+std::optional<std::wstring> from_codepage(std::string_view s, unsigned code_page, unsigned long flags)
+{
+	const int n = MultiByteToWideChar(code_page, flags, s.data(), static_cast<int>(s.size()), nullptr, 0);
+	if (n <= 0) return std::nullopt;
+	std::wstring w(static_cast<size_t>(n), L'\0');
+	MultiByteToWideChar(code_page, flags, s.data(), static_cast<int>(s.size()), w.data(), n);
+	return w;
+}
+
+// the short (8.3) form of the name of a file or a folder that is there (none: no short form, or too long)
+std::optional<std::wstring> short_form(const std::wstring &path)
+{
+	wchar_t buf[MAX_PATH * 4];
+	const DWORD size = static_cast<DWORD>(std::size(buf));
+	const DWORD n = GetShortPathNameW(path.c_str(), buf, size);
+	if (n == 0 || n >= size) return std::nullopt;
+	return std::wstring(buf);
+}
+
+}  // namespace
+
 std::optional<std::string> to_codepage(const std::wstring &w, unsigned code_page, WideToMulti convert)
 {
 	if (!convert) convert = WideCharToMultiByte;
@@ -46,22 +70,16 @@ std::optional<std::string> acp(const std::wstring &w)
 
 std::wstring engine_text(std::string_view s)
 {
-	const unsigned cp = engine_code_page();
-	const int n = MultiByteToWideChar(cp, 0, s.data(), static_cast<int>(s.size()), nullptr, 0);
-	if (n <= 0) return std::wstring(s.begin(), s.end());
-	std::wstring w(static_cast<size_t>(n), L'\0');
-	MultiByteToWideChar(cp, 0, s.data(), static_cast<int>(s.size()), w.data(), n);
-	return w;
+	if (auto w = from_codepage(s, engine_code_page(), 0)) return *std::move(w);
+	return std::wstring(s.begin(), s.end());
 }
 
 std::optional<std::string> engine_command(std::string_view utf8)
 {
 	if (utf8.empty()) return std::string();
-	const int n = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8.data(), static_cast<int>(utf8.size()), nullptr, 0);
-	if (n <= 0) return std::nullopt;
-	std::wstring w(static_cast<size_t>(n), L'\0');
-	MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8.data(), static_cast<int>(utf8.size()), w.data(), n);
-	return acp(w);
+	const auto w = from_codepage(utf8, CP_UTF8, MB_ERR_INVALID_CHARS);
+	if (!w) return std::nullopt;
+	return acp(*w);
 }
 
 // A name on the command line of an engine is quoted (spaces are allowed); the engine reads it in the code page of the
@@ -76,18 +94,15 @@ std::optional<std::wstring> engine_arg_path(const std::wstring &path, EngineName
 		return a && (what == EngineName::Book ? a->size() <= kEngineBookNameMax : w.size() <= kEngineNameMax);
 	};
 	if (fits(path)) return path;
-	wchar_t buf[MAX_PATH * 4];
-	const DWORD size = static_cast<DWORD>(std::size(buf));
 	if (const size_t slash = path.find_last_of(L"\\/"); slash != std::wstring::npos) {
-		const DWORD n = GetShortPathNameW(path.substr(0, slash).c_str(), buf, size);
-		if (n > 0 && n < size) {
-			const std::wstring w = std::wstring(buf) + path.substr(slash);
+		if (const auto dir = short_form(path.substr(0, slash))) {
+			const std::wstring w = *dir + path.substr(slash);
 			if (fits(w)) return w;
 		}
 	}
 	if (what == EngineName::Book) return std::nullopt;
-	const DWORD n = GetShortPathNameW(path.c_str(), buf, size);  // (a file still to be made has none)
-	if (n > 0 && n < size && fits(buf)) return std::wstring(buf);
+	const auto whole = short_form(path);  // (a file still to be made has none)
+	if (whole && fits(*whole)) return whole;
 	return std::nullopt;
 }
 
@@ -101,18 +116,15 @@ std::optional<std::string> engine_path(const std::wstring &path, bool exists)
 		return acp(w);
 	};
 	if (auto s = plain(path)) return s;
-	wchar_t buf[MAX_PATH * 4];
-	const DWORD size = static_cast<DWORD>(std::size(buf));
 	if (exists) {
-		const DWORD n = GetShortPathNameW(path.c_str(), buf, size);
-		if (n == 0 || n >= size) return std::nullopt;
-		return plain(buf);
+		const auto whole = short_form(path);
+		return whole ? plain(*whole) : std::nullopt;
 	}
 	const size_t slash = path.find_last_of(L"\\/");
 	if (slash == std::wstring::npos) return std::nullopt;
-	const DWORD n = GetShortPathNameW(path.substr(0, slash).c_str(), buf, size);
-	if (n == 0 || n >= size) return std::nullopt;
-	return plain(std::wstring(buf) + L"\\" + path.substr(slash + 1));
+	const auto dir = short_form(path.substr(0, slash));
+	if (!dir) return std::nullopt;
+	return plain(*dir + L"\\" + path.substr(slash + 1));
 }
 
 }  // namespace ng

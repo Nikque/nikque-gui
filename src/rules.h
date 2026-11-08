@@ -35,6 +35,19 @@ struct Position {
 	int ply() const noexcept { return 60 - empties(); }
 	// the position after the move (kPass changes the side only); the move must be legal
 	Position play(int sq) const noexcept;
+	// the side to move puts a disc on `sq` and turns the discs `turned` (the flips of the move); the other side moves next
+	void put(int sq, u64 turned) noexcept
+	{
+		turned |= 1ULL << sq;
+		if (side == kBlack) {
+			black |= turned;
+			white &= ~turned;
+		} else {
+			white |= turned;
+			black &= ~turned;
+		}
+		side ^= 1;
+	}
 	// 64 squares a1..h8 ('X' black, 'O' white, '-' empty), a space and the side ('X' or 'O')
 	std::string to_board_string() const;
 

@@ -2,7 +2,6 @@
 // A request is sent once per position; answers are kept in the cache, so a position seen again is shown at once.
 #include <windows.h>
 
-#include <commdlg.h>
 #include <intrin.h>
 
 #include <cstdio>
@@ -16,23 +15,13 @@ namespace ng {
 
 namespace {
 
-bool file_exists(const std::wstring &p)
-{
-	const DWORD a = GetFileAttributesW(p.c_str());
-	return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
-}
+// the names of the engines in the log, by their roles (eng_)
+constexpr const char *kRoleNames[] = {"engine.main", "engine.search", "engine.tool", "engine.play", "engine.compare"};
 
 bool dir_exists(const std::wstring &p)
 {
 	const DWORD a = GetFileAttributesW(p.c_str());
 	return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
-}
-
-std::wstring absolute(const std::wstring &base, const std::string &p)
-{
-	const std::wstring w = widen(p);
-	if (w.size() >= 2 && (w[1] == L':' || (w[0] == L'\\' && w[1] == L'\\'))) return w;
-	return base + L"\\" + w;
 }
 
 // the size of a file, for the log
@@ -107,7 +96,8 @@ void App::send(int role, const std::string &text)
 	if (text.empty() || !eng_[role].alive) return;
 	if (!eng_[role].proc.send(text)) {
 		eng_[role].alive = false;
-		log(lang::f("log.engine_lost", {lang::t(role ? "engine.search" : "engine.main")}));
+		eng_[role].lost = true;  // (the end of its output comes after: on_engine)
+		log(lang::f("log.engine_lost", {lang::t(kRoleNames[role])}));
 	}
 }
 
@@ -132,6 +122,22 @@ std::wstring App::engine_eval(EngineKind k) const
 	const char *sec = engine_section(k);
 	const std::string ev = ini_.get(sec, "eval");
 	return ev.empty() ? engine_dir(k) + L"\\data\\eval.dat" : absolute(engine_dir(k), ev);
+}
+
+bool App::engine_files_ok(EngineKind k)
+{
+	const std::wstring exe = engine_exe(k);
+	if (exe.empty() || !file_exists(exe)) {
+		log(lang::f("log.no_exe", {exe.empty() ? engine_dir(k) : exe}));
+		return false;
+	}
+	// (an engine without its eval file ends at once, saying so without ending the line: nothing of it reaches the log)
+	const std::wstring eval = engine_eval(k);
+	if (!file_exists(eval)) {
+		log(lang::f("log.no_eval", {eval}));
+		return false;
+	}
+	return true;
 }
 
 std::optional<std::wstring> App::engine_args(EngineKind k)
@@ -214,6 +220,16 @@ void App::board_to(int role, std::string &out, const Position &p)
 	eng_[role].board = key;
 }
 
+int App::ask_main(std::string &out, const Position &p, Request::Kind kind, const char *command, const std::string &args,
+                  const std::string &params)
+{
+	board_to(0, out, p);
+	const int id = new_id();
+	out += std::string(command) + " id=" + std::to_string(id) + (args.empty() ? "" : " " + args) + "\n";
+	requests_[id] = {kind, key_of(p), params};
+	return id;
+}
+
 void App::stop_request(std::string &out, int &id)
 {
 	if (!id) return;
@@ -235,17 +251,9 @@ void App::start_engines()
 {
 	const std::wstring dir = engine_dir();
 	const std::wstring exe = engine_exe();
-	const std::wstring eval = engine_eval();
 	const std::wstring book = book_file();
 
-	if (exe.empty() || !file_exists(exe)) {
-		log(lang::f("log.no_exe", {exe.empty() ? dir : exe}));
-		return;
-	}
-	if (!file_exists(eval)) {
-		log(lang::f("log.no_eval", {eval}));
-		return;
-	}
+	if (!engine_files_ok(kind_)) return;
 	const auto common = engine_args();
 	if (!common) return;
 	bool main_ok = true;
@@ -257,7 +265,8 @@ void App::start_engines()
 		log(eng_[0].error);
 		main_ok = false;
 	}
-	if (kind_ == EngineKind::Nikque18) {
+	// (not while the main engine runs: it may be saving the book, and a handle on the file makes its replacing fail)
+	if (kind_ == EngineKind::Nikque18 && !eng_[0].proc.running()) {
 		// nikque.18 cannot read the book form 2 of newedax ("NEDXBOOK")
 		FILE *f = nullptr;
 		if (_wfopen_s(&f, book.c_str(), L"rb") == 0 && f) {
@@ -286,11 +295,13 @@ void App::start_engines()
 		}
 		std::wstring err;
 		++s.generation;
+		s.lost = false;
 		s.alive = s.proc.start(exe, args, dir, hwnd_, WM_ENGINE, engine_tag(role, s.generation), &err);
 		s.loaded = false;
 		s.board.reset();
 		s.open.clear();
 		s.book_arg = role == 0 ? *book_arg : std::wstring();
+		s.book_changed = false;
 		if (role == 0) {
 			WIN32_FILE_ATTRIBUTE_DATA attr{};
 			book_bytes_.reset();
@@ -313,7 +324,11 @@ void App::start_engines()
 			book_peek_.start(book, hwnd_, WM_BOOK_PEEK, ++book_peek_generation_);
 		}
 		send(role, "mode 3\n");
-		if (role == 0) send(0, learn_options_commands());  // the settings of book learning
+		if (role == 0) {  // the settings of book learning (those changed while the last engine learned too)
+			learn_options_sent_ = 0;
+			send_learn_options();
+			learn_options_waiting_ = false;
+		}
 		s.version.clear();
 		s.ping_id = 0;
 		s.ping_sent = std::chrono::steady_clock::now();
@@ -325,15 +340,108 @@ void App::start_engines()
 	if (!eng_[1].alive) hint_busy_ = false;
 }
 
-void App::stop_engines()
+// After a command that may change the book the main engine saves it as it ends ("quit"): it writes the whole book to
+// another file, then puts it in the place of the book file (a book of hundreds of millions of positions is tens of GB:
+// minutes on a slow drive). It is then not ended: its end is looked for by a timer, the window answering meanwhile (the
+// log and the log row say so), and `then` is done after it (end_save). Else it is ended 2 seconds after "quit", as the
+// other engines, and `then` is done at once. A learning in progress reads "quit" only after its end: it is not waited
+// for. Closed while it saves (the window closed after another book was asked): `then` in the place of what was asked.
+// Its requests and its learning go at once.
+void App::close_main_engine(std::function<void()> then)
 {
-	for (auto &s : eng_) {
-		s.proc.close();
-		s.alive = false;
-		s.board.reset();
+	EngineSlot &s = eng_[0];
+	if (book_saving_) {
+		after_save_ = std::move(then);
+		return;
 	}
+	const bool save = s.alive && s.book_changed && !learning_;
+	if (save) s.proc.quit();
+	else s.proc.close();
+	s.alive = s.lost = false;
+	s.board.reset();
 	forget_main_requests();
 	learning_ = false;
+	if (!save) {
+		s.book_changed = false;
+		if (then) then();
+		return;
+	}
+	book_saving_ = true;
+	save_t0_ = std::chrono::steady_clock::now();
+	save_shown_s_ = -1;
+	after_save_ = std::move(then);
+	log(lang::t("log.engine_saving"));
+	SetTimer(hwnd_, kTimerSave, 250, nullptr);
+	update_menu();
+	invalidate();
+}
+
+void App::watch_save()
+{
+	if (!book_saving_) {
+		KillTimer(hwnd_, kTimerSave);
+		return;
+	}
+	if (!eng_[0].proc.exited()) {
+		const long long sec = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - save_t0_).count();
+		if (sec != save_shown_s_) {  // (the time in the log row)
+			save_shown_s_ = sec;
+			invalidate();
+		}
+		return;
+	}
+	// a box or a small window open on the window (it is disabled then: the question of ask_cut_save too): after it
+	if (hwnd_ && !IsWindowEnabled(hwnd_)) return;
+	end_save(false);
+}
+
+void App::end_save(bool cut)
+{
+	KillTimer(hwnd_, kTimerSave);
+	EngineSlot &s = eng_[0];
+	// its last lines first (the save said by the engine, or why it could not save), which close() would drop: it has
+	// read them all when it has ended (exited)
+	if (!cut) on_engine(engine_tag(0, s.generation), false);
+	s.proc.close(0);  // (it has ended, else it is ended now)
+	s.book_changed = false;
+	book_saving_ = false;
+	const auto sec = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - save_t0_).count();
+	log(cut ? lang::t("log.engine_save_cut") : lang::f("log.engine_saved", {std::to_wstring(sec / 60), std::to_wstring(sec % 60)}));
+	update_menu();
+	invalidate();
+	schedule_script();  // (a script waits for the end of the save)
+	std::function<void()> then = std::move(after_save_);
+	after_save_ = nullptr;
+	if (then) then();
+}
+
+void App::ask_cut_save()
+{
+	if (!book_saving_ || (hwnd_ && !IsWindowEnabled(hwnd_))) return;  // (the question, or another box, is open)
+	const auto sec = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - save_t0_).count();
+	const int r = message(lang::f("ask.cut_save", {std::to_wstring(sec / 60), std::to_wstring(sec % 60)}),
+	                      MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
+	if (!book_saving_) return;
+	if (eng_[0].proc.exited()) end_save(false);  // (it has ended while asked: the book is saved)
+	else if (r == IDYES) end_save(true);
+}
+
+bool App::refuse_while_saving()
+{
+	if (!book_saving_) return false;
+	message(lang::t("save.busy"), MB_ICONINFORMATION);
+	return true;
+}
+
+void App::stop_engines(std::function<void()> then)
+{
+	book_peek_.stop();  // (the main engine saves its book as it ends: the file is not open then)
+	for (int role = 1; role < 5; ++role) {
+		EngineSlot &s = eng_[role];
+		s.proc.close();
+		s.alive = s.lost = false;
+		s.board.reset();
+	}
 	hint_busy_ = hint_accept_ = hint_background_ = false;
 	tool_busy_ = false;
 	com_thinking_ = com_pondering_ = com_waiting_book_ = com_accept_ = false;
@@ -341,10 +449,12 @@ void App::stop_engines()
 	cmp_busy_ = cmp_accept_ = false;
 	DeleteFileW((temp_dir_ + L"\\nobook.dat").c_str());
 	DeleteFileW((temp_dir_ + L"\\nobook-tool.dat").c_str());
+	close_main_engine(std::move(then));  // (last: what was asked is done after it)
 }
 
-bool App::refuse_while_learning()
+bool App::refuse_while_book_busy()
 {
+	if (refuse_while_saving()) return true;
 	if (!learning_) return false;
 	message(lang::t("learn.busy"), MB_ICONINFORMATION);
 	return true;
@@ -353,13 +463,14 @@ bool App::refuse_while_learning()
 void App::restart_engines()
 {
 	// (a learning command takes no input to stop: the engine would be closed in the middle of it)
-	if (refuse_while_learning()) return;
-	stop_engines();
-	cache_.clear_book();
-	cache_.clear_search();
-	start_engines();
-	if (compare_) set_compare(true);  // the other engine of the kind chosen now
-	position_changed();
+	if (refuse_while_book_busy()) return;
+	stop_engines([this] {
+		cache_.clear_book();
+		cache_.clear_search();
+		start_engines();
+		if (compare_) set_compare(true);  // the other engine of the kind chosen now
+		position_changed();
+	});
 }
 
 // With the precision stages the engine writes the rows of the book moves when their stages are known, at the end of an
@@ -368,10 +479,7 @@ void App::restart_engines()
 // there at once.
 void App::ask_book_values(std::string &out, const Position &p)
 {
-	board_to(0, out, p);
-	values_id_ = new_id();
-	out += "book moveinfo id=" + std::to_string(values_id_) + " parts=\n";
-	requests_[values_id_] = {Request::Values, key_of(p)};
+	values_id_ = ask_main(out, p, Request::Values, "book moveinfo", "parts=");
 }
 
 std::optional<Position> App::next_values()
@@ -388,7 +496,8 @@ std::optional<Position> App::next_values()
 }
 
 // The engine reads its book, learns, or has a long job to do that moving the position does not stop (the analyses are
-// done one after the other): nothing is asked behind it, and the book file is looked up meanwhile.
+// done one after the other): nothing is asked behind it, and the book file is looked up meanwhile (not while a command
+// that may replace the file runs: see start_learning_at).
 bool App::book_held() const
 {
 	if (!eng_[0].loaded || learning_) return true;
@@ -423,12 +532,8 @@ void App::pump_graph()
 	if (graph_id_ || book_id_ || background_paused_) return;
 	const std::string params = book_params();
 	auto ask = [&](const Position &p) {
-		const PosKey key = key_of(p);
 		std::string out;
-		board_to(0, out, p);
-		graph_id_ = new_id();
-		out += "book moveinfo id=" + std::to_string(graph_id_) + " " + params + "\n";
-		requests_[graph_id_] = {Request::Graph, key, params};
+		graph_id_ = ask_main(out, p, Request::Graph, "book moveinfo", params, params);
 		send(0, out);
 	};
 	// the nodes of the tree first while it is shown
@@ -507,7 +612,9 @@ void App::request_analysis()
 	if (eng_[0].alive && book_held()) {
 		if (eng_[0].loaded) {
 			if (!learning_) send(0, stop_main_analyses());
-			if (!book_peek_.running()) book_peek_.start(book_file(), hwnd_, WM_BOOK_PEEK, ++book_peek_generation_);
+			// (lookups that found the file unusable are not started again: it is the same file until the engine answers)
+			if (!book_peek_.started() && !(learning_ && learn_replaces_book_))
+				book_peek_.start(book_file(), hwnd_, WM_BOOK_PEEK, ++book_peek_generation_);
 		}
 		request_book_peek();
 	} else if (eng_[0].alive) {
@@ -542,7 +649,6 @@ void App::request_analysis()
 		cancel(levels_id_, book_on && tab_ == Tab::Book && same(levels_id_));
 		cancel(best_id_, book_on && tab_ == Tab::Book && same(best_id_));
 		if (info) {
-			auto board = [&] { board_to(0, out, p); };
 			if (missing_id_ && !same(missing_id_)) {  // (it may take long; asked again by the tab that shows it)
 				missing_.asked = false;
 				stop_request(out, missing_id_);
@@ -551,30 +657,14 @@ void App::request_analysis()
 			if (wait_values) {
 				stages_held_ = true;
 			} else {
-				if (!info->book_done && !book_id_) {
-					board();
-					book_id_ = new_id();
-					out += "book moveinfo id=" + std::to_string(book_id_) + " " + params + "\n";
-					requests_[book_id_] = {Request::Book, key, params};
-				}
-				if (count_ && !info->count_done && !count_id_) {
-					board();
-					count_id_ = new_id();
-					out += "book moveinfo id=" + std::to_string(count_id_) + " parts=count\n";
-					requests_[count_id_] = {Request::Count, key};
-				}
-				if (tab_ == Tab::Book && !info->levels_done && !levels_id_) {
-					board();
-					levels_id_ = new_id();
-					out += "book levels id=" + std::to_string(levels_id_) + "\n";
-					requests_[levels_id_] = {Request::Levels, key};
-				}
-				if (tab_ == Tab::Book && !info->best_done && !best_id_) {
-					board();
-					best_id_ = new_id();
-					out += "book bestlines id=" + std::to_string(best_id_) + "\n";  // loss 0: the best moves only
-					requests_[best_id_] = {Request::Best, key};
-				}
+				if (!info->book_done && !book_id_)
+					book_id_ = ask_main(out, p, Request::Book, "book moveinfo", params, params);
+				if (count_ && !info->count_done && !count_id_)
+					count_id_ = ask_main(out, p, Request::Count, "book moveinfo", "parts=count");
+				if (tab_ == Tab::Book && !info->levels_done && !levels_id_)
+					levels_id_ = ask_main(out, p, Request::Levels, "book levels");
+				if (tab_ == Tab::Book && !info->best_done && !best_id_)
+					best_id_ = ask_main(out, p, Request::Best, "book bestlines");  // loss 0: the best moves only
 				request_missing(out, p);
 			}
 		}
@@ -691,8 +781,8 @@ void App::on_engine(WPARAM tag, bool ended)
 	if (role == 2) {
 		for (const std::string &line : lines)
 			if (!line.empty()) tool_line(line);
-		if (ended && s.alive) {
-			s.alive = false;
+		if (ended && (s.alive || s.lost)) {
+			s.alive = s.lost = false;
 			if (tool_busy_) tool_ended(true);
 		}
 		return;
@@ -703,8 +793,8 @@ void App::on_engine(WPARAM tag, bool ended)
 			if (role == 3) play_line(line);
 			else compare_line(line);
 		}
-		if (ended && s.alive) {
-			s.alive = false;
+		if (ended && (s.alive || s.lost)) {
+			s.alive = s.lost = false;
 			log(lang::f("log.engine_ended", {lang::t(role == 3 ? "engine.play" : "engine.compare")}));
 			if (role == 3) com_thinking_ = com_pondering_ = com_accept_ = false;
 			else cmp_busy_ = cmp_accept_ = false;
@@ -777,19 +867,22 @@ void App::on_engine(WPARAM tag, bool ended)
 			}
 			if (req.kind == Request::BestExport) {
 				if (last) {
+					const long long written = f.num("written").value_or(0);
 					if (!done || f.num("error").value_or(0))
 						log(lang::f("best.export_failed", {best_file_}));
+					else if (written == 0 && !file_exists(best_file_))  // (newedax makes no file without a line)
+						log(lang::f("best.none", {best_file_}));
 					else
-						log(lang::f("best.written", {std::to_wstring(f.num("written").value_or(0)), best_file_,
+						log(lang::f("best.written", {std::to_wstring(written), best_file_,
 						                             std::to_wstring(f.num("lines").value_or(0)),
 						                             std::to_wstring(f.num("incomplete_ends").value_or(0))}));
 					requests_.erase(it);
 				}
 				continue;
 			}
-			PosInfo &info = cache_.get(Position{req.pos.black, req.pos.white, req.pos.side});
+			PosInfo &info = cache_.get(position_of(req.pos));
 			if constexpr (measure::kOn)
-				measure::trace("BOOK " + Position{req.pos.black, req.pos.white, req.pos.side}.to_board_string() + " | " + line);
+				measure::trace("BOOK " + position_of(req.pos).to_board_string() + " | " + line);
 			if ((req.kind == Request::Book || req.kind == Request::Graph) && req.params != info.book_params) {
 				// asked with other book settings (changed since): nothing of it is kept
 				if (last) {
@@ -872,7 +965,7 @@ void App::on_engine(WPARAM tag, bool ended)
 					measure::engine_answer(1);
 				} else if (mark == hint_end_id_ && hint_busy_) {
 					// the hint has ended: a move without a line (an engine that gave fewer) is not asked again
-					PosInfo &info = cache_.get(Position{hint_pos_.black, hint_pos_.white, hint_pos_.side});
+					PosInfo &info = cache_.get(position_of(hint_pos_));
 					info.search_done = true;
 					info.search_level = hint_level_;
 					hint_busy_ = hint_accept_ = false;
@@ -886,8 +979,8 @@ void App::on_engine(WPARAM tag, bool ended)
 			}
 			if (auto h = parse_hint_line(line); h && !h->book) {
 				if constexpr (measure::kOn)
-					measure::trace("HINT " + Position{hint_pos_.black, hint_pos_.white, hint_pos_.side}.to_board_string() + " | " + line);
-				PosInfo &info = cache_.get(Position{hint_pos_.black, hint_pos_.white, hint_pos_.side});
+					measure::trace("HINT " + position_of(hint_pos_).to_board_string() + " | " + line);
+				PosInfo &info = cache_.get(position_of(hint_pos_));
 				if (MoveEval *m = info.find(h->pv[0])) {
 					m->searched = true;
 					m->score = h->score;
@@ -937,8 +1030,8 @@ void App::on_engine(WPARAM tag, bool ended)
 		if (line[0] == '<' || parse_hint_line(line)) continue;
 		log(lang::t(role ? "engine.search" : "engine.main") + L": " + engine_text(line));
 	}
-	if (ended && s.alive) {
-		s.alive = false;
+	if (ended && (s.alive || s.lost)) {  // (lost: a command to it failed before its end came)
+		s.alive = s.lost = false;
 		log(lang::f("log.engine_ended", {lang::t(role ? "engine.search" : "engine.main")}));
 		if (role == 0) {
 			forget_main_requests();
@@ -968,7 +1061,7 @@ void App::on_engine(WPARAM tag, bool ended)
 		const PosInfo *info = cache_.peek(game_.now());
 		if (info && info->values_done) {
 			com_waiting_book_ = false;
-			KillTimer(hwnd_, 4);
+			KillTimer(hwnd_, kTimerCom);
 			com_think();
 		}
 	}
@@ -978,14 +1071,10 @@ void App::on_engine(WPARAM tag, bool ended)
 	}
 }
 
-}  // namespace ng
-
-namespace ng {
-
 // Another book for the main engine (the menu, the recent books, a file dropped on the window).
 void App::switch_book(const std::wstring &path)
 {
-	if (refuse_while_learning()) return;
+	if (refuse_while_book_busy()) return;
 	if (message(lang::f("ask.open_book", {path}), MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
 		return;
 	const char *sec = engine_section(kind_);
@@ -1005,34 +1094,39 @@ void App::switch_book(const std::wstring &path)
 	restart_main_engine();
 }
 
-// The main engine closed and started again (another book, the book read again): its requests go with it.
+// The main engine closed and started again (another book, the book read again): its requests go with it, and it starts
+// again when it has ended (after the save of its book: close_main_engine).
 void App::restart_main_engine()
 {
-	eng_[0].proc.close();
-	eng_[0].alive = false;
-	eng_[0].board.reset();
-	forget_main_requests();
-	cache_.clear_book();
-	start_engines();
-	position_changed();
+	if (refuse_while_saving()) return;
+	book_peek_.stop();  // (the engine saves its book as it ends: the file is not open then)
+	close_main_engine([this] {
+		cache_.clear_book();
+		start_engines();
+		position_changed();
+	});
 }
 
 // The missing lines as games (the moves from the start), one a line, for a file.
+// the list of missing lines is of the position shown (it stays when moves are played in another tab, where it is not
+// asked again)
+bool App::missing_here() const
+{
+	return !missing_.lines.empty() && missing_.pos == key_of(game_.now());
+}
+
 void App::export_missing()
 {
-	if (missing_.lines.empty()) {
+	if (!missing_here()) {
 		set_status(lang::t("status.missing_none"));
 		return;
 	}
-	wchar_t file[MAX_PATH] = L"missing.txt";
-	OPENFILENAMEW of{sizeof of};
-	of.hwndOwner = hwnd_;
-	of.lpstrFilter = L"*.txt\0*.txt\0*.*\0*.*\0";
-	of.lpstrFile = file;
-	of.nMaxFile = MAX_PATH;
-	of.lpstrDefExt = L"txt";
-	of.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
-	if (!GetSaveFileNameW(&of)) return;
+	const std::wstring file = pick_save(file_filter("filter.text", L"*.txt").c_str(), L"txt", L"missing.txt");
+	if (!file.empty()) write_missing(file);
+}
+
+bool App::write_missing(const std::wstring &file)
+{
 	const std::string head = game_.to_text(true);
 	std::string out;
 	for (const auto &ml : missing_.lines) {
@@ -1042,19 +1136,16 @@ void App::export_missing()
 		if (ml.leaf != kNoMove && ml.leaf != kPass) out += square_name(ml.leaf);
 		out += "\r\n";
 	}
+	// (as the other exports: the log says it with the file, written or not, also when the file cannot be opened)
 	FILE *f = nullptr;
-	if (_wfopen_s(&f, file, L"wb") != 0 || !f) {
-		set_status(lang::t("status.write_failed"));
-		return;
+	bool ok = _wfopen_s(&f, file.c_str(), L"wb") == 0 && f;
+	if (ok) {
+		const bool written = fwrite(out.data(), 1, out.size(), f) == out.size();
+		ok = fclose(f) == 0 && written;  // (the last part is written as the file closes: a full drive fails there)
 	}
-	const bool ok = fwrite(out.data(), 1, out.size(), f) == out.size();
-	fclose(f);
-	log(ok ? lang::f("status.missing_written", {std::to_wstring(missing_.lines.size()), file}) : lang::t("status.write_failed"));
+	log(ok ? lang::f("status.missing_written", {std::to_wstring(missing_.lines.size()), file}) : lang::f("status.missing_failed", {file}));
+	return ok;
 }
-
-}  // namespace ng
-
-namespace ng {
 
 // the move whose missing leaves are listed: the move chosen, else the best move of the book (only book moves
 // have missing leaves; the search values would change the move again and again while they come)
@@ -1095,15 +1186,8 @@ void App::request_missing(std::string &out, const Position &p)
 	missing_.params = params;
 	missing_.asked = true;
 	missing_scroll_ = 0;
-	board_to(0, out, p);
-	missing_id_ = new_id();
-	out += "book missing id=" + std::to_string(missing_id_) + " sq=" + square_name(sq) + " " + params + " n=500\n";
-	requests_[missing_id_] = {Request::Missing, key};
+	missing_id_ = ask_main(out, p, Request::Missing, "book missing", "sq=" + square_name(sq) + " " + params + " n=500");
 }
-
-}  // namespace ng
-
-namespace ng {
 
 // Every few seconds: an engine with nothing to do is asked an echo marker; one that has not answered it after
 // 20 seconds does not answer and is closed and started again. (Busy engines are not asked: a learning command

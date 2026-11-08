@@ -1,5 +1,6 @@
 // The row of the moves as text, right above the graph: a text box with the moves up to the position shown, and the
-// buttons to copy and to paste. Pasted text loads at once, typed text with Enter; Esc or leaving the box takes it back.
+// buttons to copy and to paste. Pasted text loads at once, typed text with Enter; Esc or leaving the box for the board
+// takes it back.
 #include <cmath>
 
 #include "app.h"
@@ -33,9 +34,12 @@ LRESULT CALLBACK edit_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	case WM_CHAR:
 		if (wp == L'\r' || wp == VK_ESCAPE) return 0;  // (the box would beep)
 		break;
+	case WM_SETFOCUS:
+		app->record_resume_ = false;
+		break;
 	case WM_KILLFOCUS: {
 		const LRESULT r = CallWindowProcW(app->record_edit_proc_, hwnd, msg, wp, lp);
-		app->sync_record_box(true);
+		app->record_focus_lost(reinterpret_cast<HWND>(wp));
 		return r;
 	}
 	}
@@ -43,6 +47,13 @@ LRESULT CALLBACK edit_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 }
 
 }  // namespace
+
+// the last font and brush of the text box (the ones before them are deleted when they are made again)
+App::~App()
+{
+	if (record_font_) DeleteObject(record_font_);
+	if (record_brush_) DeleteObject(record_brush_);
+}
 
 std::wstring App::record_text() const
 {
@@ -67,7 +78,10 @@ void App::place_record_box()
 	const Layout &L = lay_;
 	const D2D1_RECT_F &T = L.record_text;
 	if (T.right <= T.left) {
-		if (GetFocus() == record_edit_) SetFocus(hwnd_);
+		// (the keys in another window meanwhile: what was typed stays in the box, which would not follow the game when
+		// shown again; it is taken back, and the keys do not come back to it)
+		leave_record_box();
+		if (SendMessageW(record_edit_, EM_GETMODIFY, 0, 0)) sync_record_box(true);
 		ShowWindow(record_edit_, SW_HIDE);
 		return;
 	}
@@ -92,7 +106,7 @@ void App::place_record_box()
 void App::sync_record_box(bool force)
 {
 	if (!record_edit_) return;
-	if (editing_ && GetFocus() == record_edit_) SetFocus(hwnd_);
+	if (editing_) leave_record_box();
 	EnableWindow(record_edit_, !editing_);
 	if (!force && SendMessageW(record_edit_, EM_GETMODIFY, 0, 0)) return;
 	std::wstring text = record_text();
@@ -106,11 +120,36 @@ void App::sync_record_box(bool force)
 	SendMessageW(record_edit_, EM_SCROLLCARET, 0, 0);
 }
 
+void App::leave_record_box()
+{
+	record_resume_ = false;
+	if (record_edit_ && GetFocus() == record_edit_) SetFocus(hwnd_);
+}
+
+// To the window itself (a click on the board, Esc, Enter): what was typed is taken back. To another window (another
+// program by Alt+Tab, a message box or a small window of this one: `to` is null or not in this window), it stays, and
+// the keys come back to the box when the window has them again, as a dialog gives them back to its field.
+void App::record_focus_lost(HWND to)
+{
+	if (!to || (to != hwnd_ && !IsChild(hwnd_, to))) {
+		record_resume_ = true;
+		return;
+	}
+	sync_record_box(true);
+}
+
+bool App::record_resumes()
+{
+	const bool r = record_resume_;
+	record_resume_ = false;
+	return r && record_edit_ && (GetWindowLongPtrW(record_edit_, GWL_STYLE) & WS_VISIBLE) && IsWindowEnabled(record_edit_);
+}
+
 bool App::record_take(const std::string &u)
 {
 	if (editing_ || !paste_text(u)) return false;
 	sync_record_box(true);
-	if (record_edit_ && GetFocus() == record_edit_) SetFocus(hwnd_);
+	leave_record_box();
 	return true;
 }
 
@@ -125,7 +164,7 @@ void App::record_key(WPARAM vk)
 		return;
 	}
 	sync_record_box(true);
-	if (GetFocus() == record_edit_) SetFocus(hwnd_);
+	leave_record_box();
 }
 
 LRESULT App::record_color(HDC dc)

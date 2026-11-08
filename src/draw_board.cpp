@@ -159,13 +159,13 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 	// outline, then the fill over its inner half
 	dc->SetTransform(M);
 	gx.stroke_shape(s, gx.brush(st.edge), em * 0.17f);
-	if (st.gem) {
-		const D2D1_GRADIENT_STOP stops[3] = {{0, st.top}, {0.5f, st.mid}, {1, st.bottom}};
-		auto *g = gx.gradient(100 + k + (th.design == Design::Paw ? 10 : 0), stops, 3);
-		g->SetStartPoint({0, s.bounds.top});
-		g->SetEndPoint({0, s.bounds.bottom});
-		gx.fill_shape(s, g);
-	} else {
+	const D2D1_GRADIENT_STOP stops[3] = {{0, st.top}, {0.5f, st.mid}, {1, st.bottom}};
+	auto *gem = st.gem ? gx.gradient(100 + k + (th.design == Design::Paw ? 10 : 0), stops, 3) : nullptr;
+	if (gem) {
+		gem->SetStartPoint({0, s.bounds.top});
+		gem->SetEndPoint({0, s.bounds.bottom});
+		gx.fill_shape(s, gem);
+	} else {  // (also a gem whose gradient could not be made: its middle color)
 		gx.fill_shape(s, gx.brush(k == 0 && v.exact ? th.exact : st.mid));
 	}
 
@@ -175,18 +175,18 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 			{0, rgb(0xffffff, 0.55f)}, {0.47f, rgb(0xffffff, 0.2f)}, {0.5f, rgb(0xffffff, 0)}, {1, rgb(0xffffff, 0)}};
 		// the black diamond keeps its black: less light on it
 		const float shine = k == 7 ? 0.45f : 1.0f;
-		auto *gl = gx.gradient(200, gloss, 4);
-		gl->SetOpacity(shine);
-		gl->SetStartPoint({s.bounds.left, s.bounds.top});
-		gl->SetEndPoint({s.bounds.left + w * 0.55f, s.bounds.top + h * 0.75f});
-		gx.fill_shape(s, gl);
+		if (auto *gl = gx.gradient(200, gloss, 4)) {
+			gl->SetOpacity(shine);
+			gl->SetStartPoint({s.bounds.left, s.bounds.top});
+			gl->SetEndPoint({s.bounds.left + w * 0.55f, s.bounds.top + h * 0.75f});
+			gx.fill_shape(s, gl);
+		}
 
 		// bands of light crossing the number
 		// (stage 4: bands of its own light color, a white one would make it pale)
 		const D2D1_COLOR_F bc = stage_band(th, k);
 		const float bp = k == 4 ? 0.9f : 0.8f;
-		const D2D1_GRADIENT_STOP band[3] = {{0, D2D1_COLOR_F{bc.r, bc.g, bc.b, 0}}, {0.5f, D2D1_COLOR_F{bc.r, bc.g, bc.b, bp}},
-		                                    {1, D2D1_COLOR_F{bc.r, bc.g, bc.b, 0}}};
+		const D2D1_GRADIENT_STOP band[3] = {{0, with_alpha(bc, 0)}, {0.5f, with_alpha(bc, bp)}, {1, with_alpha(bc, 0)}};
 		const D2D1_GRADIENT_STOP rainbow[8] = {
 			{0, rgb(0xff6467, 0)},      {0.18f, rgb(0xff6467, 0.6f)}, {0.32f, rgb(0xffdf20, 0.6f)},
 			{0.46f, rgb(0x7bf1a8, 0.6f)}, {0.6f, rgb(0x53eafd, 0.6f)}, {0.74f, rgb(0x8ec5ff, 0.6f)},
@@ -196,6 +196,7 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 		for (int i = 0; i < bands; ++i) {
 			const bool rb = k == 6 && i == 1;
 			auto *g = rb ? gx.gradient(202, rainbow, 8) : gx.gradient(k == 4 ? 203 : 201, band, 3);
+			if (!g) continue;
 			const float ph = frac(t / period[k] + i * 0.5);
 			const float bx = s.bounds.left - w * 0.6f + ph * w * 2.2f, bw = w * (rb ? 0.4f : 0.22f);
 			g->SetStartPoint({bx - bw, s.bounds.top});
@@ -251,10 +252,8 @@ void draw_value(App &app, const Theme &th, const D2D1_RECT_F &rc, const CellView
 			const float y = rc.bottom - c * 0.08f - p * c * 0.8f;
 			const float r = c * 0.022f;
 			const float a = std::sin(p * static_cast<float>(std::numbers::pi)) * (k == 6 ? 0.65f : 1.0f);
-			dc->FillEllipse(D2D1::Ellipse({x, y}, r, r), gx.brush(D2D1_COLOR_F{col.r, col.g, col.b, a}));
-			if (th.particle_edge.a > 0)
-				dc->DrawEllipse(D2D1::Ellipse({x, y}, r, r), gx.brush(D2D1_COLOR_F{th.particle_edge.r, th.particle_edge.g,
-				                                                                   th.particle_edge.b, a}), 1.0f);
+			dc->FillEllipse(D2D1::Ellipse({x, y}, r, r), gx.brush(with_alpha(col, a)));
+			if (th.particle_edge.a > 0) dc->DrawEllipse(D2D1::Ellipse({x, y}, r, r), gx.brush(with_alpha(th.particle_edge, a)), 1.0f);
 		}
 	}
 	if (fx && top_strong && eff == Effects::On) {
@@ -329,6 +328,13 @@ void App::prepare_glows()
 	}
 }
 
+// a frame with round corners inside a square, `in` from its sides
+static void inset_frame(Gfx &gx, const D2D1_RECT_F &rc, float in, float radius, const D2D1_COLOR_F &color, float width)
+{
+	gx.dc()->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(rc.left + in, rc.top + in, rc.right - in, rc.bottom - in), radius, radius),
+	                              gx.brush(color), width);
+}
+
 void draw_cell(App &app, int sq, double t)
 {
 	const Theme &th = theme(app.design_);
@@ -347,7 +353,7 @@ void draw_cell(App &app, int sq, double t)
 		const float rot = sq == 0 ? -25.0f : sq == 7 ? 25.0f : sq == 56 ? -155.0f : 155.0f;
 		auto *b = gx.brush(th.paw_print);
 		b->SetOpacity(th.paw_print.a);
-		b->SetColor(D2D1_COLOR_F{th.paw_print.r, th.paw_print.g, th.paw_print.b, 1});
+		b->SetColor(with_alpha(th.paw_print, 1));
 		dc->SetTransform(D2D1::Matrix3x2F::Scale(sz, sz) * D2D1::Matrix3x2F::Rotation(rot) *
 		                 D2D1::Matrix3x2F::Translation((rc.left + rc.right) / 2, (rc.top + rc.bottom) / 2));
 		dc->FillGeometry(gx.paw(), b);
@@ -376,16 +382,10 @@ void draw_cell(App &app, int sq, double t)
 	if (v.best || v.good || v.selected) {
 		const float s = app.lay_.scale;
 		if (v.best || v.good) {
-			const float in = c * 0.06f, wd = v.best ? 2 * s : 1 * s;
-			dc->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(rc.left + in, rc.top + in, rc.right - in, rc.bottom - in),
-			                                           c * 0.12f, c * 0.12f),
-			                         gx.brush(v.best ? th.best_frame : th.good_frame), wd);
+			inset_frame(gx, rc, c * 0.06f, c * 0.12f, v.best ? th.best_frame : th.good_frame, v.best ? 2 * s : 1 * s);
 		}
 		if (v.selected) {
-			const float in = c * 0.025f;
-			dc->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(rc.left + in, rc.top + in, rc.right - in, rc.bottom - in),
-			                                           c * 0.14f, c * 0.14f),
-			                         gx.brush(th.select_frame), 2.5f * s);
+			inset_frame(gx, rc, c * 0.025f, c * 0.14f, th.select_frame, 2.5f * s);
 		}
 	}
 	if (v.has_value) {
@@ -414,10 +414,7 @@ void draw_cell(App &app, int sq, double t)
 
 	// the fixed record: a red frame on its losing move, a mark where it goes another way than the game
 	if (v.fixed_bad) {
-		const float in = c * 0.035f;
-		dc->DrawRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(rc.left + in, rc.top + in, rc.right - in, rc.bottom - in),
-		                                           c * 0.12f, c * 0.12f),
-		                         gx.brush(rgb(0xfb2c36)), std::max(2.0f, c * 0.05f));  // red-500
+		inset_frame(gx, rc, c * 0.035f, c * 0.12f, rgb(0xfb2c36), std::max(2.0f, c * 0.05f));  // red-500
 	}
 	if (v.fixed_mark) {
 		const float s = c * 0.16f, x = rc.left + c * 0.1f, y = rc.top + c * 0.1f;
@@ -446,7 +443,7 @@ void draw_cell(App &app, int sq, double t)
 		const float r = c * 0.36f;
 		const bool black = v.pv_side == kBlack;
 		const D2D1_COLOR_F stone = black ? th.black_stone : th.white_stone;
-		dc->FillEllipse(D2D1::Ellipse(center, r, r), gx.brush(D2D1_COLOR_F{stone.r, stone.g, stone.b, 0.62f}));
+		dc->FillEllipse(D2D1::Ellipse(center, r, r), gx.brush(with_alpha(stone, 0.62f)));
 		dc->DrawEllipse(D2D1::Ellipse(center, r, r), gx.brush(black ? th.black_rim : th.white_rim), 1.0f);
 		IDWriteTextFormat *f = gx.text(std::round(c * 0.3f), true, DWRITE_TEXT_ALIGNMENT_CENTER, Face::Number);
 		gx.draw_text(std::to_wstring(v.pv_num), f, rc, black ? rgb(0xffffff) : rgb(0x09090b));

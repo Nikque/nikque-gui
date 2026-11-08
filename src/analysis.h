@@ -96,6 +96,7 @@ struct PosKeyHash {
 	}
 };
 inline PosKey key_of(const Position &p) { return {p.black, p.white, p.side}; }
+inline Position position_of(const PosKey &k) { return {k.black, k.white, k.side}; }
 
 // the positions seen, the oldest dropped beyond `limit`
 class AnalysisCache {

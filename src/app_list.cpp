@@ -16,12 +16,6 @@ namespace ng {
 
 namespace {
 
-std::wstring file_name(const std::wstring &p)
-{
-	const size_t s = p.find_last_of(L"\\/");
-	return s == std::wstring::npos ? p : p.substr(s + 1);
-}
-
 // the place in a game after n moves (passes not counted)
 int index_after(const Game &g, int n)
 {
@@ -33,31 +27,14 @@ int index_after(const Game &g, int n)
 	return g.size();
 }
 
-std::wstring list_filter()
-{
-	std::wstring f = lang::t("filter.games") + L" (*.txt)";
-	f += L'\0';
-	f += L"*.txt";
-	f += L'\0';
-	f += lang::t("filter.all");
-	f += L'\0';
-	f += L"*.*";
-	f += L'\0';
-	return f;
-}
+std::wstring list_filter() { return file_filter("filter.games", L"*.txt"); }
 
-std::optional<int> ask_number(HWND owner, const std::wstring &title, const std::wstring &label, int value, int lo, int hi,
-                              const std::wstring &note = {})
+// the log line of a job that has ended: what it did and the seconds it took
+std::wstring took(const std::wstring &what, double seconds)
 {
-	std::vector<FormField> f(1);
-	f[0].kind = FormField::Number;
-	f[0].label = label;
-	f[0].text = std::to_wstring(value);
-	f[0].lo = lo;
-	f[0].hi = hi;
-	f[0].note = note;
-	if (!run_form(owner, title, f, lang::t("form.ok"), lang::t("form.cancel"), lang::t("form.bad_number"))) return std::nullopt;
-	return std::stoi(f[0].text);
+	wchar_t sec[32];
+	swprintf(sec, 32, L"%.2f", seconds);
+	return lang::f("task.took", {what, sec});
 }
 
 std::uint64_t seed_or_clock(int seed)
@@ -158,15 +135,12 @@ void App::list_load(const std::wstring &file, bool add)
 				list_index_ = -1;
 				list_file_ = file;
 			}
-			hits_.clear();
-			hits_shown_ = false;
+			clear_hits();
 			list_scroll_ = 0;
 			tab_ = Tab::List;
-			wchar_t sec[32];
-			swprintf(sec, 32, L"%.2f", s);
-			log(lang::f("task.took", {lang::f(add ? "list.added" : "list.read", {std::to_wstring(r.games), file_name(file),
-			                                                                    std::to_wstring(list_.size()), std::to_wstring(r.cut)}),
-			                          sec}));
+			log(took(lang::f(add ? "list.added" : "list.read",
+			                 {std::to_wstring(r.games), file_name(file), std::to_wstring(list_.size()), std::to_wstring(r.cut)}),
+			         s));
 			if (!add && !list_.empty()) list_select(0);
 		};
 	});
@@ -182,8 +156,7 @@ static void list_job(App &app, const std::wstring &label, std::function<std::wst
 	auto l = std::make_shared<GameList>(std::move(app.list_));
 	app.list_.clear();
 	app.list_index_ = -1;
-	app.hits_.clear();
-	app.hits_shown_ = false;
+	app.clear_hits();
 	app.run_task(label, [&app, l, work](std::stop_token st) -> std::function<void()> {
 		const auto t0 = std::chrono::steady_clock::now();
 		const std::wstring msg = work(*l, st);
@@ -191,9 +164,7 @@ static void list_job(App &app, const std::wstring &label, std::function<std::wst
 		return [&app, l, msg, s] {
 			app.list_ = std::move(*l);
 			app.list_scroll_ = 0;
-			wchar_t sec[32];
-			swprintf(sec, 32, L"%.2f", s);
-			app.log(lang::f("task.took", {msg, sec}));
+			app.log(took(msg, s));
 		};
 	});
 }
@@ -204,6 +175,28 @@ void App::list_job_script(const std::wstring &label, std::function<void(GameList
 		work(l);
 		return lang::f("list.done", {std::to_wstring(l.size())});
 	});
+}
+
+void App::clear_hits()
+{
+	hits_.clear();
+	hits_shown_ = false;
+}
+
+void App::clear_list()
+{
+	list_.clear();
+	list_index_ = -1;
+	clear_hits();
+	list_file_.clear();
+}
+
+void App::list_add_game()
+{
+	std::vector<std::uint8_t> mv;
+	for (const int m : game_.moves())
+		if (m != kPass) mv.push_back(static_cast<std::uint8_t>(m));
+	list_.add(game_.start(), mv);
 }
 
 void App::list_select(int index, bool from_hit, int hit)
@@ -288,10 +281,7 @@ void App::list_command(int id)
 		break;
 	}
 	case cmd::ListAddGame: {
-		std::vector<std::uint8_t> mv;
-		for (const int m : game_.moves())
-			if (m != kPass) mv.push_back(static_cast<std::uint8_t>(m));
-		list_.add(game_.start(), mv);
+		list_add_game();
 		list_index_ = static_cast<int>(list_.size()) - 1;
 		log(lang::f("list.game_added", {std::to_wstring(list_.size())}));
 		break;
@@ -341,13 +331,8 @@ void App::list_command(int id)
 		f[0].label = t("list.scatter.side");
 		f[0].choices = {t("list.scatter.black"), t("list.scatter.white"), t("list.scatter.both")};
 		f[0].choice = 2;
-		f[1].kind = FormField::Number;
-		f[1].label = t("list.seed");
-		f[1].text = L"0";
-		f[1].lo = 0;
-		f[1].hi = 2000000000;
-		f[1].note = t("list.seed.note");
-		if (!run_form(hwnd_, t("menu.list.scatter"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) break;
+		f[1] = number_field(t("list.seed"), 0, 0, 2000000000, t("list.seed.note"));
+		if (!run_form(hwnd_, t("menu.list.scatter"), f)) break;
 		const int sides = f[0].choice + 1;
 		const std::uint64_t seed = seed_or_clock(std::stoi(f[1].text));
 		list_job(*this, t("menu.list.scatter"), [sides, seed](GameList &l, std::stop_token st) {
@@ -359,8 +344,7 @@ void App::list_command(int id)
 	case cmd::ListDelete:
 		if (list_index_ >= 0 && list_index_ < static_cast<int>(list_.size())) {
 			list_.erase(static_cast<size_t>(list_index_));
-			hits_.clear();
-			hits_shown_ = false;
+			clear_hits();
 			log(lang::f("list.deleted", {std::to_wstring(list_index_ + 1), std::to_wstring(list_.size())}));
 			if (list_index_ >= static_cast<int>(list_.size())) list_index_ = static_cast<int>(list_.size()) - 1;
 			if (list_index_ >= 0) list_select(list_index_);
@@ -368,11 +352,7 @@ void App::list_command(int id)
 		break;
 	case cmd::ListClear:
 		if (!list_.empty() && message(lang::f("list.ask_clear", {std::to_wstring(list_.size())}), MB_OKCANCEL | MB_ICONQUESTION) == IDOK) {
-			list_.clear();
-			list_index_ = -1;
-			hits_.clear();
-			hits_shown_ = false;
-			list_file_.clear();
+			clear_list();
 			log(t("list.cleared"));
 		}
 		break;
@@ -401,8 +381,7 @@ void App::list_command(int id)
 	case cmd::ListReload: list_select(list_index_); break;
 	case cmd::ListSearch: list_search(); break;
 	case cmd::ListSearchClear:
-		hits_.clear();
-		hits_shown_ = false;
+		clear_hits();
 		break;
 	default: break;
 	}
@@ -420,24 +399,10 @@ void App::list_from_book()
 		return;
 	}
 	std::vector<FormField> f(3);
-	f[0].kind = FormField::Number;
-	f[0].label = t("best.loss");
-	f[0].text = std::to_wstring(ini_.get_int("list", "book_loss", 0, 0, 129));
-	f[0].lo = 0;
-	f[0].hi = 129;
-	f[0].note = t("best.loss.note");
-	f[1].kind = FormField::Number;
-	f[1].label = t("best.depth");
-	f[1].text = std::to_wstring(ini_.get_int("list", "book_depth", 60, 1, 60));
-	f[1].lo = 1;
-	f[1].hi = 60;
-	f[1].note = t("best.depth.note");
-	f[2].kind = FormField::Number;
-	f[2].label = t("list.book.n");
-	f[2].text = std::to_wstring(ini_.get_int("list", "book_n", 10000, 1, 10000000));
-	f[2].lo = 1;
-	f[2].hi = 10000000;
-	if (!run_form(hwnd_, t("menu.list.book"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return;
+	f[0] = number_field(t("best.loss"), ini_.get_int("list", "book_loss", 0, 0, 129), 0, 129, t("best.loss.note"));
+	f[1] = number_field(t("best.depth"), ini_.get_int("list", "book_depth", 60, 1, 60), 1, 60, t("best.depth.note"));
+	f[2] = number_field(t("list.book.n"), ini_.get_int("list", "book_n", 10000, 1, 10000000), 1, 10000000);
+	if (!run_form(hwnd_, t("menu.list.book"), f)) return;
 	ini_.set("list", "book_loss", narrow(f[0].text));
 	ini_.set("list", "book_depth", narrow(f[1].text));
 	ini_.set("list", "book_n", narrow(f[2].text));
@@ -494,14 +459,9 @@ void App::list_book_written(bool add, bool ok)
 				return;
 			}
 			const size_t n = std::min<size_t>(nl->size(), static_cast<size_t>(limit));
-			if (!add) {
-				list_.clear();
-				list_file_.clear();
-				list_index_ = -1;
-			}
+			if (!add) clear_list();
 			for (size_t i = 0; i < n; ++i) list_.add(nl->start(i), nl->moves(i));
-			hits_.clear();
-			hits_shown_ = false;
+			clear_hits();
 			tab_ = Tab::List;
 			log(lang::f("list.book.read", {std::to_wstring(n), std::to_wstring(nl->size()), std::to_wstring(list_.size())}));
 		};
@@ -566,8 +526,7 @@ void App::kept_command(int id)
 	}
 	case cmd::KeptCompare:
 		// compared like a fixed record: a red frame on its losing moves, a mark where the game goes another way
-		fixed_.clear();
-		for (const int m : k.moves) fixed_.push_back(m);
+		fixed_ = k.moves;
 		fixed_start_ = k.start;
 		fixed_on_ = true;
 		log(lang::f("kept.compared", {std::to_wstring(kept_sel_ + 1)}));
@@ -601,13 +560,8 @@ void App::bookmark_menu(int x, int y)
 // kept.txt next to the exe: "seconds <TAB> start board (empty: the usual start) <TAB> moves <TAB> place"
 void App::load_kept()
 {
-	FILE *f = nullptr;
-	if (_wfopen_s(&f, (exe_dir_ + L"\\kept.txt").c_str(), L"rb") != 0 || !f) return;
 	std::string all;
-	char buf[1 << 14];
-	size_t n;
-	while ((n = fread(buf, 1, sizeof buf, f)) > 0) all.append(buf, n);
-	fclose(f);
+	if (!read_file(exe_dir_ + L"\\kept.txt", &all)) return;
 	size_t i = 0;
 	while (i < all.size()) {
 		size_t e = all.find('\n', i);
@@ -642,7 +596,8 @@ void App::load_kept()
 	}
 }
 
-void App::save_kept() const
+// written whole and put in the place of the file before (which stays when it cannot be: the log says so)
+void App::save_kept()
 {
 	std::string out;
 	for (const Kept &k : kept_) {
@@ -654,14 +609,12 @@ void App::save_kept() const
 		out += "\t" + std::to_string(k.cursor) + (k.asked ? "\tasked" : "") + "\r\n";  // (0.2.0 reads the first four)
 	}
 	const std::wstring path = exe_dir_ + L"\\kept.txt";
-	if (out.empty()) {
-		DeleteFileW(path.c_str());
-		return;
-	}
-	FILE *f = nullptr;
-	if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f) return;
-	fwrite(out.data(), 1, out.size(), f);
-	fclose(f);
+	auto gone = [&] {
+		if (DeleteFileW(path.c_str())) return true;
+		const DWORD e = GetLastError();
+		return e == ERROR_FILE_NOT_FOUND || e == ERROR_PATH_NOT_FOUND;
+	};
+	if (!(out.empty() ? gone() : write_file(path, out))) log(lang::f("kept.save_failed", {path}));
 }
 
 }  // namespace ng

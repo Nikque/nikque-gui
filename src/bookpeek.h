@@ -84,7 +84,8 @@ struct BookPeekAnswer {
 // (`stop`: gives up between the moves; the answer is then not whole)
 BookPeekAnswer book_peek_moves(BookFile &file, const Position &p, const std::atomic_bool *stop = nullptr);
 
-// The lookups on a thread of their own. Each position asked is answered by a message to the window.
+// The lookups on a thread of their own. Each position asked is answered by a message to the window. The file is open
+// from start() to stop(), unless it cannot be used (no file, another form, a read that fails): the lookups then end.
 class BookPeek {
 public:
 	BookPeek() = default;
@@ -93,7 +94,8 @@ public:
 	~BookPeek() { stop(); }
 	void start(const std::wstring &path, HWND notify, UINT msg, unsigned generation);
 	void stop();
-	bool running() const noexcept { return thread_.joinable(); }
+	bool started() const noexcept { return thread_.joinable(); }  // since start(), until stop() (also when they have ended)
+	bool running() const noexcept { return thread_.joinable() && !ended_; }  // they go on: positions asked are looked up
 	void ask(std::vector<Position> positions);  // in place of the ones not looked up yet
 	void take(std::vector<BookPeekAnswer> &out);
 
@@ -104,6 +106,7 @@ private:
 	std::mutex mutex_;
 	std::condition_variable wake_;
 	std::atomic_bool quit_ = false;
+	std::atomic_bool ended_ = false;  // run() has returned
 	std::vector<Position> wanted_;
 	std::vector<BookPeekAnswer> answers_;
 };

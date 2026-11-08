@@ -29,13 +29,6 @@ std::vector<std::string> words(const std::string &s)
 	return out;
 }
 
-std::string lower(std::string s)
-{
-	for (auto &c : s)
-		if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
-	return s;
-}
-
 // the text after the first n words
 std::string rest_after(const std::string &line, int n)
 {
@@ -68,16 +61,11 @@ void App::run_script_file(const std::wstring &file, int depth)
 		script_.clear();
 		return;
 	}
-	FILE *f = nullptr;
-	if (_wfopen_s(&f, file.c_str(), L"rb") != 0 || !f) {
+	std::string all;
+	if (!read_file(file, &all)) {
 		log(lang::f("script.cannot_open", {file}));
 		return;
 	}
-	std::string all;
-	char buf[1 << 14];
-	size_t n;
-	while ((n = fread(buf, 1, sizeof buf, f)) > 0) all.append(buf, n);
-	fclose(f);
 	if (all.starts_with("\xEF\xBB\xBF")) all.erase(0, 3);
 	std::vector<ScriptLine> lines;
 	size_t i = 0;
@@ -133,13 +121,14 @@ bool App::script_condition() const
 void App::pump_script()
 {
 	while (!script_.empty() || script_wait_ != ScriptWait::None) {
+		if (book_saving_) return;  // the main engine saves its book as it ends: the next line after it (end_save)
 		if (script_wait_ != ScriptWait::None) {
 			if (script_waiting()) return;
 			// a wait that ended by its time (wait, waitgame), not by what it waited for: said in the log
 			if ((script_wait_ == ScriptWait::Game || script_wait_ == ScriptWait::Analysis) && script_condition())
 				log(lang::t("script.wait_timeout"));
 			script_wait_ = ScriptWait::None;
-			KillTimer(hwnd_, 3);
+			KillTimer(hwnd_, kTimerScript);
 		}
 		if (script_.empty()) break;
 		const ScriptLine l = script_.front();
@@ -166,15 +155,25 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		*error = t(key);
 		return false;
 	};
-	auto path = [&](const std::string &p) {
-		const std::wstring wp = widen(p);
-		if (wp.size() >= 2 && (wp[1] == L':' || (wp[0] == L'\\' && wp[1] == L'\\'))) return wp;
-		return (script_dir_.empty() ? exe_dir_ : script_dir_) + L"\\" + wp;
-	};
+	auto path = [&](const std::string &p) { return absolute(script_dir_.empty() ? exe_dir_ : script_dir_, p); };
 	auto on_off = [&](bool *v) {
 		if (a1 == "on") *v = true;
 		else if (a1 == "off") *v = false;
 		else return false;
+		return true;
+	};
+	// on|off of a setting: its menu command turns it over when it changes
+	auto toggle = [&](bool now, int command) {
+		bool v = now;
+		if (!on_off(&v)) return bad("script.on_off");
+		if (v != now) on_command(command);
+		return true;
+	};
+	// a setting given by its name: the menu command of that name (`first` for the first of `names`)
+	auto by_name = [&]<size_t N>(const char *const (&names)[N], int first) {
+		const int k = name_index(names, a1);
+		if (k < 0) return bad("script.bad_word");
+		on_command(first + k);
 		return true;
 	};
 	auto wait = [&](ScriptWait sw) { script_wait_ = sw; };
@@ -231,7 +230,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 			if (w.size() > 5 || (w.size() > 4 && !here)) return bad("script.bad_word");
 			if (!eng_[0].alive) return bad("learn.no_engine");
 			if (learning_) return bad("learn.busy");
-			if (!reduce_book(*x, *y, !here, false)) return bad("learn.busy");
+			if (!reduce_book(*x, *y, !here, false)) return bad("reduce.busy");  // (the rest is looked at above)
 			wait(ScriptWait::Reduce);
 			return true;
 		}
@@ -242,29 +241,18 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 			if (w.size() < 6 || w.size() > 7 || lower(w[4]) != "export" || (which != "leaf" && which != "ends" && which != "all"))
 				return bad("script.bad_word");
 			if (!eng_[0].alive) return bad("learn.no_engine");
+			if (eng_[0].probe_id) return bad("devexp.loading");  // (not known while the engine reads its book)
 			if (!eng_[0].exports) return bad("devexp.old_engine");
 			if (learning_) return bad("learn.busy");
-			if (!start_deviate_export(a1, *x, *y, which, path(w[5]))) return bad("learn.busy");
+			// (the state is the one looked at above: the name of the file could not be given to the engine)
+			if (!start_deviate_export(a1, *x, *y, which, path(w[5]))) return bad("script.bad_file");
 			wait(ScriptWait::Learn);
 			return true;
 		}
-		bool v = use_book_;
-		if (!on_off(&v)) return bad("script.on_off");
-		if (v != use_book_) on_command(cmd::UseBook);
-		return true;
+		return toggle(use_book_, cmd::UseBook);
 	}
-	if (c == "eval") {
-		bool v = show_eval_;
-		if (!on_off(&v)) return bad("script.on_off");
-		if (v != show_eval_) on_command(cmd::ShowEval);
-		return true;
-	}
-	if (c == "numbers") {
-		bool v = move_numbers_;
-		if (!on_off(&v)) return bad("script.on_off");
-		if (v != move_numbers_) on_command(cmd::MoveNumbers);
-		return true;
-	}
+	if (c == "eval") return toggle(show_eval_, cmd::ShowEval);
+	if (c == "numbers") return toggle(move_numbers_, cmd::MoveNumbers);
 	if (c == "level") {
 		auto n = number(a1);
 		if (!n || *n < 0 || *n > 60) return bad("script.bad_number");
@@ -285,37 +273,23 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		const EngineKind k = a1 == "newedax" ? EngineKind::Newedax : EngineKind::Nikque18;
 		if (a1 != "newedax" && a1 != "nikque" && a1 != "nikque18") return bad("script.bad_word");  // (nikque18: up to 0.2.0)
 		if (k != kind_) {
+			// (before the kind changes: restart_engines would refuse after it, in a box, the engine of the kind before
+			// going on)
+			if (book_saving_) return bad("save.busy");
+			if (learning_) return bad("learn.busy");
 			kind_ = k;
 			update_menu();
 			restart_engines();
 		}
 		return true;
 	}
-	if (c == "pv" || c == "precision" || c == "bookmarks" || c == "openingmarks") {
-		bool *flag = c == "pv" ? &pv_on_board_ : c == "precision" ? &precision_ : c == "openingmarks" ? &opening_marks_ : &bookmarks_shown_;
-		bool v = *flag;
-		if (!on_off(&v)) return bad("script.on_off");
-		if (v != *flag) on_command(c == "pv" ? cmd::PvOnBoard : c == "precision" ? cmd::PrecisionOn : c == "openingmarks" ? cmd::OpeningMarks : cmd::BookmarksShow);
-		return true;
-	}
-	if (c == "recordbox") {
-		bool v = record_box_;
-		if (!on_off(&v)) return bad("script.on_off");
-		if (v != record_box_) on_command(cmd::RecordBoxShow);
-		return true;
-	}
-	if (c == "graphend") {
-		bool v = graph_end_;
-		if (!on_off(&v)) return bad("script.on_off");
-		if (v != graph_end_) on_command(cmd::GraphEndShow);
-		return true;
-	}
-	if (c == "uppermoves") {
-		bool v = upper_moves_;
-		if (!on_off(&v)) return bad("script.on_off");
-		if (v != upper_moves_) on_command(cmd::UpperMoves);
-		return true;
-	}
+	if (c == "pv") return toggle(pv_on_board_, cmd::PvOnBoard);
+	if (c == "precision") return toggle(precision_, cmd::PrecisionOn);
+	if (c == "bookmarks") return toggle(bookmarks_shown_, cmd::BookmarksShow);
+	if (c == "openingmarks") return toggle(opening_marks_, cmd::OpeningMarks);
+	if (c == "recordbox") return toggle(record_box_, cmd::RecordBoxShow);
+	if (c == "graphend") return toggle(graph_end_, cmd::GraphEndShow);
+	if (c == "uppermoves") return toggle(upper_moves_, cmd::UpperMoves);
 	if (c == "recordtext") {
 		if (!record_take(rest_after(line, 1))) return bad("script.bad_moves");
 		return true;
@@ -339,43 +313,19 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		return true;
 	}
 	if (c == "design") {
-		if (a1 == "standard") on_command(cmd::DesignStandard);
-		else if (a1 == "paw") on_command(cmd::DesignPaw);
-		else if (a1 == "toggle") on_command(cmd::DesignToggle);
-		else return bad("script.bad_word");
+		if (a1 != "toggle") return by_name(kDesignNames, cmd::DesignStandard);
+		on_command(cmd::DesignToggle);
 		return true;
 	}
-	if (c == "effects") {
-		if (a1 == "on") on_command(cmd::EffectsOn);
-		else if (a1 == "subdued") on_command(cmd::EffectsSubdued);
-		else if (a1 == "off") on_command(cmd::EffectsOff);
-		else return bad("script.bad_word");
-		return true;
-	}
-	if (c == "tab") {
-		const char *names[] = {"moves", "book", "record", "list", "tree"};
-		for (int k = 0; k < 5; ++k)
-			if (a1 == names[k]) {
-				on_command(cmd::TabMoves + k);
-				return true;
-			}
-		return bad("script.bad_word");
-	}
+	if (c == "effects") return by_name(kEffectsNames, cmd::EffectsOn);
+	if (c == "tab") return by_name(kTabNames, cmd::TabMoves);
 	if (c == "rotate") {
 		auto n = number(a1);
 		if (!n || *n < 0 || *n > 7) return bad("script.bad_number");
 		orient_to(*n);
 		return true;
 	}
-	if (c == "cellinfo") {
-		const char *names[] = {"none", "positions", "level", "stage", "umi"};
-		for (int k = 0; k < 5; ++k)
-			if (a1 == names[k]) {
-				on_command(cmd::CellInfoNone + k);
-				return true;
-			}
-		return bad("script.bad_word");
-	}
+	if (c == "cellinfo") return by_name(kCellInfoNames, cmd::CellInfoNone);
 	if (c == "estimate") {
 		estimate_line();
 		wait(ScriptWait::FindLine);
@@ -394,7 +344,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		const int s = w.size() > 1 ? number(a1).value_or(30) : 30;
 		script_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(std::clamp(s, 1, 3600));
 		wait(ScriptWait::Analysis);
-		SetTimer(hwnd_, 3, 250, nullptr);
+		SetTimer(hwnd_, kTimerScript, 250, nullptr);
 		return true;
 	}
 	if (c == "search") {
@@ -429,10 +379,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		if (a1 == "prev") return job(cmd::ListPrev);
 		if (a1 == "addgame") return job(cmd::ListAddGame);
 		if (a1 == "clear") {
-			list_.clear();
-			list_index_ = -1;
-			hits_.clear();
-			hits_shown_ = false;
+			clear_list();
 			return true;
 		}
 		const std::optional<int> n = w.size() > 2 ? number(w[2]) : std::nullopt;
@@ -460,7 +407,10 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		if (a1 == "book") {
 			auto arg = [&](size_t k, int def) { return w.size() > k ? number(w[k]).value_or(def) : def; };
 			const bool add = w.size() > 5 && lower(w[5]) == "add";
-			if (!ask_book_lines(arg(2, 0), arg(3, 60), arg(4, 10000), add)) return bad("learn.no_engine");
+			if (!eng_[0].alive) return bad("learn.no_engine");
+			if (learning_) return bad("learn.busy");
+			// (the state is the one looked at above: the name of the file in the temporary folder could not be given)
+			if (!ask_book_lines(arg(2, 0), arg(3, 60), arg(4, 10000), add)) return bad("script.bad_file");
 			wait(ScriptWait::BookLines);
 			return true;
 		}
@@ -501,6 +451,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 	if (c == "learn") {
 		if (a1 == "start") {
 			if (learn_queue_.empty() || learning_) return true;
+			if (!eng_[0].alive) return bad("learn.no_engine");
 			queue_running_ = true;
 			next_in_queue();
 			wait(ScriptWait::Learn);
@@ -531,7 +482,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		if (tool_busy_) return bad("tool.busy");
 		std::string cmd;
 		if (const char *e = for_engine(rest_after(line, 1), 2, &cmd)) return bad(e);
-		if (!start_tool(cmd, widen(rest_after(line, 1)))) return bad("tool.busy");
+		if (!start_tool(cmd, widen(rest_after(line, 1)))) return bad("tool.not_started");  // (busy: looked at above)
 		wait(ScriptWait::Tool);
 		return true;
 	}
@@ -555,10 +506,9 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		return true;
 	}
 	if (c == "opening") {
-		if (a1 == "search") opening_ = Opening::Search;
-		else if (a1 == "best") opening_ = Opening::BookBest;
-		else if (a1 == "wide") opening_ = Opening::BookWide;
-		else return bad("script.bad_word");
+		const int k = name_index(kOpeningNames, a1);
+		if (k < 0) return bad("script.bad_word");
+		opening_ = static_cast<Opening>(k);
 		if (w.size() > 2) opening_width_ = std::clamp(number(w[2]).value_or(opening_width_), 0, 64);
 		if (w.size() > 3) opening_until_ = std::clamp(number(w[3]).value_or(opening_until_), 0, 60);
 		update_menu();
@@ -570,18 +520,13 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		clock_minutes_ = *n;
 		return true;
 	}
-	if (c == "ponder") {
-		bool v = ponder_;
-		if (!on_off(&v)) return bad("script.on_off");
-		if (v != ponder_) on_command(cmd::PlayPonder);
-		return true;
-	}
+	if (c == "ponder") return toggle(ponder_, cmd::PlayPonder);
 	if (c == "go") {
 		com_once_ = true;
 		com_once_pos_ = key_of(game_.now());
 		com_think();
 		wait(ScriptWait::Com);
-		SetTimer(hwnd_, 3, 250, nullptr);
+		SetTimer(hwnd_, kTimerScript, 250, nullptr);
 		return true;
 	}
 	if (c == "takeback") {
@@ -592,7 +537,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		const int s = w.size() > 1 ? number(a1).value_or(600) : 600;
 		script_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(std::clamp(s, 1, 36000));
 		wait(ScriptWait::Game);
-		SetTimer(hwnd_, 3, 250, nullptr);
+		SetTimer(hwnd_, kTimerScript, 250, nullptr);
 		return true;
 	}
 	if (c == "compare") {
@@ -607,21 +552,18 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 	}
 	if (c == "lang") {
 		const std::string code = w.size() > 1 ? w[1] : std::string();
-		if (code != "ja" && code != "en" && code != "zh-Hans" && code != "zh-Hant") return bad("script.bad_word");
+		if (name_index(kLanguages, code) < 0) return bad("script.bad_word");
 		set_language(code);
 		return true;
 	}
 	if (c == "quit") {
 		script_.clear();
+		script_quit_ = true;
 		PostMessageW(hwnd_, WM_CLOSE, 0, 0);
 		return true;
 	}
 	return bad("script.unknown");
 }
-
-}  // namespace ng
-
-namespace ng {
 
 void App::schedule_script()
 {

@@ -26,6 +26,6 @@ nikque GUI は、オセロのエンジン Edax v4.5.5-nikque（C 版）と newed
 
 対象のバージョン：
 
-- nikque GUI 0.2.3
-- エンジン v4.5.5-nikque.25・v4.5.5-newedax.10
-- book を軽くする機能は v4.5.5-nikque.20・newedax.5 から使えます。ほかの機能は v4.5.5-nikque.19・newedax.4 でも使えます。
+- nikque GUI 0.3.6
+- エンジン v4.5.5-nikque.27・v4.5.5-newedax.12
+- book を軽くする機能は v4.5.5-nikque.20・newedax.5 から、deviate がたどる進行の書き出しは v4.5.5-nikque.26・newedax.11 から使えます。ほかの機能は v4.5.5-nikque.19・newedax.4 でも使えます。

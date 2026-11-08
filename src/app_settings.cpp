@@ -2,8 +2,7 @@
 // settings of book learning, sent to the main engine as commands.
 #include <windows.h>
 
-#include <commdlg.h>
-
+#include <algorithm>
 #include <cwchar>
 
 #include "app.h"
@@ -64,6 +63,17 @@ bool learn_value_ok(const std::string &v)
 	return v.find_first_not_of("0123456789") == std::string::npos && v.size() <= 9;
 }
 
+// the settings of book learning that config.ini gives a value (sent to the engine): a bit for each, in the order above
+unsigned learn_options_with_value(const Ini &ini)
+{
+	unsigned bits = 0;
+	for (size_t k = 0; k < std::size(kLearnOptions); ++k) {
+		const std::string v = ini.get("learn_options", kLearnOptions[k].key);
+		if (!v.empty() && learn_value_ok(v)) bits |= 1u << k;
+	}
+	return bits;
+}
+
 }  // namespace
 
 void App::open_range_settings()
@@ -71,14 +81,7 @@ void App::open_range_settings()
 	using lang::t;
 	std::vector<FormField> f;
 	auto number = [&](const char *label, int v, int lo, int hi, const char *note = nullptr) {
-		FormField x;
-		x.kind = FormField::Number;
-		x.label = t(label);
-		x.text = std::to_wstring(v);
-		x.lo = lo;
-		x.hi = hi;
-		if (note) x.note = t(note);
-		f.push_back(std::move(x));
+		f.push_back(number_field(t(label), v, lo, hi, note ? t(note) : std::wstring()));
 	};
 	auto heading = [&](const char *label) {
 		FormField x;
@@ -142,7 +145,7 @@ void App::open_range_settings()
 	number("range.threads", threads_, 0, 1024, "range.threads.note");
 	number("range.hash", hash_bits_, 0, 30, "range.hash.note");
 
-	if (!run_form(hwnd_, t("range.window"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return;
+	if (!run_form(hwnd_, t("range.window"), f)) return;
 
 	size_t i = 1;  // after the heading
 	loss_x_ = std::stoi(f[i++].text);
@@ -191,13 +194,8 @@ void App::choose_level()
 {
 	using lang::t;
 	std::vector<FormField> f(1);
-	f[0].kind = FormField::Slider;
-	f[0].label = t("range.level");
-	f[0].text = std::to_wstring(level_);
-	f[0].lo = 0;
-	f[0].hi = 60;
-	f[0].note = t("level.note");
-	if (!run_form(hwnd_, t("level.window"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return;
+	f[0] = slider_field(t("range.level"), level_, 0, 60, t("level.note"));
+	if (!run_form(hwnd_, t("level.window"), f)) return;
 	level_ = std::stoi(f[0].text);
 	save_config();
 	update_menu();
@@ -215,23 +213,30 @@ std::string App::learn_options_commands() const
 	return out;
 }
 
+void App::send_learn_options()
+{
+	learn_options_sent_ |= learn_options_with_value(ini_);
+	send(0, learn_options_commands());
+}
+
 void App::open_learn_settings()
 {
 	using lang::t;
 	std::vector<FormField> f;
-	for (const auto &o : kLearnOptions) {
-		FormField x;
-		x.kind = FormField::Text;
-		x.label = t(o.label);
-		x.text = widen(ini_.get("learn_options", o.key));
-		x.note = widen(o.key) + L"：" + t(o.note);
-		f.push_back(std::move(x));
-	}
-	if (!run_form(hwnd_, t("learnopt.window"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return;
+	for (const auto &o : kLearnOptions)
+		f.push_back(text_field(t(o.label), widen(ini_.get("learn_options", o.key)), widen(o.key) + L"：" + t(o.note)));
+	if (!run_form(hwnd_, t("learnopt.window"), f)) return;
+	std::vector<std::wstring> texts;
+	for (const FormField &x : f) texts.push_back(x.text);
+	apply_learn_options(texts);
+}
+
+void App::apply_learn_options(const std::vector<std::wstring> &texts)
+{
+	using lang::t;
 	bool bad = false;
-	for (size_t k = 0; k < std::size(kLearnOptions); ++k) {
-		std::string v = narrow(f[k].text);
-		v = trim(v);
+	for (size_t k = 0; k < std::size(kLearnOptions) && k < texts.size(); ++k) {
+		const std::string v = trim(narrow(texts[k]));
 		if (!learn_value_ok(v)) {
 			bad = true;
 			continue;
@@ -240,9 +245,48 @@ void App::open_learn_settings()
 	}
 	if (bad) log(t("learnopt.bad"));
 	save_config();
-	// the engine takes them at once (between two commands; a learning in progress keeps its own)
-	if (!learning_) send(0, learn_options_commands());
-	log(t("learnopt.sent"));
+	// the engine takes them at once (between two commands); a learning in progress keeps its own, so they go when it
+	// has ended (learning_ended), and an engine not running takes them when it starts (start_engines)
+	if (!eng_[0].alive) {
+		log(t("learnopt.at_start"));
+		return;
+	}
+	// a setting emptied (the engine's own) cannot be sent: the engine reads no option without a value and has no word for
+	// its own setting, so the value sent before stays in it until it starts again
+	const unsigned emptied = learn_options_sent_ & ~learn_options_with_value(ini_);
+	if (learning_) {
+		learn_options_waiting_ = true;
+		log(t("learnopt.after_learning"));
+	} else {
+		send_learn_options();
+		log(t("learnopt.sent"));
+	}
+	if (emptied) {
+		std::wstring names;
+		for (size_t k = 0; k < std::size(kLearnOptions); ++k)
+			if (emptied >> k & 1) names += (names.empty() ? L"" : L", ") + widen(kLearnOptions[k].key);
+		log(lang::f("learnopt.emptied", {names}));
+	}
+}
+
+bool App::export_ready(bool deviate)
+{
+	using lang::t;
+	if (refuse_while_book_busy()) return false;  // (first: the engine is not running while it saves its book)
+	if (!eng_[0].alive) {
+		message(t("learn.no_engine"), MB_ICONINFORMATION);
+		return false;
+	}
+	if (!deviate) return true;
+	if (eng_[0].probe_id) {  // (its answer to the first "stop id=" comes after its book: whether it has the export is not known)
+		message(t("devexp.loading"), MB_ICONINFORMATION);
+		return false;
+	}
+	if (!eng_[0].exports) {
+		message(t("devexp.old_engine"), MB_ICONWARNING);
+		return false;
+	}
+	return true;
 }
 
 // The lines that book deviate, deviate2, deviate3 walks from the position shown, to a text file without expanding the
@@ -250,57 +294,32 @@ void App::open_learn_settings()
 void App::export_deviate()
 {
 	using lang::t;
-	if (!eng_[0].alive || learning_) return;
-	if (!eng_[0].exports) {
-		message(t("devexp.old_engine"), MB_ICONWARNING);
-		return;
-	}
+	if (!export_ready(true)) return;
 	static const char *const bases[] = {"deviate", "deviate2", "deviate3"}, *const whiches[] = {"leaf", "ends", "all"};
 	std::vector<FormField> f(4);
-	f[0].kind = FormField::Choice;
-	f[0].label = t("devexp.base");
-	f[0].choices = {L"book deviate", L"book deviate2", L"book deviate3"};
-	const std::string b = ini_.get("devexport", "base", base_);
-	f[0].choice = b == "deviate3" ? 2 : b == "deviate2" ? 1 : 0;
-	f[1].kind = FormField::Number;
-	f[1].label = t("devexp.x");
-	f[1].text = std::to_wstring(ini_.get_int("devexport", "x", loss_x_, 0, 129));
-	f[1].lo = 0;
-	f[1].hi = 129;
-	f[1].note = t("devexp.x.note");
-	f[2].kind = FormField::Number;
-	f[2].label = t("devexp.y");
-	f[2].text = std::to_wstring(ini_.get_int("devexport", "y", loss_y_, 0, 254));
-	f[2].lo = 0;
-	f[2].hi = 254;
-	f[2].note = t("devexp.y.note");
-	f[3].kind = FormField::Choice;
-	f[3].label = t("devexp.which");
-	f[3].choices = {t("devexp.which.leaf"), t("devexp.which.ends"), t("devexp.which.all")};
-	const std::string wh = ini_.get("devexport", "which", "leaf");
-	f[3].choice = wh == "all" ? 2 : wh == "ends" ? 1 : 0;
-	if (!run_form(hwnd_, t("devexp.window"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return;
+	// (the first choice when config.ini names none of them)
+	f[0] = choice_field(t("devexp.base"), {L"book deviate", L"book deviate2", L"book deviate3"},
+	                    std::max(0, name_index(bases, ini_.get("devexport", "base", base_))));
+	f[1] = number_field(t("devexp.x"), ini_.get_int("devexport", "x", loss_x_, 0, 129), 0, 129, t("devexp.x.note"));
+	f[2] = number_field(t("devexp.y"), ini_.get_int("devexport", "y", loss_y_, 0, 254), 0, 254, t("devexp.y.note"));
+	f[3] = choice_field(t("devexp.which"), {t("devexp.which.leaf"), t("devexp.which.ends"), t("devexp.which.all")},
+	                    std::max(0, name_index(whiches, ini_.get("devexport", "which", "leaf"))));
+	if (!run_form(hwnd_, t("devexp.window"), f)) return;
 	const int x = std::stoi(f[1].text), y = std::stoi(f[2].text);
 	if (f[0].choice == 0 && y > 65) {  // (the absolute error of book deviate)
 		message(t("devexp.y_deviate"), MB_ICONWARNING);
 		return;
 	}
-	ini_.set("devexport", "base", bases[f[0].choice]);
+	const char *const base = bases[f[0].choice], *const which = whiches[f[3].choice];
+	ini_.set("devexport", "base", base);
 	ini_.set("devexport", "x", std::to_string(x));
 	ini_.set("devexport", "y", std::to_string(y));
-	ini_.set("devexport", "which", whiches[f[3].choice]);
+	ini_.set("devexport", "which", which);
 	save_config();
 
-	wchar_t file[MAX_PATH] = L"deviate-lines.txt";
-	OPENFILENAMEW of{sizeof of};
-	of.hwndOwner = hwnd_;
-	of.lpstrFilter = L"*.txt\0*.txt\0*.*\0*.*\0";
-	of.lpstrFile = file;
-	of.nMaxFile = MAX_PATH;
-	of.lpstrDefExt = L"txt";
-	of.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
-	if (!GetSaveFileNameW(&of)) return;
-	start_deviate_export(bases[f[0].choice], x, y, whiches[f[3].choice], file);
+	const std::wstring file = pick_save(file_filter("filter.text", L"*.txt").c_str(), L"txt", L"deviate-lines.txt");
+	if (file.empty() || !export_ready(true)) return;  // (the engine may have gone or started to learn meanwhile)
+	start_deviate_export(base, x, y, which, file);
 }
 
 bool App::start_deviate_export(const std::string &base, int x, int y, const std::string &which, const std::wstring &file)
@@ -309,9 +328,8 @@ bool App::start_deviate_export(const std::string &base, int x, int y, const std:
 	auto p = engine_path_or_say(file, FileUse::Write, 0);  // (a name the engine cannot open goes through the temporary folder)
 	if (!p) return false;
 	devexp_file_ = file;
-	learn_keeps_book_ = true;
 	start_learning_at("book " + base + " " + std::to_string(x) + " " + std::to_string(y) + " export " + *p + " " + which,
-	                  game_.start(), moves_to_cursor());
+	                  game_.start(), moves_to_cursor(), true);
 	return true;
 }
 
@@ -320,29 +338,14 @@ bool App::start_deviate_export(const std::string &base, int x, int y, const std:
 void App::export_best()
 {
 	using lang::t;
-	if (!eng_[0].alive || learning_) return;
+	if (!export_ready(false)) return;
 	std::vector<FormField> f(4);
-	f[0].kind = FormField::Number;
-	f[0].label = t("best.loss");
-	f[0].text = std::to_wstring(ini_.get_int("bestlines", "loss", 0, 0, 129));
-	f[0].lo = 0;
-	f[0].hi = 129;
-	f[0].note = t("best.loss.note");
-	f[1].kind = FormField::Number;
-	f[1].label = t("best.depth");
-	f[1].text = std::to_wstring(ini_.get_int("bestlines", "depth", 60, 1, 60));
-	f[1].lo = 1;
-	f[1].hi = 60;
-	f[1].note = t("best.depth.note");
-	f[2].kind = FormField::Check;
-	f[2].label = t("best.follow");
-	f[2].checked = ini_.get("bestlines", "solved") == "follow";
-	f[2].note = t("best.follow.note");
-	f[3].kind = FormField::Choice;
-	f[3].label = t("best.which");
-	f[3].choices = {t("best.which.all"), t("best.which.incomplete")};
-	f[3].choice = ini_.get("bestlines", "which") == "incomplete" ? 1 : 0;
-	if (!run_form(hwnd_, t("best.window"), f, t("form.ok"), t("form.cancel"), t("form.bad_number"))) return;
+	f[0] = number_field(t("best.loss"), ini_.get_int("bestlines", "loss", 0, 0, 129), 0, 129, t("best.loss.note"));
+	f[1] = number_field(t("best.depth"), ini_.get_int("bestlines", "depth", 60, 1, 60), 1, 60, t("best.depth.note"));
+	f[2] = check_field(t("best.follow"), ini_.get("bestlines", "solved") == "follow", t("best.follow.note"));
+	f[3] = choice_field(t("best.which"), {t("best.which.all"), t("best.which.incomplete")},
+	                    ini_.get("bestlines", "which") == "incomplete" ? 1 : 0);
+	if (!run_form(hwnd_, t("best.window"), f)) return;
 	const int loss = std::stoi(f[0].text), depth = std::stoi(f[1].text);
 	const std::string solved = f[2].checked ? "follow" : "stop", which = f[3].choice ? "incomplete" : "all";
 	ini_.set("bestlines", "loss", std::to_string(loss));
@@ -351,20 +354,19 @@ void App::export_best()
 	ini_.set("bestlines", "which", which);
 	save_config();
 
-	wchar_t file[MAX_PATH] = L"bestlines.txt";
-	OPENFILENAMEW of{sizeof of};
-	of.hwndOwner = hwnd_;
-	of.lpstrFilter = L"*.txt\0*.txt\0*.*\0*.*\0";
-	of.lpstrFile = file;
-	of.nMaxFile = MAX_PATH;
-	of.lpstrDefExt = L"txt";
-	of.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
-	if (!GetSaveFileNameW(&of)) return;
+	const std::wstring file = pick_save(file_filter("filter.text", L"*.txt").c_str(), L"txt", L"bestlines.txt");
+	if (file.empty() || !export_ready(false)) return;  // (the engine may have gone or started to learn meanwhile)
+	start_best_export(loss, depth, solved, which, file);
+}
+
+bool App::start_best_export(int loss, int depth, const std::string &solved, const std::string &which, const std::wstring &file)
+{
+	if (!eng_[0].alive || learning_) return false;  // (an engine that learns would read it only when the learning has ended)
 	// the engine opens the file with the code page of the system
 	const auto name = acp(file);
 	if (!name) {
-		message(t("best.bad_path"), MB_ICONWARNING);
-		return;
+		message(lang::t("best.bad_path"), MB_ICONWARNING);
+		return false;
 	}
 	const std::string &path = *name;
 	best_file_ = file;
@@ -377,6 +379,7 @@ void App::export_best()
 	requests_[id] = {Request::BestExport, key_of(game_.now())};
 	send(0, out);
 	log(lang::f("best.started", {best_file_}));
+	return true;
 }
 
 }  // namespace ng

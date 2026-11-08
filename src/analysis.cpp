@@ -3,6 +3,8 @@
 #include <bit>
 #include <charconv>
 
+#include "game.h"
+
 namespace ng {
 
 MoveEval *PosInfo::find(int sq)
@@ -321,10 +323,6 @@ int shown_level(const MoveEval &m, bool use_book)
 	return 0;
 }
 
-}  // namespace ng
-
-namespace ng {
-
 int echo_marker(std::string_view line)
 {
 	const size_t e = line.find("echo");
@@ -403,12 +401,6 @@ void unmix_lines(std::vector<std::string> &lines, std::string &open)
 	}
 	lines = std::move(out);
 }
-
-}  // namespace ng
-
-#include "game.h"
-
-namespace ng {
 
 bool move_exact(const MoveEval &m, const Position &p)
 {

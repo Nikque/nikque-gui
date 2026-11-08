@@ -56,15 +56,7 @@ void play_known(Position &p, int sq) noexcept
 		p.side ^= 1;
 		f = flips(p.me(), p.opp(), sq);
 	}
-	const u64 turned = f | (1ULL << sq);
-	if (p.side == kBlack) {
-		p.black |= turned;
-		p.white &= ~turned;
-	} else {
-		p.white |= turned;
-		p.black &= ~turned;
-	}
-	p.side ^= 1;
+	p.put(sq, f);
 }
 
 size_t moves_in(const GameList &l)
@@ -230,15 +222,7 @@ bool parse_list_line(std::string_view line, Position *start, std::vector<std::ui
 			*cut = true;
 			break;
 		}
-		const u64 turned = f | (1ULL << sq);
-		if (p.side == kBlack) {
-			p.black |= turned;
-			p.white &= ~turned;
-		} else {
-			p.white |= turned;
-			p.black &= ~turned;
-		}
-		p.side ^= 1;
+		p.put(sq, f);
 		moves->push_back(static_cast<std::uint8_t>(sq));
 	}
 	return true;
@@ -549,15 +533,7 @@ void reoriented_into(const Position &start, std::span<const std::uint8_t> moves,
 		}
 		if (!f) break;  // not a game of legal moves (cannot happen for a list read in)
 		out.push_back(static_cast<std::uint8_t>(t));
-		const u64 turned = f | (1ULL << t);
-		if (p.side == kBlack) {
-			p.black |= turned;
-			p.white &= ~turned;
-		} else {
-			p.white |= turned;
-			p.black &= ~turned;
-		}
-		p.side ^= 1;
+		p.put(t, f);
 	}
 }
 
@@ -576,6 +552,9 @@ int normal_pick(unsigned sym, int t)
 	return best;
 }
 
+// the pick of reoriented_into for the normal orientation
+constexpr auto kNormalPick = [](unsigned sym, const Position &, int t) { return normal_pick(sym, t); };
+
 // one of the symmetries in `sym`, drawn with r
 int drawn_pick(unsigned sym, std::uint64_t r)
 {
@@ -584,7 +563,6 @@ int drawn_pick(unsigned sym, std::uint64_t r)
 		if ((sym >> s) & 1 && k-- == 0) return s;
 	return 0;
 }
-
 
 // The moves of every game made again by `make(i, out)` and written over the old ones, in parts on threads: an
 // orientation keeps every move, so no second list is made. False when stopped (the games done before the stop keep
@@ -614,7 +592,7 @@ bool rewrite(GameList &list, std::stop_token stop, Make make)
 std::vector<std::uint8_t> normalized_moves(const Position &start, std::span<const std::uint8_t> moves)
 {
 	std::vector<std::uint8_t> out;
-	reoriented_into(start, moves, [](unsigned sym, const Position &, int t) { return normal_pick(sym, t); }, out);
+	reoriented_into(start, moves, kNormalPick, out);
 	return out;
 }
 
@@ -631,7 +609,7 @@ std::vector<std::uint8_t> scattered_moves(const Position &start, std::span<const
 void normalize_list(GameList &list, std::stop_token stop)
 {
 	rewrite(list, stop, [&](size_t i, std::vector<std::uint8_t> &out) {
-		reoriented_into(list.start(i), list.moves(i), [](unsigned sym, const Position &, int t) { return normal_pick(sym, t); }, out);
+		reoriented_into(list.start(i), list.moves(i), kNormalPick, out);
 	});
 }
 

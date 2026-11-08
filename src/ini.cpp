@@ -15,14 +15,50 @@ std::string trim(std::string_view s)
 	return std::string(s.substr(a, b - a));
 }
 
+namespace {
+
+// A to Z as a to z, the other bytes as they are
+char lower_char(char c) noexcept { return c >= 'A' && c <= 'Z' ? static_cast<char>(c - 'A' + 'a') : c; }
+
+}  // namespace
+
 bool iequals(std::string_view a, std::string_view b) noexcept
 {
 	if (a.size() != b.size()) return false;
-	for (size_t i = 0; i < a.size(); ++i) {
-		char x = a[i], y = b[i];
-		if (x >= 'A' && x <= 'Z') x = static_cast<char>(x - 'A' + 'a');
-		if (y >= 'A' && y <= 'Z') y = static_cast<char>(y - 'A' + 'a');
-		if (x != y) return false;
+	for (size_t i = 0; i < a.size(); ++i)
+		if (lower_char(a[i]) != lower_char(b[i])) return false;
+	return true;
+}
+
+std::string lower(std::string s)
+{
+	for (auto &c : s) c = lower_char(c);
+	return s;
+}
+
+bool read_file(const std::wstring &path, std::string *out)
+{
+	FILE *f = nullptr;
+	if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return false;
+	out->clear();
+	char buf[16384];
+	size_t n;
+	while ((n = fread(buf, 1, sizeof buf, f)) > 0) out->append(buf, n);
+	fclose(f);
+	return true;
+}
+
+bool write_file(const std::wstring &path, std::string_view data)
+{
+	const std::wstring tmp = path + L".tmp";
+	FILE *f = nullptr;
+	if (_wfopen_s(&f, tmp.c_str(), L"wb") != 0) f = nullptr;
+	if (!f) return false;
+	bool ok = fwrite(data.data(), 1, data.size(), f) == data.size();
+	ok = (fclose(f) == 0) && ok;
+	if (!ok || !MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+		DeleteFileW(tmp.c_str());
+		return false;
 	}
 	return true;
 }
@@ -49,14 +85,8 @@ bool Ini::load(const std::wstring &path)
 {
 	lines_.clear();
 	dirty_ = false;
-	FILE *f = nullptr;
-	if (_wfopen_s(&f, path.c_str(), L"rb") != 0) f = nullptr;
-	if (!f) return false;
 	std::string all;
-	char buf[16384];
-	size_t n;
-	while ((n = fread(buf, 1, sizeof buf, f)) > 0) all.append(buf, n);
-	fclose(f);
+	if (!read_file(path, &all)) return false;
 	size_t i = 0;
 	if (all.size() >= 3 && all.compare(0, 3, "\xEF\xBB\xBF") == 0) i = 3;
 	while (i <= all.size()) {
@@ -72,20 +102,12 @@ bool Ini::load(const std::wstring &path)
 
 bool Ini::save(const std::wstring &path)
 {
-	const std::wstring tmp = path + L".tmp";
-	FILE *f = nullptr;
-	if (_wfopen_s(&f, tmp.c_str(), L"wb") != 0) f = nullptr;
-	if (!f) return false;
-	bool ok = true;
+	std::string text;  // (every line with CRLF, the last one too)
 	for (const auto &l : lines_) {
-		ok = ok && fwrite(l.data(), 1, l.size(), f) == l.size();
-		ok = ok && fwrite("\r\n", 1, 2, f) == 2;
+		text += l;
+		text += "\r\n";
 	}
-	ok = (fclose(f) == 0) && ok;
-	if (!ok || !MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
-		DeleteFileW(tmp.c_str());
-		return false;
-	}
+	if (!write_file(path, text)) return false;
 	dirty_ = false;
 	return true;
 }

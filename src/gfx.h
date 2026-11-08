@@ -49,18 +49,21 @@ public:
 	UINT height() const noexcept { return height_; }
 
 	ID2D1SolidColorBrush *brush(const D2D1_COLOR_F &c);
-	// a linear gradient brush kept by name; its points are set by the caller
+	// a linear gradient brush kept by name; its points are set by the caller (null: it could not be made)
 	ID2D1LinearGradientBrush *gradient(int id, const D2D1_GRADIENT_STOP *stops, UINT n);
+	// a text format kept by its size and kind (null: it could not be made; the two below pass it by)
 	IDWriteTextFormat *text(float px, bool bold, DWRITE_TEXT_ALIGNMENT align = DWRITE_TEXT_ALIGNMENT_LEADING,
 	                        Face face = Face::Ui);
-	// width of a text in a format
+	// width of a text in a format (0 without one)
 	float text_width(std::wstring_view s, IDWriteTextFormat *f);
 	void draw_text(std::wstring_view s, IDWriteTextFormat *f, const D2D1_RECT_F &r, const D2D1_COLOR_F &c,
 	               bool clip = true);
 
-	// the outline of a text (number font, bold); kept
+	// the outline of a text (number font, bold); kept (without its geometry when the font or the geometry cannot be made:
+	// not kept, drawn as nothing)
 	const NumberShape &shape(std::wstring_view text, float em, Face face = Face::Number);
-	// fills (or outlines with round joins, the line `stroke_w` wide) a shape at the current transform
+	// fills (or outlines with round joins, the line `stroke_w` wide) a shape at the current transform (nothing without
+	// its geometry)
 	void fill_shape(const NumberShape &s, ID2D1Brush *b);
 	void stroke_shape(const NumberShape &s, ID2D1Brush *b, float stroke_w);
 	// a soft glow of a shape; must be made outside begin_frame/end_frame (prepare_glow), then read with glow()
