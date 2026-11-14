@@ -550,6 +550,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		return true;
 	}
 	if (c == "ponder") return toggle(ponder_, cmd::PlayPonder);
+	if (c == "keep-hash") return toggle(keep_hash_, cmd::PlayKeepHash);
 	if (c == "go") {
 		com_once_ = true;
 		com_once_pos_ = key_of(game_.now());

@@ -68,6 +68,8 @@ bool App::start_play_engine()
 	}
 	s.board.reset();
 	send(3, "mode 3\n");
+	// (sent only when on: an engine without the setting, nikque Edax for one, would warn about it)
+	if (keep_hash_) send(3, "keep-hash on\n");
 	log(lang::f("play.engine_started", {exe}));
 	return true;
 }
@@ -366,6 +368,12 @@ void App::play_command(int id)
 			com_pondering_ = false;
 		}
 		com_think();
+		break;
+	case cmd::PlayKeepHash:
+		// the setboard of each move keeps the hash table when it continues the game: what the pondering found
+		// helps the next move (newedax from v4.5.5-newedax.14; up to newedax.13 the table was cleaned at each one)
+		keep_hash_ = !keep_hash_;
+		if (eng_[3].alive) send(3, keep_hash_ ? "keep-hash on\n" : "keep-hash off\n");
 		break;
 	case cmd::PlayEndSettings: {
 		std::vector<FormField> f(2);

@@ -86,6 +86,7 @@ enum : int {
 	PlayClock,
 	PlayPonder,
 	PlayEndSettings,
+	PlayKeepHash,
 	ShowEval = 1100,
 	Recompute,
 	Backward,
@@ -605,6 +606,7 @@ public:
 	std::chrono::steady_clock::time_point clock_t0_{};
 	int clock_side_ = -1;            // the side whose time runs (-1: none)
 	bool ponder_ = false;            // the play engine searches the person's position meanwhile
+	bool keep_hash_ = false;         // the play engine keeps its hash table from move to move (newedax: keep-hash)
 	bool end_keep_ = true, end_list_ = false;
 	int engine_games_left_ = 0;      // the computer on both sides: more games after this one
 	bool com_once_ = false;          // one move of the computer asked (free play)

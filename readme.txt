@@ -104,7 +104,7 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・newedax）は G
 - 対局：人どうし（自由打ち）・人が黒・人が白・コンピューターどうし（続けて打つ対局の数）。コンピューターは
   book を読まない「対局用エンジン」で考えるので、その間も盤の解析は続きます。待ったは人の番まで戻ります。
   コンピューターの Lv、持ち時間（分。時間があるときは残りの時間で 1 手の時間を決め、切れた側の負け）、
-  相手の番にも考える、終局したときの動作（しおりを挟む・棋譜リストに追加）。上の帯に対局の種類と残りの時間。
+  相手の番にも考える、置換表を手ごとに残す（newedax.14 から）、終局したときの動作（しおりを挟む・棋譜リストに追加）。上の帯に対局の種類と残りの時間。
   評価値は H で隠せます。
 - 序盤の打ち方：book を使わない・book の最善の手・book から幅をもって選ぶ（最善からの石損の幅と、
   book を使う手数）。book の手は Edax と同じく、局面のリンクと leaf から選びます。
@@ -171,7 +171,7 @@ Ntest の形式は「空き 手番の側の石 手番」。
   tool <コマンド>          ツール用エンジンで実行する（solve・bench・count・perft・estimate・base）
   run <ファイル>           別のスクリプト（4 段まで）
   game free|black|white|engines [数]  対局を始める（black は人が黒）
-  comlevel <n> / clock <分> / ponder on|off / opening search|best|wide [幅] [手数]
+  comlevel <n> / clock <分> / ponder on|off / keep-hash on|off / opening search|best|wide [幅] [手数]
   go                       コンピューターに 1 手打たせる / takeback  待った
   waitgame [秒]            対局が終わるまで待つ（コンピューターどうしは全部の対局。時間で終わったときはログに出る）
   compare on|off           比較モード
@@ -185,7 +185,7 @@ Ntest の形式は「空き 手番の側の石 手番」。
 [nikque]・[newedax] dir・exe・eval・book
 [analysis] level（0〜60）・threads（0 は全部）・hash（ハッシュ表のビット数、0 はエンジンのまま）・umi・x・y・base・stages・
            precision（1 で精度を計算する）・backward・forward（棋譜の局面を裏で読む順）・compare
-[play] level・opening（search|best|wide）・width・until・clock・ponder・end_keep・end_list
+[play] level・opening（search|best|wide）・width・until・clock・ponder・keep_hash（1 で置換表を手ごとに残す、newedax.14 から）・end_keep・end_list
 [view] design・effects・language・numbers・opening_marks（0 で定石の手順の印を出さない）・record_box（0 で棋譜の欄を出さない）・upper_moves（1 で棋譜を大文字で出力）・graph_end（0 でグラフに読み切りの範囲を出さない）・pv（1 で読み筋を盤に表示）・cell_info・fps・font・opening_file・screenshot_dir
 [window] 大きさと場所、tab、panel_w、bookmarks（1 でしおりの列を表示）
 [list] start_ply（棋譜リストの棋譜を開く手数、-1 は最後）
@@ -333,7 +333,7 @@ work waits for its end. Relative names are from the script's folder. The command
 Japanese part above (moves, board, play, new, goto, back, forward, book, book reload, book reduce, eval,
 numbers, level, umi, precision, analysis, stop, pv, openingmarks, recordbox, recordtext, uppermoves, graphend, engine, design, effects, tab, rotate, cellinfo, lang, wait,
 estimate, keep, bookmark, bookmarks, screenshot, savelog, list ..., search, learn, edax, tool, run, game,
-comlevel, clock, ponder, opening, go, takeback, waitgame, compare, tree, log, quit).
+comlevel, clock, ponder, keep-hash, opening, go, takeback, waitgame, compare, tree, log, quit).
 A wait or waitgame that ends by its time says so in the log.
 
 8. config.ini

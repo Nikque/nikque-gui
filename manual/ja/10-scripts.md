@@ -59,7 +59,7 @@
 | `tool <コマンド>` | ツール用エンジンで実行する（solve・bench・count・perft・estimate・base） |
 | `run <ファイル>` | 別のスクリプト |
 | `game free\|black\|white\|engines [数]` | 対局を始める（`black` は人が黒） |
-| `comlevel <n>` / `clock <分>` / `ponder on\|off` | コンピューターの Lv・持ち時間・相手の番にも考える |
+| `comlevel <n>` / `clock <分>` / `ponder on\|off` / `keep-hash on\|off` | コンピューターの Lv・持ち時間・相手の番にも考える・置換表を手ごとに残す |
 | `opening search\|best\|wide [幅] [手数]` | 序盤の打ち方 |
 | `go` / `takeback` | コンピューターに 1 手打たせる・待った |
 | `waitgame [秒]` | 対局が終わるまで待つ（コンピューターどうしは全部の対局） |

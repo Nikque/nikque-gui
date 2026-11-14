@@ -59,7 +59,7 @@ Rules:
 | `tool <command>` | runs on the tool engine (solve, bench, count, perft, estimate, base) |
 | `run <file>` | another script |
 | `game free\|black\|white\|engines [n]` | starts a game (`black`: you as black) |
-| `comlevel <n>` / `clock <min>` / `ponder on\|off` | computer level, time, thinking on your turn |
+| `comlevel <n>` / `clock <min>` / `ponder on\|off` / `keep-hash on\|off` | computer level, time, thinking on your turn, the hash table kept from move to move |
 | `opening search\|best\|wide [width] [moves]` | opening moves |
 | `go` / `takeback` | let the computer play a move, take back |
 | `waitgame [s]` | waits for the end of the game (all the games, computer against computer) |

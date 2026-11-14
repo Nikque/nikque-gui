@@ -4,7 +4,7 @@
 
 ## Installing
 
-1. Unpack the ZIP (`nikque-gui-0.4.1.zip`) anywhere. No installation is needed.
+1. Unpack the ZIP (`nikque-gui-0.4.2.zip`) anywhere. No installation is needed.
 2. Start `nikque-gui.exe`.
 
 Contents of the folder:

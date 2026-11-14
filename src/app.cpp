@@ -393,6 +393,7 @@ void App::load_config()
 	opening_until_ = ini_.get_int("play", "until", 60, 0, 60);
 	clock_minutes_ = ini_.get_int("play", "clock", 0, 0, 600);
 	ponder_ = ini_.get_bool("play", "ponder", false);
+	keep_hash_ = ini_.get_bool("play", "keep_hash", false);
 	end_keep_ = ini_.get_bool("play", "end_keep", true);
 	end_list_ = ini_.get_bool("play", "end_list", false);
 	compare_ = ini_.get_bool("analysis", "compare", false);
@@ -432,6 +433,7 @@ bool App::save_config()
 	ini_.set_int("play", "until", opening_until_);
 	ini_.set_int("play", "clock", clock_minutes_);
 	ini_.set_int("play", "ponder", ponder_);
+	ini_.set_int("play", "keep_hash", keep_hash_);
 	ini_.set_int("play", "end_keep", end_keep_);
 	ini_.set_int("play", "end_list", end_list_);
 	ini_.set_int("list", "start_ply", list_start_ply_);
@@ -520,6 +522,7 @@ void App::build_menu()
 	sub(game, op, t("menu.opening"));
 	item(game, cmd::PlayClock, t("menu.play.clock"));
 	item(game, cmd::PlayPonder, t("menu.play.ponder"));
+	item(game, cmd::PlayKeepHash, t("menu.play.keep_hash"));
 	item(game, cmd::PlayEndSettings, t("menu.play.end"));
 	sep(game);
 	item(game, cmd::Undo, t("menu.game.undo"), keys_.describe(Action::Back) + L" / " + t("key.right_click"));
@@ -868,6 +871,7 @@ void App::update_menu()
 	radio(cmd::PlayFree, cmd::PlayEngines, cmd::PlayFree + static_cast<int>(play_mode_));
 	radio(cmd::OpeningSearch, cmd::OpeningWide, cmd::OpeningSearch + static_cast<int>(opening_));
 	check(cmd::PlayPonder, ponder_);
+	check(cmd::PlayKeepHash, keep_hash_);
 	check(cmd::CompareOn, compare_);
 	enable(cmd::PlayTakeBack, play_mode_ == PlayMode::HumanBlack || play_mode_ == PlayMode::HumanWhite);
 	enable(cmd::PlayStop, play_mode_ != PlayMode::Free);

@@ -557,7 +557,7 @@ void App::on_command(int id)
 		learn_command(id);
 		return;
 	}
-	if (id >= cmd::PlayFree && id <= cmd::PlayEndSettings) {
+	if (id >= cmd::PlayFree && id <= cmd::PlayKeepHash) {
 		play_command(id);
 		return;
 	}

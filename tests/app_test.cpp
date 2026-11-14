@@ -2037,7 +2037,8 @@ static void test_script_switches()
 	} switches[] = {{"book", &App::use_book_},          {"eval", &App::show_eval_},          {"numbers", &App::move_numbers_},
 	                {"pv", &App::pv_on_board_},         {"precision", &App::precision_},     {"bookmarks", &App::bookmarks_shown_},
 	                {"openingmarks", &App::opening_marks_}, {"recordbox", &App::record_box_}, {"graphend", &App::graph_end_},
-	                {"uppermoves", &App::upper_moves_}, {"ponder", &App::ponder_}};
+	                {"uppermoves", &App::upper_moves_}, {"ponder", &App::ponder_},
+	                {"keep-hash", &App::keep_hash_}};
 	std::wstring err;
 	for (const auto &[name, flag] : switches) {
 		for (const bool on : {true, false, false, true})
