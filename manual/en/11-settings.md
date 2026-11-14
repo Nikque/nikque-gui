@@ -28,7 +28,7 @@ When it cannot be written (a read-only folder, for example), the file stays as i
 
 | Section | Main keys |
 |---|---|
-| `[engine]` | `kind=nikque\|newedax`, `search=1` (use the search engine) |
+| `[engine]` | `kind=nikque\|newedax` (newedax when missing), `search=1` (use the search engine) |
 | `[nikque]`, `[newedax]` | `dir` (engine folder), `exe` (`auto` or the file name), `eval`, `book` |
 | `[books]` | `recent1` to `recent8` (the list of Book → Recent books) |
 | `[analysis]` | `level`, `threads` (0: all), `hash` (bits of the hash table; 0: the engine's), `umi`, `x`, `y`, `base`, `stages`, `precision` (1: compute the book accuracy), `backward`, `forward` (the order of the search of the game), `compare` |

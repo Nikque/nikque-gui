@@ -4,7 +4,7 @@
 
 ## Installing
 
-1. Unpack the ZIP (`nikque-gui-0.4.0.zip`) anywhere. No installation is needed.
+1. Unpack the ZIP (`nikque-gui-0.4.1.zip`) anywhere. No installation is needed.
 2. Start `nikque-gui.exe`.
 
 Contents of the folder:
@@ -27,7 +27,7 @@ Contents of the folder:
 
 ## Choosing the engine
 
-Switch with Engine → nikque type / newedax type.
+Switch with Engine → nikque type / newedax type. The first start uses the newedax type (up to 0.4.0 it was the nikque type). The type you choose is saved in `config.ini` and used at the next start.
 
 - Both engines have the same book analysis commands and give the same results.
 - newedax.13 uses a newly trained evaluation function (64 slots). Its `eval.dat` is about 108 MB and is not the `eval.dat` of nikque.

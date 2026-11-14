@@ -181,7 +181,7 @@ Ntest の形式は「空き 手番の側の石 手番」。
 
 8. config.ini の主な項目
 ------------------------
-[engine] kind=nikque|newedax、search=1（探索用エンジンを使う）
+[engine] kind=nikque|newedax（無いときは newedax）、search=1（探索用エンジンを使う）
 [nikque]・[newedax] dir・exe・eval・book
 [analysis] level（0〜60）・threads（0 は全部）・hash（ハッシュ表のビット数、0 はエンジンのまま）・umi・x・y・base・stages・
            precision（1 で精度を計算する）・backward・forward（棋譜の局面を裏で読む順）・compare

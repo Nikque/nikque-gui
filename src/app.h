@@ -423,7 +423,7 @@ public:
 	std::string base_ = "deviate";
 	std::string stages_ = "1/1,2/2,3/3,4/4,5/5";
 	bool count_ = true;        // ask the number of positions (heavier)
-	EngineKind kind_ = EngineKind::Nikque18;
+	EngineKind kind_ = EngineKind::Newedax;  // (the default from 0.4.1; before, nikque)
 	bool search_engine_ = true;
 	bool backward_ = true;     // backward analysis of the game (and searching its positions in the background)
 	bool forward_ = false;     // the positions of the game searched in the background from the start (no values going back)

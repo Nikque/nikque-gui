@@ -35,6 +35,7 @@ static int failures = 0;
 	} while (0)
 
 static std::wstring self;
+static std::wstring src_dir;  // the folder of the sources (the first argument)
 
 static std::unique_ptr<App> make_app()
 {
@@ -863,6 +864,7 @@ static void test_engine_lost_names()
 static void test_engine_lost_then_ended()
 {
 	auto a = make_app();
+	a->kind_ = EngineKind::Nikque18;  // (the default is newedax)
 	a->ini_.set("nikque", "dir", narrow(a->temp_dir_));
 	a->ini_.set("nikque", "exe", narrow(self));
 	a->ini_.set("nikque", "eval", narrow(self));
@@ -2050,6 +2052,7 @@ static void test_script_switches()
 		++asked;
 		return IDOK;
 	};
+	a->kind_ = EngineKind::Nikque18;  // (the default is newedax)
 	a->learning_ = true;
 	err.clear();
 	CHECK(!a->script_command("engine newedax", 1, &err) && err == lang::t("learn.busy"));
@@ -2275,6 +2278,41 @@ static void test_bookmark_right_click()
 	a->on_command(cmd::KeptDelete);
 	CHECK(a->kept_.size() == 1 && a->kept_[0].cursor == 3);
 	a->kept_.clear();
+}
+
+// The engine of a new installation is newedax (from 0.4.1): the app before its settings are read, a config.ini without
+// [engine] kind, and the config.ini of the distribution (res\default-config.ini). A kind written in config.ini stays.
+static void test_engine_default()
+{
+	CHECK(App().kind_ == EngineKind::Newedax);
+	auto a = make_app();
+	const auto load = [&](const char *text) {
+		FILE *f = nullptr;
+		_wfopen_s(&f, a->ini_path_.c_str(), L"wb");
+		CHECK(f != nullptr);
+		if (f) {
+			std::fputs(text, f);
+			std::fclose(f);
+		}
+		a->kind_ = EngineKind::Nikque18;  // (not the value before)
+		a->load_config();
+	};
+	load("[engine]\r\nsearch=1\r\n");
+	CHECK(a->kind_ == EngineKind::Newedax);
+	load("[engine]\r\nkind=nikque\r\n");
+	CHECK(a->kind_ == EngineKind::Nikque18);
+	load("[engine]\r\nkind=NikQue\r\n");
+	CHECK(a->kind_ == EngineKind::Nikque18);
+	load("[engine]\r\nkind=newedax\r\n");
+	CHECK(a->kind_ == EngineKind::Newedax);
+	load("[engine]\r\nkind=other\r\n");
+	CHECK(a->kind_ == EngineKind::Newedax);
+	DeleteFileW(a->ini_path_.c_str());
+	// the config.ini of the distribution
+	Ini dist;
+	dist.load(src_dir + L"\\res\\default-config.ini");
+	CHECK(dist.get("engine", "kind") == "newedax");
+	lang::load(src_dir, "ja");  // (load_config read the words of the temporary folder)
 }
 
 // The C version is "nikque": the folder engines\nikque, the section [nikque], kind=nikque. A config.ini of 0.2.0 or
@@ -2936,7 +2974,10 @@ int main(int argc, char **argv)
 		return 0;
 	}
 	lang::load(argc > 1 ? widen(argv[1]) : std::wstring(L"."), "ja");
+	src_dir = argc > 1 ? widen(argv[1]) : std::wstring(L".");
 	std::setvbuf(stdout, nullptr, _IONBF, 0);  // (the lines before a crash are kept)
+	std::printf("%s\n", "test_engine_default");
+	test_engine_default();
 	std::printf("%s\n", "test_mixed_lines");
 	test_mixed_lines();
 	std::printf("%s\n", "test_old_settings");

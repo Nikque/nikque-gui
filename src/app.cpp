@@ -373,7 +373,9 @@ void App::load_config()
 	anim_fps_ = ini_.get_int("view", "fps", 20, 5, 60);
 	font_px_ = ini_.get_int("view", "font", 0, 0, 72);
 	ini_.rename_section("nikque18", "nikque");  // (a config.ini of 0.2.0 or before)
-	kind_ = lower(ini_.get("engine", "kind", "nikque")) == "newedax" ? EngineKind::Newedax : EngineKind::Nikque18;
+	// the engine: newedax unless nikque is written (nikque18: a config.ini of 0.2.0 or before); newedax by default from 0.4.1
+	const std::string kind = lower(ini_.get("engine", "kind", "newedax"));
+	kind_ = kind == "nikque" || kind == "nikque18" ? EngineKind::Nikque18 : EngineKind::Newedax;
 	search_engine_ = ini_.get_bool("engine", "search", true);
 	panel_w_ = static_cast<float>(ini_.get_int("window", "panel_w", 420, 200, 4000));
 	graph_ratio_ = ini_.get_int("window", "graph", 34, 10, 90) / 100.0f;
