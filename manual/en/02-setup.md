@@ -4,7 +4,7 @@
 
 ## Installing
 
-1. Unpack the ZIP (`nikque-gui-0.3.6.zip`) anywhere. No installation is needed.
+1. Unpack the ZIP (`nikque-gui-0.4.0.zip`) anywhere. No installation is needed.
 2. Start `nikque-gui.exe`.
 
 Contents of the folder:
@@ -15,7 +15,7 @@ Contents of the folder:
 | `config.ini` | settings ([11. Settings](11-settings.md)) |
 | `lang\*.txt` | the words of the screen (Japanese, English, Simplified and Traditional Chinese) |
 | `engines\nikque` | Edax v4.5.5-nikque.27, C version |
-| `engines\newedax` | newedax.12, C++ version |
+| `engines\newedax` | newedax.13, C++ version (the 64-slot build) |
 | `readme.txt` | short notes |
 
 - Each engine folder contains:
@@ -30,7 +30,11 @@ Contents of the folder:
 Switch with Engine → nikque type / newedax type.
 
 - Both engines have the same book analysis commands and give the same results.
-- newedax uses an evaluation function from the eval2 line (a different `eval.dat`).
+- newedax.13 uses a newly trained evaluation function (64 slots). Its `eval.dat` is about 108 MB and is not the `eval.dat` of nikque.
+- Use the `eval.dat` from the release of the same version as the newedax engine. With the `eval.dat` of an earlier newedax, of eval2 or of nikque, the engine runs but its evaluation is wrong. The GUI then tells you so in a message ([12. Troubleshooting](12-troubleshooting.md)).
+- The 48-slot build (`edax-4.5.5-newedax.13-48.zip` in the newedax release) is not included. To use it, unpack that ZIP into another folder and write its `bin` folder in `dir=` of `[newedax]` in `config.ini`. Use the 48-slot `eval.dat` of the same ZIP with the 48-slot exe files (if they are mixed up, the evaluation is wrong without any message).
+- Memory: one newedax.13 engine uses about 160 MB (`wEdax-x86-64.exe`) to about 275 MB (`wEdax-x86-64-v4.exe`, AVX-512). The GUI starts up to five engines (main, search, tool, game and compare), so with newedax for all of them it is about 0.8 to 1.4 GB. A larger hash table or more threads use more, and the book adds its own size.
+- The book format has not changed, so the books you used with earlier versions are read as they are. Their values, however, were made with the earlier evaluation function if they were learned with an earlier version.
 
 ## The book
 

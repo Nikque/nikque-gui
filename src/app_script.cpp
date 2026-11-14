@@ -29,8 +29,8 @@ std::vector<std::string> words(const std::string &s)
 	return out;
 }
 
-// the text after the first n words
-std::string rest_after(const std::string &line, int n)
+// the text after the first n words, as it is
+std::string text_after(const std::string &line, int n)
 {
 	size_t i = 0;
 	for (int k = 0; k < n; ++k) {
@@ -38,9 +38,36 @@ std::string rest_after(const std::string &line, int n)
 		while (i < line.size() && line[i] != ' ' && line[i] != '\t') ++i;
 	}
 	while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) ++i;
-	std::string r = line.substr(i);
+	return line.substr(i);
+}
+
+// the text after the first n words, without the "..." around it
+std::string rest_after(const std::string &line, int n)
+{
+	std::string r = text_after(line, n);
 	if (r.size() >= 2 && r.front() == '"' && r.back() == '"') r = r.substr(1, r.size() - 2);
 	return r;
+}
+
+// "<file> [word]": a file of one word, or in "..." (also with spaces), then at most one word (empty when left out).
+// Null, or the text of the error.
+const char *file_then_word(const std::string &text, std::string *file, std::string *word)
+{
+	size_t i;
+	if (text.starts_with('"')) {
+		i = text.find('"', 1);
+		if (i == std::string::npos) return "script.bad_file";
+		*file = text.substr(1, i - 1);
+		if (++i < text.size() && text[i] != ' ' && text[i] != '\t') return "script.bad_word";
+	} else {
+		i = std::min(text.find_first_of(" \t"), text.size());
+		*file = text.substr(0, i);
+	}
+	if (file->empty()) return "script.bad_file";
+	const std::vector<std::string> w = words(text.substr(i));
+	if (w.size() > 1) return "script.bad_word";
+	*word = w.empty() ? "" : w[0];
+	return nullptr;
 }
 
 std::optional<int> number(const std::string &s)
@@ -237,15 +264,17 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		if (a1 == "deviate" || a1 == "deviate2" || a1 == "deviate3") {  // book deviate.. X Y export <file> [leaf|ends|all]
 			const auto x = w.size() > 2 ? number(w[2]) : std::nullopt, y = w.size() > 3 ? number(w[3]) : std::nullopt;
 			if (!x || !y || *x < 0 || *x > 129 || *y < 0 || *y > (a1 == "deviate" ? 65 : 254)) return bad("script.bad_number");
-			const std::string which = w.size() > 6 ? lower(w[6]) : "leaf";
-			if (w.size() < 6 || w.size() > 7 || lower(w[4]) != "export" || (which != "leaf" && which != "ends" && which != "all"))
-				return bad("script.bad_word");
+			if (w.size() < 6 || lower(w[4]) != "export") return bad("script.bad_word");
+			std::string file, which;
+			if (const char *e = file_then_word(text_after(line, 5), &file, &which)) return bad(e);
+			which = which.empty() ? "leaf" : lower(which);
+			if (which != "leaf" && which != "ends" && which != "all") return bad("script.bad_word");
 			if (!eng_[0].alive) return bad("learn.no_engine");
 			if (eng_[0].probe_id) return bad("devexp.loading");  // (not known while the engine reads its book)
 			if (!eng_[0].exports) return bad("devexp.old_engine");
 			if (learning_) return bad("learn.busy");
 			// (the state is the one looked at above: the name of the file could not be given to the engine)
-			if (!start_deviate_export(a1, *x, *y, which, path(w[5]))) return bad("script.bad_file");
+			if (!start_deviate_export(a1, *x, *y, which, path(file))) return bad("script.bad_file");
 			wait(ScriptWait::Learn);
 			return true;
 		}

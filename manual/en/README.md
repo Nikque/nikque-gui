@@ -26,6 +26,6 @@ nikque GUI is a Windows GUI for the Othello engines Edax v4.5.5-nikque (C versio
 
 Versions covered:
 
-- nikque GUI 0.3.6
-- engines v4.5.5-nikque.27 and v4.5.5-newedax.12
-- Making the book lighter requires v4.5.5-nikque.20 or newedax.5, and writing the lines deviate walks v4.5.5-nikque.26 or newedax.11. Everything else also works with v4.5.5-nikque.19 and newedax.4.
+- nikque GUI 0.4.0
+- engines v4.5.5-nikque.27 and v4.5.5-newedax.13 (the 64-slot build)
+- Making the book lighter requires v4.5.5-nikque.20 or newedax.5, and writing the lines deviate walks v4.5.5-nikque.26, eval2.14 or newedax.11. Everything else also works with v4.5.5-nikque.19 and newedax.4.

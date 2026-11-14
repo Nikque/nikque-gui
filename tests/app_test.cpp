@@ -209,9 +209,28 @@ static void test_deviate_export()
 	CHECK(!a->learning_);
 	CHECK(logged(*a, lang::f("devexp.notinbook", {file})));
 
+	// a name with spaces in "..." (as the files of edax and tool), with or without the kind: the engine is given a name
+	// without spaces (it reads a name up to a space)
+	const std::wstring dir = a->temp_dir_ + L"\\ng dir sp";
+	CreateDirectoryW(dir.c_str(), nullptr);
+	const std::wstring spaced = dir + L"\\ng export.txt";
+	for (const std::string kind : {" all", ""}) {
+		CHECK(a->script_command("book deviate2 2 4 export \"" + narrow(spaced) + "\"" + kind, 1, &err));
+		const std::string head = "book deviate2 2 4 export ", tail = kind.empty() ? " leaf" : kind;
+		CHECK(a->learning_ && a->learn_cmd_.starts_with(head) && a->learn_cmd_.ends_with(tail));
+		CHECK(a->learn_cmd_.size() > head.size() + tail.size() &&
+		      a->learn_cmd_.substr(head.size(), a->learn_cmd_.size() - head.size() - tail.size()).find(' ') == std::string::npos);
+		feed(*a, "!Book deviate2 2 4 export" + tail + "...finished: 3 lines written (x)\n!echo: \"M" +
+		             std::to_string(a->learn_end_id_) + "\" is not on or off; ignored\n");
+		CHECK(!a->learning_);
+		CHECK(logged(*a, lang::f("devexp.written", {L"3", spaced})));
+	}
+
 	for (const char *bad : {"book deviate4 2 4 export x.txt", "book deviate2 2 4 export x.txt some", "book deviate2 2 export x.txt",
 	                        "book deviate 2 70 export x.txt", "book deviate2 2 255 export x.txt", "book deviate2 2 4 export",
-	                        "book deviate2 2 4 expand x.txt"})
+	                        "book deviate2 2 4 expand x.txt", "book deviate2 2 4 export a b.txt ends", "book deviate2 2 4 export \"a b.txt ends",
+	                        "book deviate2 2 4 export \"a b.txt\"ends", "book deviate2 2 4 export \"a b.txt\" ends more",
+	                        "book deviate2 2 4 export \"\" ends"})
 		CHECK(!a->script_command(bad, 1, &err));
 	CHECK(!a->learning_);
 }
@@ -644,6 +663,72 @@ static void test_mixed_lines()
 	feed(*a, "!WARNING: echo: \"@end id=53 ms=0\" is not on or off; ignored\n");
 	CHECK(a->book_id_ == 53 && a->requests_.count(53));
 	CHECK(logged(*a, L"WARNING: echo: \"@end id=53 ms=0\" is not on or off; ignored"));
+}
+
+// An engine reading an eval file not made for it (newedax.13 with the eval.dat of eval2 or of Edax 4.5) warns on its
+// error output and goes on with a wrong evaluation: the app says so in the log (each time, with the engine's own line)
+// and in the status line, and once in a box, after the lines are read (not while a script runs: it would stop it).
+static void test_eval_mismatch()
+{
+	const std::string warning = "!\n!WARNING: data\\eval.dat has no weights for the extra groups of this build (EVAL_SLOTS 64): "
+	                            "the evaluation is wrong; use the eval.dat of the release of this build\n";
+	const std::wstring main_log = lang::f("log.eval_mismatch", {lang::t("engine.main")});
+	{
+		auto a = make_app();
+		start_engine(*a);
+		int asked = 0;
+		std::wstring text;
+		UINT flags = 0;
+		a->message_hook_ = [&](const std::wstring &t, UINT f) {
+			++asked;
+			text = t;
+			flags = f;
+			return IDOK;
+		};
+		// another warning is only a line of the log
+		feed(*a, "!WARNING: echo: something else\n");
+		pump_app(*a);
+		CHECK(asked == 0 && !logged(*a, main_log));
+		feed(*a, warning);
+		CHECK(asked == 0);  // (not while the lines of the engine are read)
+		CHECK(logged(*a, main_log));
+		CHECK(logged(*a, L"has no weights for the extra groups of this build (EVAL_SLOTS 64)"));
+		CHECK(a->status_ == main_log);
+		pump_app(*a);
+		CHECK(asked == 1 && text == lang::f("warn.eval_mismatch", {lang::t("engine.main")}) && (flags & MB_ICONWARNING));
+		// again (the engines started again): the log, but no second box
+		const size_t lines = a->log_.size();
+		feed(*a, warning);
+		pump_app(*a);
+		CHECK(asked == 1 && a->log_.size() > lines);
+	}
+	{  // while a script runs: the log and the status line only
+		auto a = make_app();
+		start_engine(*a);
+		int asked = 0;
+		a->message_hook_ = [&](const std::wstring &, UINT) {
+			++asked;
+			return IDOK;
+		};
+		a->script_wait_ = App::ScriptWait::Task;
+		feed(*a, warning);
+		pump_app(*a);
+		CHECK(asked == 0 && logged(*a, main_log));
+		a->script_wait_ = App::ScriptWait::None;
+	}
+	{  // the search engine too (each engine of the app reads the eval file its section names)
+		auto a = make_app();
+		start_search_engine(*a);
+		a->message_hook_ = [&](const std::wstring &, UINT) { return IDOK; };
+		const std::wstring search_log = lang::f("log.eval_mismatch", {lang::t("engine.search")});
+		a->eng_[1].proc.send(warning);
+		for (const ULONGLONG end = GetTickCount64() + 10000; !logged(*a, search_log) && GetTickCount64() < end; Sleep(1)) {
+			MSG m{};
+			while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a->on_engine(m.wParam, m.lParam != 0);
+		}
+		CHECK(logged(*a, search_log));
+		pump_app(*a);
+	}
 }
 
 // The book settings changed while the counts and the levels are coming: what came of them stays (they do not
@@ -2856,6 +2941,8 @@ int main(int argc, char **argv)
 	test_mixed_lines();
 	std::printf("%s\n", "test_old_settings");
 	test_old_settings();
+	std::printf("%s\n", "test_eval_mismatch");
+	test_eval_mismatch();
 	std::printf("%s\n", "test_settings_keep_counts");
 	test_settings_keep_counts();
 	std::printf("%s\n", "test_command_letters");

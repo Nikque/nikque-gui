@@ -53,6 +53,7 @@ inline constexpr UINT WM_TASK = WM_APP + 2;  // a background job has ended
 inline constexpr UINT WM_SCRIPT = WM_APP + 3;  // the command script goes on (after the work that it waited for)
 inline constexpr UINT WM_REDUCE = WM_APP + 4;  // the count of book reduce has come (asked after the lines of the engine are read)
 inline constexpr UINT WM_BOOK_PEEK = WM_APP + 5;  // a position was looked up in the book file (the main engine is reading it)
+inline constexpr UINT WM_EVAL_WARN = WM_APP + 6;  // an engine reads an eval file not made for it (a box after the lines are read)
 // the timers of the main window
 inline constexpr UINT_PTR kTimerAnim = 1;
 inline constexpr UINT_PTR kTimerWatch = 2;     // the engines are watched every 5 seconds
@@ -773,6 +774,12 @@ public:
 	bool reduce_book(int x, int y, bool initial, bool ask);
 	void reduce_counted();  // the count has come (WM_REDUCE): asked, then the command runs
 	void reduce_answer(const Fields &f, bool done);  // the last line of the answer of the count
+	// an engine has warned that its eval file is not made for it (newedax.13 with an older eval.dat): the log and the
+	// status line each time, a box once (WM_EVAL_WARN: eval_mismatch_box, not while a script runs)
+	void eval_mismatch(int role);
+	void eval_mismatch_box();
+	bool eval_warned_ = false;  // the box has been asked for (once while the app runs)
+	int eval_warned_role_ = 0;
 	void watch_engines();
 	void stop_learning();
 	void continue_learning();

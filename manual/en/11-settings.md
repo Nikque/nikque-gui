@@ -30,6 +30,7 @@ When it cannot be written (a read-only folder, for example), the file stays as i
 |---|---|
 | `[engine]` | `kind=nikque\|newedax`, `search=1` (use the search engine) |
 | `[nikque]`, `[newedax]` | `dir` (engine folder), `exe` (`auto` or the file name), `eval`, `book` |
+| `[books]` | `recent1` to `recent8` (the list of Book → Recent books) |
 | `[analysis]` | `level`, `threads` (0: all), `hash` (bits of the hash table; 0: the engine's), `umi`, `x`, `y`, `base`, `stages`, `precision` (1: compute the book accuracy), `backward`, `forward` (the order of the search of the game), `compare` |
 | `[play]` | `level`, `opening` (`search\|best\|wide`), `width`, `until`, `clock`, `ponder`, `end_keep`, `end_list` |
 | `[view]` | `design`, `effects`, `language`, `numbers`, `opening_marks` (0: no marks on the lines of the openings), `record_box` (0: no box of the moves), `upper_moves` (1: the game written in capitals), `graph_end` (0: no ranges searched to the end on the graph), `pv` (1: the expected line on the board), `cell_info`, `fps`, `font`, `opening_file`, `screenshot_dir` |
@@ -38,6 +39,8 @@ When it cannot be written (a read-only folder, for example), the file stays as i
 | `[learn]` | the last learning command and its position (for Continue from the file saved on the way) |
 | `[learn_options]` | learning settings sent to the engine ([6. Learning](06-learning.md)) |
 | `[tools]` | the values of the tool windows, the last command of the command box |
+| `[bestlines]` | the values last chosen in Book → Write the best lines…: `loss` (largest loss in one move, 0 to 129), `depth` (last move followed, 1 to 60), `solved` (`follow`: follow past positions solved to the end, `stop`: a position solved to the end is an end), `which` (`all`: all the ends, `incomplete`: only the ends not solved to the end). Without them, `0`, `60`, `stop` and `all` |
+| `[devexport]` | the values last chosen in Book → Write the lines deviate walks…: `base` (`deviate\|deviate2\|deviate3`), `x` (0 to 129), `y` (0 to 254), `which` (`leaf\|ends\|all`). Without them, the accuracy base and the loss (per move, total) of Range of the analyses, and `leaf` |
 | `[script]` | `startup` (the script run at the start) |
 | `[keys]` | the keys |
 

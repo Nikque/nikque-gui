@@ -37,7 +37,7 @@
 | `uppermoves on\|off` | 棋譜を大文字で出力する・しない |
 | `graphend on\|off` | グラフに読み切りの範囲（今の Lv）を表示する・しない |
 | `book reload` | book を読み込み直す（メインエンジンを再起動） |
-| `book deviate\|deviate2\|deviate3 <X> <Y> export <ファイル> [leaf\|ends\|all]` | 今の局面からたどる進行をファイルに書き出す（book は広げない。leaf：広げる leaf の局面、ends：進行の端、all：進行の局面すべて。省くと leaf） |
+| `book deviate\|deviate2\|deviate3 <X> <Y> export <ファイル> [leaf\|ends\|all]` | 今の局面からたどる進行をファイルに書き出す（book は広げない。leaf：広げる leaf の局面、ends：進行の端、all：進行の局面すべて。省くと leaf。空白を含むファイル名は `"…"` で囲む） |
 | `book reduce <X> <Y> [here]` | book を軽くする（初期局面から。`here` は今の局面から）。数えてから、確かめずに行う |
 | `engine nikque\|newedax` | エンジンの系列 |
 | `design standard\|paw\|toggle` / `effects on\|subdued\|off` | デザイン（`toggle` で切り替え）・効果 |

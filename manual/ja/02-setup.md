@@ -4,7 +4,7 @@
 
 ## 置き方
 
-1. 配布の ZIP（`nikque-gui-0.3.6.zip`）を好きな場所に展開します。インストールは要りません。
+1. 配布の ZIP（`nikque-gui-0.4.0.zip`）を好きな場所に展開します。インストールは要りません。
 2. `nikque-gui.exe` を起動します。
 
 フォルダの中身：
@@ -15,7 +15,7 @@
 | `config.ini` | 設定（[11. 設定](11-settings.md)） |
 | `lang\*.txt` | 画面の言葉（日本語・English・简体中文・繁體中文） |
 | `engines\nikque` | C 版の Edax v4.5.5-nikque.27 |
-| `engines\newedax` | newedax.12（C++ 版） |
+| `engines\newedax` | newedax.13（C++ 版、64 枠の版） |
 | `readme.txt` | 短い説明 |
 
 - どちらのエンジンのフォルダにも、次のファイルがあります。
@@ -30,7 +30,11 @@
 「エンジン」→「nikque 系」・「newedax 系」で切り替えます。
 
 - どちらも同じ book の解析のコマンドを持ち、同じ結果を返します。
-- newedax は eval2 の系列の評価関数（別の `eval.dat`）を使います。
+- newedax.13 は、新しく学習し直した評価関数（64 枠）を使います。`eval.dat` は約 108 MB で、nikque の `eval.dat` とは別のものです。
+- newedax の `eval.dat` は、エンジンと同じ版の配布物のものを使ってください。前の版の newedax・eval2・nikque の `eval.dat` を読ませると、エンジンは動きますが評価が正しくありません。そのときは GUI がメッセージで知らせます（[12. 困ったときは](12-troubleshooting.md)）。
+- 48 枠の版（newedax の Release の `edax-4.5.5-newedax.13-48.zip`）は付いていません。使うときは、その ZIP を別のフォルダに展開し、`config.ini` の `[newedax]` の `dir=` にその `bin` のフォルダを書きます。48 枠の exe には、同じ ZIP の 48 枠の `eval.dat` を使ってください（取り違えると、メッセージは出ずに評価が正しくなくなります）。
+- メモリの目安：newedax.13 はエンジン 1 つで約 160 MB（`wEdax-x86-64.exe`）〜約 275 MB（AVX-512 の `wEdax-x86-64-v4.exe`）を使います。GUI はエンジンを最大 5 つ（メイン・探索用・ツール用・対局用・比較用）起動するので、すべて newedax だと約 0.8〜1.4 GB になります。置換表の大きさやスレッドの数で増え、book の大きさは別に足されます。
+- book の形式は変わらないので、前の版で使っていた book はそのまま読めます。ただし、前の版で学習した book の値は前の評価関数でつけたものです。
 
 ## book を置く
 

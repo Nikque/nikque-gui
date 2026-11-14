@@ -37,7 +37,7 @@ Rules:
 | `uppermoves on\|off` | write the game in capitals, or not |
 | `graphend on\|off` | the ranges searched to the end (the current Lv) on the graph, or not |
 | `book reload` | reads the book again (restarts the main engine) |
-| `book deviate\|deviate2\|deviate3 <X> <Y> export <file> [leaf\|ends\|all]` | writes the lines walked from the position shown to a file, without expanding the book (leaf: positions with a leaf to expand, ends: the ends of the lines, all: all their positions; leaf when left out) |
+| `book deviate\|deviate2\|deviate3 <X> <Y> export <file> [leaf\|ends\|all]` | writes the lines walked from the position shown to a file, without expanding the book (leaf: positions with a leaf to expand, ends: the ends of the lines, all: all their positions; leaf when left out; a file name with spaces in `"…"`) |
 | `book reduce <X> <Y> [here]` | makes the book lighter (from the initial position; `here`: from the position shown); counted, then done without asking |
 | `engine nikque\|newedax` | kind of engine |
 | `design standard\|paw\|toggle` / `effects on\|subdued\|off` | design (`toggle` switches it), effects |

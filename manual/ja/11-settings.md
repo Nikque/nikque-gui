@@ -32,6 +32,7 @@ GUI を閉じるときにも書き直されます。手で編集するときは�
 |---|---|
 | `[engine]` | `kind=nikque\|newedax`、`search=1`（探索用エンジンを使う） |
 | `[nikque]`・`[newedax]` | `dir`（エンジンのフォルダ）・`exe`（`auto` か exe の名前）・`eval`・`book` |
+| `[books]` | `recent1`〜`recent8`（「book」→「最近の book」の一覧） |
 | `[analysis]` | `level`（0〜60）・`threads`（0 は全部）・`hash`（ハッシュ表のビット数、0 はエンジンのまま）・`umi`・`x`・`y`・`base`・`stages`・`precision`（1 で精度を計算する）・`backward`・`forward`（棋譜の局面を裏で読む順）・`compare` |
 | `[play]` | `level`・`opening`（`search\|best\|wide`）・`width`・`until`・`clock`・`ponder`・`end_keep`・`end_list` |
 | `[view]` | `design`・`effects`・`language`・`numbers`・`opening_marks`（0 で定石の手順の印を出さない）・`record_box`（0 で棋譜の欄を出さない）・`upper_moves`（1 で棋譜を大文字で出力）・`graph_end`（0 でグラフに読み切りの範囲を出さない）・`pv`（1 で読み筋を盤に表示）・`cell_info`・`fps`・`font`・`opening_file`・`screenshot_dir` |
@@ -40,6 +41,8 @@ GUI を閉じるときにも書き直されます。手で編集するときは�
 | `[learn]` | 最後の学習のコマンドと局面（「途中保存から再開」が使う） |
 | `[learn_options]` | エンジンに送る学習の設定（[6. 学習](06-learning.md)） |
 | `[tools]` | ツールのウィンドウの値、コマンドの入力の最後のコマンド |
+| `[bestlines]` | 「book」→「最善の進行を書き出す…」で最後に選んだ値：`loss`（1 手の石損の上限、0〜129）・`depth`（たどる最後の手数、1〜60）・`solved`（`follow` で完全読みの先もたどる、`stop` で完全読みの局面を端にする）・`which`（`all` ですべての端、`incomplete` で完全読みに届かない端だけ）。無いときは `0`・`60`・`stop`・`all` |
+| `[devexport]` | 「book」→「deviate がたどる進行を書き出す…」で最後に選んだ値：`base`（`deviate\|deviate2\|deviate3`）・`x`（0〜129）・`y`（0〜254）・`which`（`leaf\|ends\|all`）。無いときは「調べる範囲」の精度の基準と石損（1 手・合計）、それに `leaf` |
 | `[script]` | `startup`（起動のときのスクリプト） |
 | `[keys]` | キーの割り当て |
 

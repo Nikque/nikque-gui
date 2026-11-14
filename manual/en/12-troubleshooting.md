@@ -5,6 +5,7 @@
 | What you see | Why, and what to do |
 |---|---|
 | "No engine" in the top bar | the engine executable or `eval.dat` is not found; the log shows where it was looked for. Check `dir=` and `exe=` of `[nikque]` and `[newedax]` in `config.ini` |
+| "the eval file (eval.dat) it reads is not made for this version of the engine" | newedax.13 reads the `eval.dat` of an earlier newedax, of eval2 or of nikque. The engine runs, but its evaluation is wrong; the log also shows the `WARNING` line of the engine. Use the included `engines\newedax\data\eval.dat` (from the release of the same version as the engine), and check `eval=` and `dir=` of `[newedax]` in `config.ini` (the message is shown once while the GUI runs; the log and the bottom line show it each time) |
 | "No book analyses (old engine)" | the engine is older than v4.5.5-nikque.19 or newedax.4. Use the included engines or later versions |
 | "This engine has no book reduce" | making the book lighter needs v4.5.5-nikque.20 or newedax.5. Use the included engines |
 | "This main engine cannot write the lines deviate walks" | writing the lines deviate walks needs v4.5.5-nikque.26, eval2.14 or newedax.11. An earlier engine would not read the word export and would expand the book, so the GUI does not send it. Use the included engines |

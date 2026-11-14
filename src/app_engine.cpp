@@ -759,6 +759,23 @@ void App::pump_search()
 	}
 }
 
+void App::eval_mismatch(int role)
+{
+	const std::wstring text = lang::f("log.eval_mismatch", {lang::t(kRoleNames[role])});
+	log(text);
+	set_status(text);
+	if (eval_warned_) return;
+	eval_warned_ = true;
+	eval_warned_role_ = role;
+	if (hwnd_) PostMessageW(hwnd_, WM_EVAL_WARN, 0, 0);  // (a message box is not shown while the lines of the engine are read)
+}
+
+void App::eval_mismatch_box()
+{
+	if (!script_.empty() || script_wait_ != ScriptWait::None) return;  // (a box would stop the script)
+	message(lang::f("warn.eval_mismatch", {lang::t(kRoleNames[eval_warned_role_])}), MB_ICONWARNING);
+}
+
 void App::on_engine(WPARAM tag, bool ended)
 {
 	const int role = static_cast<int>(tag & 7);
@@ -768,6 +785,18 @@ void App::on_engine(WPARAM tag, bool ended)
 	std::vector<std::string> lines;
 	s.proc.take_lines(lines);
 	if (role == 0) unmix_lines(lines, s.open);
+	// newedax.13 (and later) with an eval file not made for it: it goes on, but its evaluation is wrong (said after
+	// the lines are taken, so that it comes after the engine's own line in the log and stays in the status line)
+	struct AtEnd {
+		App *app = nullptr;
+		int role = 0;
+		~AtEnd()
+		{
+			if (app) app->eval_mismatch(role);
+		}
+	} eval_note;
+	for (const std::string &line : lines)
+		if (line.starts_with("WARNING") && line.find("has no weights for the extra groups") != std::string::npos) eval_note = {this, role};
 	const bool held = role == 0 && book_held();
 	bool changed = false, ask_missing = false, book_read = false;
 	const PosKey here = key_of(game_.now());
