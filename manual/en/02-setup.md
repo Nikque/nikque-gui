@@ -4,7 +4,7 @@
 
 ## Installing
 
-1. Unpack the ZIP (`nikque-gui-0.4.4.zip`) anywhere. No installation is needed.
+1. Unpack the ZIP (`nikque-gui-0.4.5.zip`) anywhere. No installation is needed.
 2. Start `nikque-gui.exe`.
 
 Contents of the folder:
@@ -14,8 +14,8 @@ Contents of the folder:
 | `nikque-gui.exe` | the GUI |
 | `config.ini` | settings ([11. Settings](11-settings.md)) |
 | `lang\*.txt` | the words of the screen (Japanese, English, Simplified and Traditional Chinese) |
-| `engines\nikque` | Edax v4.5.5-nikque.27, C version |
-| `engines\newedax` | newedax.14, C++ version (the 64-slot build) |
+| `engines\nikque` | Edax v4.5.5-nikque.28, C version |
+| `engines\newedax` | newedax.15, C++ version (the 64-slot build) |
 | `readme.txt` | short notes |
 
 - Each engine folder contains:
@@ -27,13 +27,13 @@ Contents of the folder:
 
 ## Mac (trial version)
 
-From 0.4.3 there is a Mac version (`nikque-gui-0.4.4-mac.zip`). It runs on macOS 13 or later, on Apple silicon and Intel Macs. It is still a trial version: please report anything that does not work well.
+From 0.4.3 there is a Mac version (`nikque-gui-0.4.5-mac.zip`). It runs on macOS 13 or later, on Apple silicon and Intel Macs. It is still a trial version: please report anything that does not work well.
 
 1. Unpack the ZIP anywhere.
-2. The app is not signed, so macOS stops it as it is. Once, at first, type this in Terminal (replace `~/Downloads/nikque-gui-0.4.4-mac` with the folder you unpacked):
+2. The app is not signed, so macOS stops it as it is. Once, at first, type this in Terminal (replace `~/Downloads/nikque-gui-0.4.5-mac` with the folder you unpacked):
 
    ```
-   xattr -dr com.apple.quarantine ~/Downloads/nikque-gui-0.4.4-mac
+   xattr -dr com.apple.quarantine ~/Downloads/nikque-gui-0.4.5-mac
    ```
 
    The app and the engines in the folder can then all be opened.
@@ -42,7 +42,7 @@ From 0.4.3 there is a Mac version (`nikque-gui-0.4.4-mac.zip`). It runs on macOS
 The folder holds the same as the Windows version: `config.ini`, `lang` and `engines` are next to `nikque GUI.app`.
 
 - Each engine folder holds `mEdax-arm64` (Apple silicon), `mEdax-x64-modern` (Intel) and `data/eval.dat`. With `exe=auto`, the one for your Mac is chosen.
-- The nikque engine is the one of the release ZIP of v4.5.5-nikque.27. The release of newedax.14 has no engine for macOS, so the newedax engine is built for this distribution from the source of its tag (64 slots; see `engines/newedax/SOURCE.txt`).
+- The nikque engine is the one of the release ZIP of v4.5.5-nikque.28. The release of newedax.15 has no engine for macOS, so the newedax engine is built for this distribution from the source of its tag (64 slots; see `engines/newedax/SOURCE.txt`).
 - Names are separated with `/`. Places written in `config.ini` (`dir=` and others) are written the Mac way (for example `/Users/name/books/book.dat`).
 - Keys: use Command (⌘) where Windows uses Ctrl (Command+C copies the moves, for example). A right click is a two-finger click on a trackpad, or a click with control held.
 - A file whose name contains a space cannot be given to the engine directly; the GUI gives it through a temporary folder (the log says so).
@@ -50,12 +50,12 @@ The folder holds the same as the Windows version: `config.ini`, `lang` and `engi
 
 ## Linux (trial version)
 
-From 0.4.4 there is a Linux version (`nikque-gui-0.4.4-linux.tar.gz`). It runs on x86-64 Ubuntu 22.04 or later (it should run on other distributions of that time or later), with GTK 3. It is still a trial version: please report anything that does not work well.
+From 0.4.4 there is a Linux version (`nikque-gui-0.4.5-linux.tar.gz`). It runs on x86-64 Ubuntu 22.04 or later (it should run on other distributions of that time or later), with GTK 3. It is still a trial version: please report anything that does not work well.
 
 1. Unpack it anywhere:
 
    ```
-   tar -xzf nikque-gui-0.4.4-linux.tar.gz
+   tar -xzf nikque-gui-0.4.5-linux.tar.gz
    ```
 
 2. Start `nikque-gui` in it (open it from the file manager, or type `./nikque-gui` in a terminal).
@@ -65,14 +65,14 @@ The folder holds the same as the Windows version: `config.ini`, `lang` and `engi
 - GTK 3 is there on a usual desktop Ubuntu. If it is not, install it with `sudo apt install libgtk-3-0`.
 - Japanese and Chinese are drawn with the fonts of the system (Noto Sans CJK and others). If the letters are boxes, install them with `sudo apt install fonts-noto-cjk`.
 - Each engine folder holds `lEdax-x86-64-v4` (AVX-512), `lEdax-x86-64-v3` (AVX2), `lEdax-x86-64` (other x64 CPUs) and `data/eval.dat`. With `exe=auto`, the one for your CPU is chosen.
-- The engines are built for this distribution from the sources of their tags (v4.5.5-nikque.27, and newedax.14 with 64 slots; see `engines/*/SOURCE.txt`). The Linux programs of the release ZIP of nikque.27 are for Ubuntu 24.04 or later, and the release of newedax.14 has no engine for Linux.
+- The engines are built for this distribution from the sources of their tags (v4.5.5-nikque.28, and newedax.15 with 64 slots; see `engines/*/SOURCE.txt`). The Linux programs of the release ZIP of nikque.28 are for Ubuntu 24.04 or later, and the release of newedax.15 has no engine for Linux.
 - Names are separated with `/`. Places written in `config.ini` (`dir=` and others) are written the Linux way (for example `/home/name/books/book.dat`).
 - A file whose name contains a space cannot be given to the engine directly; the GUI gives it through a temporary folder (the log says so).
 - If you move the folder, move `nikque-gui`, `config.ini`, `lang` and `engines` together.
 
 ## Android (trial version)
 
-From 0.4.4 there is an Android version (`nikque-gui-0.4.4-android.apk`), for arm64 devices (most phones and tablets of today) with Android 10 or later. It is still a trial version, checked on an emulator only (not yet on a real device): please report anything that does not work well.
+From 0.4.4 there is an Android version (`nikque-gui-0.4.5-android.apk`), for arm64 devices (most phones and tablets of today) with Android 10 or later. It is still a trial version, checked on an emulator only (not yet on a real device): please report anything that does not work well.
 
 1. Download the APK on the device, open it and install it. It is not from a store, so the system first asks you to allow installing apps from this source.
 2. Open "nikque GUI". The first start, and the first start after an update, take a moment to prepare the files.
@@ -92,7 +92,7 @@ Not in this version:
 
 Other notes:
 
-- Both engines are in the app (`aEdax-arm64-v8a` of the release ZIPs of v4.5.5-nikque.27 and newedax.14). They run as separate programs.
+- Both engines are in the app (`aEdax-arm64-v8a` of the release ZIPs of v4.5.5-nikque.28 and newedax.15). They run as separate programs.
 - newedax uses about 160 to 275 MB of memory for each engine. On a device with little memory, Engine → Edax nikque is lighter.
 - The engines may go on thinking while another app is in front. Quit with Back when you are done.
 - The APK is signed with a trial key. If a later version cannot be installed over this one (the system says the keys differ), uninstall this one first (the settings start again).
@@ -104,8 +104,8 @@ Switch with Engine → nikque type / newedax type. The first start uses the newe
 - Both engines have the same book analysis commands and give the same results.
 - From newedax.13 on, newedax uses a newly trained evaluation function (64 slots). Its `eval.dat` is about 108 MB and is not the `eval.dat` of nikque.
 - Use the `eval.dat` from the release of the same version as the newedax engine. With the `eval.dat` of an earlier newedax, of eval2 or of nikque, the engine runs but its evaluation is wrong. The GUI then tells you so in a message ([12. Troubleshooting](12-troubleshooting.md)).
-- The 48-slot build (`edax-4.5.5-newedax.14-48.zip` in the newedax release) is not included. To use it, unpack that ZIP into another folder and write its `bin` folder in `dir=` of `[newedax]` in `config.ini`. Use the 48-slot `eval.dat` of the same ZIP with the 48-slot exe files (if they are mixed up, the evaluation is wrong without any message).
-- Memory: one newedax.14 engine uses about 160 MB (`wEdax-x86-64.exe`) to about 275 MB (`wEdax-x86-64-v4.exe`, AVX-512). The GUI starts up to five engines (main, search, tool, game and compare), so with newedax for all of them it is about 0.8 to 1.4 GB. A larger hash table or more threads use more, and the book adds its own size.
+- The 48-slot build (`edax-4.5.5-newedax.15-48.zip` in the newedax release) is not included. To use it, unpack that ZIP into another folder and write its `bin` folder in `dir=` of `[newedax]` in `config.ini`. Use the 48-slot `eval.dat` of the same ZIP with the 48-slot exe files (if they are mixed up, the evaluation is wrong without any message).
+- Memory: one newedax.15 engine uses about 160 MB (`wEdax-x86-64.exe`) to about 275 MB (`wEdax-x86-64-v4.exe`, AVX-512). The GUI starts up to five engines (main, search, tool, game and compare), so with newedax for all of them it is about 0.8 to 1.4 GB. A larger hash table or more threads use more, and the book adds its own size.
 - The book format has not changed, so the books you used with earlier versions are read as they are. Their values, however, were made with the earlier evaluation function if they were learned with an earlier version.
 
 ## The book

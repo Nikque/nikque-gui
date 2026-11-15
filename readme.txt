@@ -24,19 +24,19 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・newedax）は G
 ---------
 - 配布の ZIP を好きな場所に展開し、nikque-gui.exe を起動します（インストールは要りません）。
   nikque-gui.exe と同じフォルダに config.ini・lang フォルダ・readme.txt があります。
-- Mac 版（nikque-gui-0.4.4-mac.zip、試しの版、macOS 13 以上、Apple シリコンと Intel）もあります。
+- Mac 版（nikque-gui-0.4.5-mac.zip、試しの版、macOS 13 以上、Apple シリコンと Intel）もあります。
   署名していないので、展開した後に一度だけ「ターミナル」で xattr -dr com.apple.quarantine <展開したフォルダ>
   を打ってから nikque GUI.app を開きます。エンジンは mEdax-arm64・mEdax-x64-modern です（説明書の「2. 置き方と起動」）。
-- Linux 版（nikque-gui-0.4.4-linux.tar.gz、試しの版、x86-64 の Ubuntu 22.04 以上、GTK 3）もあります。
+- Linux 版（nikque-gui-0.4.5-linux.tar.gz、試しの版、x86-64 の Ubuntu 22.04 以上、GTK 3）もあります。
   展開して nikque-gui を起動します。エンジンは lEdax-x86-64-v4・-v3・lEdax-x86-64 です（説明書の「2. 置き方と起動」）。
-- Android 版（nikque-gui-0.4.4-android.apk、試しの版、Android 10 以上の arm64 の端末）もあります。
+- Android 版（nikque-gui-0.4.5-android.apk、試しの版、Android 10 以上の arm64 の端末）もあります。
   対局・解析・棋譜までで、book の学習・棋譜リスト・スクリプト・ファイルを選ぶ機能はありません（説明書の「2. 置き方と起動」）。
-- エンジンが付いています：engines\nikque に C 版の Edax v4.5.5-nikque.27、engines\newedax に
-  newedax.14 の 64 枠の版（どちらも wEdax-x86-64-v4.exe・-v3.exe・wEdax-x86-64.exe と data\eval.dat）。
+- エンジンが付いています：engines\nikque に C 版の Edax v4.5.5-nikque.28、engines\newedax に
+  newedax.15 の 64 枠の版（どちらも wEdax-x86-64-v4.exe・-v3.exe・wEdax-x86-64.exe と data\eval.dat）。
   0.2.0 までの config.ini（系の名前 [nikque18]）も、そのまま読めます。
-- newedax.14 の eval.dat（約 108 MB）は、エンジンと同じ版の配布物のものを使います。前の版の newedax・eval2・
+- newedax.15 の eval.dat（約 108 MB）は、エンジンと同じ版の配布物のものを使います。前の版の newedax・eval2・
   nikque の eval.dat を読ませると、エンジンは動きますが評価が正しくありません（GUI がメッセージで知らせます）。
-  newedax.14 はエンジン 1 つで約 160〜275 MB のメモリを使います（説明書の「2. 置き方と起動」）。
+  newedax.15 はエンジン 1 つで約 160〜275 MB のメモリを使います（説明書の「2. 置き方と起動」）。
 - すでにあるエンジンのフォルダを使うときは、config.ini の [nikque]・[newedax] の dir= で指します。
   GUI には book の解析のコマンド（book moveinfo など）が要るので、v4.5.5-nikque.19・newedax.4 以降を
   使います。古いバージョンでは上の帯に「book の解析なし（古いエンジン）」と出て、book の値・木・book タブは
@@ -229,19 +229,19 @@ The GUI is under the MIT License. The engines (Edax nikque, newedax) are GPL and
 -------------
 - Unpack the ZIP anywhere and start nikque-gui.exe (no installation). config.ini, the lang folder and
   readme.txt are next to nikque-gui.exe.
-- There is also a Mac version (nikque-gui-0.4.4-mac.zip, a trial version, macOS 13 or later, Apple silicon and Intel).
+- There is also a Mac version (nikque-gui-0.4.5-mac.zip, a trial version, macOS 13 or later, Apple silicon and Intel).
   It is not signed: after unpacking, type xattr -dr com.apple.quarantine <the folder> once in Terminal, then open
   nikque GUI.app. Its engines are mEdax-arm64 and mEdax-x64-modern (manual, "2. Setting up").
-- There is also a Linux version (nikque-gui-0.4.4-linux.tar.gz, a trial version, x86-64 Ubuntu 22.04 or later, GTK 3).
+- There is also a Linux version (nikque-gui-0.4.5-linux.tar.gz, a trial version, x86-64 Ubuntu 22.04 or later, GTK 3).
   Unpack it and start nikque-gui. Its engines are lEdax-x86-64-v4, -v3 and lEdax-x86-64 (manual, "2. Setting up").
-- There is also an Android version (nikque-gui-0.4.4-android.apk, a trial version, arm64 devices with Android 10 or later).
+- There is also an Android version (nikque-gui-0.4.5-android.apk, a trial version, arm64 devices with Android 10 or later).
   It plays, analyses and keeps the moves; it has no book learning, game lists, scripts or file commands (manual, "2. Setting up").
-- The engines are included: engines\nikque holds Edax v4.5.5-nikque.27 (C version), engines\newedax holds
-  the 64-slot build of newedax.14 (each with wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe and data\eval.dat).
+- The engines are included: engines\nikque holds Edax v4.5.5-nikque.28 (C version), engines\newedax holds
+  the 64-slot build of newedax.15 (each with wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe and data\eval.dat).
   A config.ini of 0.2.0 or before (section [nikque18]) is read as it is.
-- newedax.14 needs the eval.dat (about 108 MB) of the release of the same version. With the eval.dat of an earlier
+- newedax.15 needs the eval.dat (about 108 MB) of the release of the same version. With the eval.dat of an earlier
   newedax, of eval2 or of nikque, the engine runs but its evaluation is wrong (the GUI tells you so in a message).
-  One newedax.14 engine uses about 160 to 275 MB of memory (manual, "2. Setting up").
+  One newedax.15 engine uses about 160 to 275 MB of memory (manual, "2. Setting up").
 - To use engine folders you already have, point to them with dir= in [nikque] and [newedax] of config.ini.
   The GUI needs the book analyses (book moveinfo and the others) of v4.5.5-nikque.19 or newedax.4 or later:
   with an older engine the top bar says "No book analyses (old engine)" and the book values, the tree and
@@ -380,16 +380,16 @@ GUI 为 MIT 许可。引擎（Edax nikque、newedax）为 GPL，作为独立程�
 2. 放置
 -------
 - 将 ZIP 解压到任意位置，启动 nikque-gui.exe（无需安装）。config.ini、lang 文件夹、readme.txt 在 nikque-gui.exe 旁。
-- 另有 Mac 版（nikque-gui-0.4.4-mac.zip，试用版，macOS 13 以上，Apple 芯片与 Intel）。因未签名，解压后请先在「终端」中
+- 另有 Mac 版（nikque-gui-0.4.5-mac.zip，试用版，macOS 13 以上，Apple 芯片与 Intel）。因未签名，解压后请先在「终端」中
   执行一次 xattr -dr com.apple.quarantine <解压的文件夹>，再打开 nikque GUI.app。引擎为 mEdax-arm64、mEdax-x64-modern（说明书「2.」）。
-- 另有 Linux 版（nikque-gui-0.4.4-linux.tar.gz，试用版，x86-64 的 Ubuntu 22.04 以上，GTK 3）。解压后启动 nikque-gui。
+- 另有 Linux 版（nikque-gui-0.4.5-linux.tar.gz，试用版，x86-64 的 Ubuntu 22.04 以上，GTK 3）。解压后启动 nikque-gui。
   引擎为 lEdax-x86-64-v4、-v3、lEdax-x86-64（说明书「2.」）。
-- 另有 Android 版（nikque-gui-0.4.4-android.apk，试用版，Android 10 以上的 arm64 设备）。可对局、分析、保存棋谱；
+- 另有 Android 版（nikque-gui-0.4.5-android.apk，试用版，Android 10 以上的 arm64 设备）。可对局、分析、保存棋谱；
   没有 book 学习、棋谱列表、脚本和选择文件的功能（说明书「2.」）。
-- 附带引擎：engines\nikque 为 C 版 Edax v4.5.5-nikque.27，engines\newedax 为 newedax.14 的 64 槽版
+- 附带引擎：engines\nikque 为 C 版 Edax v4.5.5-nikque.28，engines\newedax 为 newedax.15 的 64 槽版
   （各含 wEdax-x86-64-v4.exe、-v3.exe、wEdax-x86-64.exe 与 data\eval.dat）。0.2.0 以前的 config.ini（[nikque18]）也可直接读取。
-- newedax.14 的 eval.dat（约 108 MB）须使用与引擎同一版本的发布包中的文件。读取旧版 newedax、eval2、nikque 的 eval.dat 时，
-  引擎仍会运行，但评估不正确（GUI 会以消息提示）。newedax.14 每个引擎约使用 160～275 MB 内存（说明书「2.」）。
+- newedax.15 的 eval.dat（约 108 MB）须使用与引擎同一版本的发布包中的文件。读取旧版 newedax、eval2、nikque 的 eval.dat 时，
+  引擎仍会运行，但评估不正确（GUI 会以消息提示）。newedax.15 每个引擎约使用 160～275 MB 内存（说明书「2.」）。
 - 使用已有的引擎文件夹时，在 config.ini 的 [nikque]、[newedax] 的 dir= 指定。GUI 需要 v4.5.5-nikque.19、newedax.4 以后的
   book 分析命令（book moveinfo 等）；旧版本时上方栏显示「无 book 分析（旧引擎）」，不显示 book 值、树与 book 标签页。
   减小 book 的功能（book reduce）需要 v4.5.5-nikque.20、newedax.5 以后。导出 deviate 追踪的进行需要 v4.5.5-nikque.26、eval2.14、newedax.11 以后。
@@ -434,16 +434,16 @@ GUI 為 MIT 授權。引擎（Edax nikque、newedax）為 GPL，作為獨立程�
 2. 放置
 -------
 - 將 ZIP 解壓到任意位置，啟動 nikque-gui.exe（無需安裝）。config.ini、lang 資料夾、readme.txt 在 nikque-gui.exe 旁。
-- 另有 Mac 版（nikque-gui-0.4.4-mac.zip，試用版，macOS 13 以上，Apple 晶片與 Intel）。因未簽署，解壓後請先在「終端機」中
+- 另有 Mac 版（nikque-gui-0.4.5-mac.zip，試用版，macOS 13 以上，Apple 晶片與 Intel）。因未簽署，解壓後請先在「終端機」中
   執行一次 xattr -dr com.apple.quarantine <解壓的資料夾>，再開啟 nikque GUI.app。引擎為 mEdax-arm64、mEdax-x64-modern（說明書「2.」）。
-- 另有 Linux 版（nikque-gui-0.4.4-linux.tar.gz，試用版，x86-64 的 Ubuntu 22.04 以上，GTK 3）。解壓後啟動 nikque-gui。
+- 另有 Linux 版（nikque-gui-0.4.5-linux.tar.gz，試用版，x86-64 的 Ubuntu 22.04 以上，GTK 3）。解壓後啟動 nikque-gui。
   引擎為 lEdax-x86-64-v4、-v3、lEdax-x86-64（說明書「2.」）。
-- 另有 Android 版（nikque-gui-0.4.4-android.apk，試用版，Android 10 以上的 arm64 裝置）。可對局、分析、保存棋譜；
+- 另有 Android 版（nikque-gui-0.4.5-android.apk，試用版，Android 10 以上的 arm64 裝置）。可對局、分析、保存棋譜；
   沒有 book 學習、棋譜列表、腳本和選擇檔案的功能（說明書「2.」）。
-- 附帶引擎：engines\nikque 為 C 版 Edax v4.5.5-nikque.27，engines\newedax 為 newedax.14 的 64 槽版
+- 附帶引擎：engines\nikque 為 C 版 Edax v4.5.5-nikque.28，engines\newedax 為 newedax.15 的 64 槽版
   （各含 wEdax-x86-64-v4.exe、-v3.exe、wEdax-x86-64.exe 與 data\eval.dat）。0.2.0 以前的 config.ini（[nikque18]）也可直接讀取。
-- newedax.14 的 eval.dat（約 108 MB）須使用與引擎同一版本的發佈套件中的檔案。讀取舊版 newedax、eval2、nikque 的 eval.dat 時，
-  引擎仍會執行，但評估不正確（GUI 會以訊息提示）。newedax.14 每個引擎約使用 160～275 MB 記憶體（說明書「2.」）。
+- newedax.15 的 eval.dat（約 108 MB）須使用與引擎同一版本的發佈套件中的檔案。讀取舊版 newedax、eval2、nikque 的 eval.dat 時，
+  引擎仍會執行，但評估不正確（GUI 會以訊息提示）。newedax.15 每個引擎約使用 160～275 MB 記憶體（說明書「2.」）。
 - 使用已有的引擎資料夾時，在 config.ini 的 [nikque]、[newedax] 的 dir= 指定。GUI 需要 v4.5.5-nikque.19、newedax.4 以後的
   book 分析命令（book moveinfo 等）；舊版本時上方列顯示「無 book 分析（舊引擎）」，不顯示 book 值、樹與 book 分頁。
   減小 book 的功能（book reduce）需要 v4.5.5-nikque.20、newedax.5 以後。匯出 deviate 追蹤的進行需要 v4.5.5-nikque.26、eval2.14、newedax.11 以後。
