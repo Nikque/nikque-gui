@@ -3,7 +3,7 @@
 // of a book, "XADEKOOB" and "NEDXBOOK"). A book not in that order is not looked up: the values wait for the engine.
 #pragma once
 
-#include <windows.h>
+#include "platform.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -49,14 +49,14 @@ public:
 	bool open(const std::wstring &path);
 	void close();
 	std::optional<BookRecord> find(const Position &p);
-	bool usable() const noexcept { return file_ != INVALID_HANDLE_VALUE && !failed_; }
+	bool usable() const noexcept { return file_.is_open() && !failed_; }
 
 private:
 	bool read(u64 at, unsigned char *out, size_t size, size_t *got);
 	bool find_bounds(u32 target, u64 *from);
 	u32 bucket(u64 player, u64 opponent) const noexcept;
 
-	HANDLE file_ = INVALID_HANDLE_VALUE;
+	RandomFile file_;
 	int form_ = 1;              // 1 "XADEKOOB" (Edax), 2 "NEDXBOOK" (newedax)
 	u64 start_ = 0, end_ = 0;   // where the positions begin and end
 	u32 buckets_ = 0;
@@ -92,7 +92,7 @@ public:
 	BookPeek(const BookPeek &) = delete;
 	BookPeek &operator=(const BookPeek &) = delete;
 	~BookPeek() { stop(); }
-	void start(const std::wstring &path, HWND notify, UINT msg, unsigned generation);
+	void start(const std::wstring &path, NativeWindow notify, unsigned msg, unsigned generation);
 	void stop();
 	bool started() const noexcept { return thread_.joinable(); }  // since start(), until stop() (also when they have ended)
 	bool running() const noexcept { return thread_.joinable() && !ended_; }  // they go on: positions asked are looked up
@@ -100,7 +100,7 @@ public:
 	void take(std::vector<BookPeekAnswer> &out);
 
 private:
-	void run(std::wstring path, HWND notify, UINT msg, unsigned generation);
+	void run(std::wstring path, NativeWindow notify, unsigned msg, unsigned generation);
 
 	std::thread thread_;
 	std::mutex mutex_;

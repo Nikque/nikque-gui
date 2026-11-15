@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "../src/icon_draw.h"
+#include "../src/win/icon_draw.h"
 
 using Microsoft::WRL::ComPtr;
 

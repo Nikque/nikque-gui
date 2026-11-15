@@ -171,8 +171,7 @@ u32 BookFile::bucket(u64 player, u64 opponent) const noexcept
 
 void BookFile::close()
 {
-	if (file_ != INVALID_HANDLE_VALUE) CloseHandle(file_);
-	file_ = INVALID_HANDLE_VALUE;
+	file_.close();
 	marks_.clear();
 	buckets_ = 0;
 	failed_ = false;
@@ -180,35 +179,22 @@ void BookFile::close()
 
 bool BookFile::read(u64 at, unsigned char *out, size_t size, size_t *got)
 {
-	OVERLAPPED o{};
-	o.Offset = static_cast<DWORD>(at);
-	o.OffsetHigh = static_cast<DWORD>(at >> 32);
-	DWORD n = 0;
-	if (!ReadFile(file_, out, static_cast<DWORD>(size), &n, &o)) {
-		if (GetLastError() != ERROR_HANDLE_EOF) return false;
-		n = 0;
-	}
-	*got = n;
-	return true;
+	return file_.read(at, out, size, got);
 }
 
 bool BookFile::open(const std::wstring &path)
 {
 	close();
-	// (shared with the engine, which reads the file and may give it another name; but while this handle is open no file
-	// can be put in its place, as the engine saves its book: the app closes it before that)
-	file_ = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
-	                    FILE_FLAG_RANDOM_ACCESS, nullptr);
-	if (file_ == INVALID_HANDLE_VALUE) return false;
-	LARGE_INTEGER size{};
+	if (!file_.open(path)) return false;
 	std::vector<unsigned char> head(kMaxHeader2 + kSample);
 	size_t got = 0;
-	if (!GetFileSizeEx(file_, &size) || !read(0, head.data(), head.size(), &got) || got < kHeader2) {
+	const auto size = file_.size();
+	if (!size || !read(0, head.data(), head.size(), &got) || got < kHeader2) {
 		close();
 		return false;
 	}
 	u64 count = 0;
-	end_ = static_cast<u64>(size.QuadPart);
+	end_ = *size;
 	const size_t header2 = take<unsigned short>(head.data() + 10);  // (the size of the header of form 2)
 	if (std::memcmp(head.data(), "XADEKOOB", 8) == 0 && head[8] == 4) {
 		form_ = 1;
@@ -407,7 +393,7 @@ BookPeekAnswer book_peek_moves(BookFile &file, const Position &p, const std::ato
 	return a;
 }
 
-void BookPeek::start(const std::wstring &path, HWND notify, UINT msg, unsigned generation)
+void BookPeek::start(const std::wstring &path, NativeWindow notify, unsigned msg, unsigned generation)
 {
 	stop();
 	quit_ = false;
@@ -447,7 +433,7 @@ void BookPeek::take(std::vector<BookPeekAnswer> &out)
 	answers_.clear();
 }
 
-void BookPeek::run(std::wstring path, HWND notify, UINT msg, unsigned generation)
+void BookPeek::run(std::wstring path, NativeWindow notify, unsigned msg, unsigned generation)
 {
 	BookFile file;
 	if (!file.open(path)) return;
@@ -467,7 +453,7 @@ void BookPeek::run(std::wstring path, HWND notify, UINT msg, unsigned generation
 			std::lock_guard lock(mutex_);
 			answers_.push_back(std::move(a));
 		}
-		PostMessageW(notify, msg, 0, 0);
+		post_message(notify, msg);
 	}
 }
 

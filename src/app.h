@@ -3,7 +3,6 @@
 // menu commands) and app_engine.cpp (the engines and their answers).
 #pragma once
 
-#include <windows.h>
 
 #include <chrono>
 #include <deque>
@@ -26,6 +25,8 @@
 #include "ini.h"
 #include "keys.h"
 #include "openings.h"
+#include "platform.h"
+#include "stop.h"
 #include "theme.h"
 
 namespace ng {
@@ -40,7 +41,6 @@ std::string line_commands(const Position &start, const std::string &moves);
 // where it saves the book when it has changed
 bool replaces_book_file(std::string_view commands);
 // app_tools.cpp: files and small windows
-bool file_exists(const std::wstring &p);       // a file (not a folder)
 std::wstring file_name(const std::wstring &p);  // the name without its folders
 // a name as it is with a drive or "\\" at its start, else in the folder `base`
 std::wstring absolute(const std::wstring &base, const std::string &name);
@@ -295,20 +295,20 @@ int name_index(const char *const (&names)[N], std::string_view name)
 struct Layout {
 	float scale = 1;
 	float font = 14, font_s = 11, row = 24;
-	D2D1_RECT_F bar{}, board_area{}, panel{}, log{};
-	D2D1_RECT_F opening{};  // the row of the opening name under the board (empty without names)
+	RectF bar{}, board_area{}, panel{}, log{};
+	RectF opening{};  // the row of the opening name under the board (empty without names)
 	// board: whole pixels
 	int cell = 40, line = 1, frame = 2;
 	int bx = 0, by = 0, board_px = 0;  // top left of the frame, size with the frame
 	bool panel_below = false;
-	D2D1_RECT_F tabs{}, range{}, table{}, bookmarks{}, splitter{}, graph{}, panel_split{};
-	D2D1_RECT_F record{}, record_text{}, record_copy{}, record_paste{};  // the row of the moves as text, above the graph
+	RectF tabs{}, range{}, table{}, bookmarks{}, splitter{}, graph{}, panel_split{};
+	RectF record{}, record_text{}, record_copy{}, record_paste{};  // the row of the moves as text, above the graph
 	float graph_room = 0;  // the height the table and the graph share (graph_ratio_ is of it)
 	struct Field {
-		D2D1_RECT_F box{}, track{};
+		RectF box{}, track{};
 	} fx, fy;
 
-	D2D1_RECT_F cell_rect(int sq) const
+	RectF cell_rect(int sq) const
 	{
 		const float x = static_cast<float>(bx + frame + line + (sq & 7) * (cell + line));
 		const float y = static_cast<float>(by + frame + line + (sq >> 3) * (cell + line));
@@ -318,8 +318,8 @@ struct Layout {
 };
 
 // a point in a rectangle of the layout (its left and top edges are in it, its right and bottom edges are not)
-inline bool inside(const D2D1_RECT_F &r, float x, float y) { return x >= r.left && x < r.right && y >= r.top && y < r.bottom; }
-inline bool inside(const D2D1_RECT_F &r, POINT p) { return inside(r, static_cast<float>(p.x), static_cast<float>(p.y)); }
+inline bool inside(const RectF &r, float x, float y) { return x >= r.left && x < r.right && y >= r.top && y < r.bottom; }
+inline bool inside(const RectF &r, POINT p) { return inside(r, static_cast<float>(p.x), static_cast<float>(p.y)); }
 
 // what one square shows
 struct CellView {
@@ -384,6 +384,17 @@ public:
 	App(const App &) = delete;
 	App &operator=(const App &) = delete;
 	int run(HINSTANCE inst, int show);
+	// the shared parts of run(): before the window is made (the folders, config.ini), and after it is shown (the
+	// engines, the startup script)
+	void prepare();
+	void started();
+	// the timers of the window (kTimer...): `id` comes to the window every `ms`
+	void set_timer(UINT_PTR id, UINT ms);
+	void kill_timer(UINT_PTR id);
+	// a message to the window, handled when the window gets to it (WM_TASK, WM_SCRIPT, ...)
+	void post(UINT msg);
+	// the window takes input (no message box or other modal window is open over it)
+	bool window_enabled() const;
 	int message(const std::wstring &text, UINT flags);  // a message box with the title of the app (MessageBoxW)
 	// tests: the message boxes answered without being shown (the text and the flags of message(); its answer)
 	std::function<int(const std::wstring &, UINT)> message_hook_;
@@ -401,9 +412,9 @@ public:
 	AnalysisCache cache_;
 	Openings openings_;
 	bool show_opening_ = true;
-	D2D1_RECT_F opening_rect_{};   // the opening name under the board (a click hides it)
+	RectF opening_rect_{};   // the opening name under the board (a click hides it)
 	// the small menus of book commands (greyed as a whole while the book is learning)
-	HMENU book_menu_ = nullptr, keep_menu_ = nullptr, learn_menu_ = nullptr, leaf_menu_ = nullptr;
+	MenuRef book_menu_ = nullptr, keep_menu_ = nullptr, learn_menu_ = nullptr, leaf_menu_ = nullptr;
 
 	Design design_ = Design::Standard;
 	Effects effects_ = Effects::On;
@@ -477,7 +488,7 @@ public:
 	int missing_id_ = 0;
 	MissingList missing_;
 	int missing_scroll_ = 0;
-	std::vector<std::pair<int, D2D1_RECT_F>> missing_rects_;  // book tab: index of the line
+	std::vector<std::pair<int, RectF>> missing_rects_;  // book tab: index of the line
 	// the fixed record (compared with the game)
 	std::vector<int> fixed_;
 	Position fixed_start_{};
@@ -547,7 +558,7 @@ public:
 	int list_book_limit_ = 10000;     // the lines of the book read into the list, at most
 	Position list_book_start_{};
 	int list_book_id_ = 0;            // the book lines asked of the main engine
-	std::vector<std::pair<int, D2D1_RECT_F>> list_rects_;
+	std::vector<std::pair<int, RectF>> list_rects_;
 	// the kept lines (no limit), saved next to the exe
 	struct Kept {
 		Position start;
@@ -560,7 +571,7 @@ public:
 	int kept_sel_ = -1;
 	int kept_scroll_ = 0;      // the first bookmark shown in their row
 	int kept_hover_ = -1;      // the bookmark under the mouse
-	std::vector<std::pair<int, D2D1_RECT_F>> kept_rects_;
+	std::vector<std::pair<int, RectF>> kept_rects_;
 
 	// the tree of the book lines from a position (the root): the game up to the root, and the nodes open, each
 	// as its moves from the root (no passes)
@@ -570,13 +581,13 @@ public:
 	int tree_scroll_ = 0;
 	struct TreeRow {
 		std::vector<int> path;  // the moves from the root to the position after this row's move
-		D2D1_RECT_F rect{}, arrow{};
+		RectF rect{}, arrow{};
 		bool can_open = false;
 	};
 	std::vector<TreeRow> tree_rows_;  // as drawn
 
 	// one background job at a time (work on the list, the search of a line); its end runs on the window's thread
-	std::jthread task_;
+	ng::jthread task_;
 	bool task_busy_ = false;
 	std::wstring task_label_;
 	std::chrono::steady_clock::time_point task_t0_{};
@@ -643,12 +654,12 @@ public:
 	std::wstring status_;          // the line shown in the log row (hover, messages)
 
 	// places found while drawing, for the mouse
-	std::vector<std::pair<Column, D2D1_RECT_F>> col_rects_;    // table header cells
-	std::vector<std::pair<int, D2D1_RECT_F>> row_rects_;       // table rows: square
-	std::vector<std::pair<int, D2D1_RECT_F>> record_rects_;    // record tab: number of moves
-	std::vector<std::pair<int, D2D1_RECT_F>> tab_rects_;
-	D2D1_RECT_F legend_rects_[8]{};
-	D2D1_RECT_F graph_plot_{};
+	std::vector<std::pair<Column, RectF>> col_rects_;    // table header cells
+	std::vector<std::pair<int, RectF>> row_rects_;       // table rows: square
+	std::vector<std::pair<int, RectF>> record_rects_;    // record tab: number of moves
+	std::vector<std::pair<int, RectF>> tab_rects_;
+	RectF legend_rects_[8]{};
+	RectF graph_plot_{};
 	int table_scroll_ = 0;
 
 	// animation
@@ -670,7 +681,7 @@ public:
 	void paint();
 	void paint_animation();
 	void paint_bar();  // the bar at the top alone (the clock of a game each second)
-	void invalidate() { InvalidateRect(hwnd_, nullptr, FALSE); }
+	void invalidate() { invalidate_window(hwnd_); }
 	void update_animation_timer();
 	void prepare_glows();
 	double now_s() const;
@@ -868,7 +879,7 @@ public:
 	int move_number_at(int sq) const;
 
 	// ---- app_list.cpp: the game list, the search, the kept lines, background jobs
-	void run_task(const std::wstring &label, std::function<std::function<void()>(std::stop_token)> work);
+	void run_task(const std::wstring &label, std::function<std::function<void()>(ng::stop_token)> work);
 	void task_ended();
 	void cancel_task();
 	void list_command(int id);

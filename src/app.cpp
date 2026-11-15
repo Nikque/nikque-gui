@@ -1,9 +1,6 @@
 #include "app.h"
 
-#include <windows.h>
-
-#include <shellapi.h>
-#include <windowsx.h>
+#include "platform.h"
 
 #include <algorithm>
 #include <bit>
@@ -18,18 +15,6 @@
 namespace ng {
 
 namespace {
-
-LRESULT CALLBACK wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
-{
-	App *app = reinterpret_cast<App *>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
-	if (msg == WM_NCCREATE) {
-		app = static_cast<App *>(reinterpret_cast<CREATESTRUCTW *>(lp)->lpCreateParams);
-		SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(app));
-		app->hwnd_ = hwnd;
-	}
-	if (app) return app->proc(hwnd, msg, wp, lp);
-	return DefWindowProcW(hwnd, msg, wp, lp);
-}
 
 // 974, 12.3K, 974K, 1.2M, 3.4G
 std::wstring compact(long long n)
@@ -79,217 +64,33 @@ int Layout::square_at(float x, float y) const
 	return cy * 8 + cx;
 }
 
-int App::run(HINSTANCE inst, int show)
+// ---- the start (App::run of each system calls these around the making of its window)
+
+void App::prepare()
 {
-	inst_ = inst;
 	measure::start();
-	wchar_t path[MAX_PATH * 4];
-	GetModuleFileNameW(nullptr, path, static_cast<DWORD>(std::size(path)));
-	exe_dir_ = path;
+	exe_dir_ = exe_path();
 	exe_dir_.resize(exe_dir_.find_last_of(L"\\/"));
-	ini_path_ = exe_dir_ + L"\\config.ini";
-	wchar_t tmp[MAX_PATH];
-	GetTempPathW(MAX_PATH, tmp);
-	temp_dir_ = std::wstring(tmp) + L"nikque-gui-" + std::to_wstring(GetCurrentProcessId());
-	CreateDirectoryW(temp_dir_.c_str(), nullptr);
+	ini_path_ = path_join(exe_dir_, L"config.ini");
+	temp_dir_ = temp_folder() + L"nikque-gui-" + std::to_wstring(process_id());
+	make_dir(temp_dir_);
 
 	load_config();
 	// the numbers of the requests from near the end of their range (measuring build only: a test of their turn)
 	if constexpr (measure::kOn) next_id_ = ini_.get_int("measure", "first_id", 0, 0, kMaxRequestId);
+}
 
-	WNDCLASSEXW wc{sizeof wc};
-	wc.style = CS_DBLCLKS;
-	wc.lpfnWndProc = wndproc;
-	wc.hInstance = inst;
-	wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-	wc.hIcon = LoadIconW(inst, MAKEINTRESOURCEW(design_ == Design::Paw ? IDI_PAW : IDI_APP));
-	wc.lpszClassName = L"NikqueGuiMain";
-	RegisterClassExW(&wc);
-
-	const int x = ini_.get_int("window", "x", CW_USEDEFAULT, -32000, 32000);
-	const int y = ini_.get_int("window", "y", CW_USEDEFAULT, -32000, 32000);
-	// the default size is for 96 DPI
-	const int sdpi = static_cast<int>(GetDpiForSystem());
-	const int w = ini_.get_int("window", "w", MulDiv(1280, sdpi, 96), 400, 16000);
-	const int h = ini_.get_int("window", "h", MulDiv(820, sdpi, 96), 300, 16000);
-	CreateWindowExW(0, wc.lpszClassName, lang::t("app.title").c_str(), WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, CW_USEDEFAULT,
-	                CW_USEDEFAULT, w, h, nullptr, nullptr, inst, this);
-	if (!hwnd_) return 1;
-	if (x != CW_USEDEFAULT && y != CW_USEDEFAULT) {
-		RECT r{x, y, x + w, y + h};
-		if (MonitorFromRect(&r, MONITOR_DEFAULTTONULL)) SetWindowPos(hwnd_, nullptr, x, y, w, h, SWP_NOZORDER);
-	}
-	if (!gfx_.init(hwnd_)) {
-		message(lang::t("err.d2d"), MB_ICONERROR);
-		return 1;
-	}
-	DragAcceptFiles(hwnd_, TRUE);
-	create_record_box();
-	build_menu();
-	set_window_icon();
-	gfx_.resize();
-	layout();
-	ShowWindow(hwnd_, ini_.get_bool("window", "max", false) ? SW_SHOWMAXIMIZED : show);
-	UpdateWindow(hwnd_);
+void App::started()
+{
 	if (!openings_.empty()) log(lang::f("log.openings", {std::to_wstring(openings_.positions() / 8)}));
 	load_kept();
 	start_engines();
 	if (compare_) set_compare(true);
 	position_changed();
-	SetTimer(hwnd_, kTimerWatch, 5000, nullptr);
+	set_timer(kTimerWatch, 5000);
 	// the commands to run at the start (config.ini [script] startup)
 	if (const std::string st = ini_.get("script", "startup"); !st.empty())
 		run_script_file(from_exe_dir(st), 0);
-
-	MSG m;
-	while (GetMessageW(&m, nullptr, 0, 0) > 0) {
-		TranslateMessage(&m);
-		DispatchMessageW(&m);
-	}
-	measure::finish(exe_dir_);
-	return 0;
-}
-
-LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
-{
-	switch (msg) {
-	case WM_SIZE:
-		if (wp == SIZE_MINIMIZED) {  // the frame keeps its size (images can still be made)
-			update_animation_timer();
-			return 0;
-		}
-		gfx_.resize();
-		layout();
-		update_animation_timer();
-		invalidate();
-		return 0;
-	case WM_DPICHANGED: {
-		const RECT *r = reinterpret_cast<const RECT *>(lp);
-		SetWindowPos(hwnd, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top,
-		             SWP_NOZORDER | SWP_NOACTIVATE);
-		gfx_.clear_shapes();
-		layout();
-		invalidate();
-		return 0;
-	}
-	case WM_GETMINMAXINFO: {
-		auto *mm = reinterpret_cast<MINMAXINFO *>(lp);
-		const float s = GetDpiForWindow(hwnd) / 96.0f;
-		mm->ptMinTrackSize = {static_cast<LONG>(480 * s), static_cast<LONG>(360 * s)};
-		return 0;
-	}
-	case WM_ERASEBKGND:
-		return 1;
-	case WM_PAINT: {
-		PAINTSTRUCT ps;
-		BeginPaint(hwnd, &ps);
-		EndPaint(hwnd, &ps);
-		paint();
-		return 0;
-	}
-	case WM_TIMER:
-		if (wp == kTimerAnim) paint_animation();
-		else if (wp == kTimerWatch) watch_engines();
-		else if (wp == kTimerScript) pump_script();
-		else if (wp == kTimerSave) watch_save();
-		else play_timer(*this, wp);
-		return 0;
-	case WM_TASK:
-		task_ended();
-		return 0;
-	case WM_SCRIPT:
-		pump_script();
-		return 0;
-	case WM_REDUCE:
-		reduce_counted();
-		return 0;
-	case WM_BOOK_PEEK:
-		book_peek_answers();
-		return 0;
-	case WM_EVAL_WARN:
-		eval_mismatch_box();
-		return 0;
-	case WM_ACTIVATEAPP:
-		active_ = wp != 0;
-		update_animation_timer();
-		return 0;
-	case WM_SETFOCUS:  // (given by the activation of the window too)
-		if (record_resumes()) SetFocus(record_edit_);
-		break;
-	case WM_KEYDOWN:
-	case WM_SYSKEYDOWN:
-		if (msg == WM_SYSKEYDOWN && wp != VK_LEFT && wp != VK_RIGHT && wp != VK_UP && wp != VK_DOWN) break;
-		on_key(wp);
-		return 0;
-	case WM_CHAR:
-		on_char(static_cast<wchar_t>(wp));
-		return 0;
-	case WM_LBUTTONDOWN:
-	case WM_LBUTTONDBLCLK:
-		SetCapture(hwnd);
-		on_mouse_down(GET_X_LPARAM(lp), GET_Y_LPARAM(lp), false, msg == WM_LBUTTONDBLCLK);
-		return 0;
-	case WM_RBUTTONDOWN:
-		on_mouse_down(GET_X_LPARAM(lp), GET_Y_LPARAM(lp), true, false);
-		return 0;
-	case WM_LBUTTONUP:
-		ReleaseCapture();
-		on_mouse_up(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
-		return 0;
-	case WM_MOUSEMOVE:
-		on_mouse_move(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
-		return 0;
-	case WM_MOUSELEAVE:
-		on_mouse_move(-1, -1);
-		return 0;
-	case WM_MOUSEWHEEL: {
-		POINT p{GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
-		ScreenToClient(hwnd, &p);
-		on_wheel(p.x, p.y, GET_WHEEL_DELTA_WPARAM(wp));
-		return 0;
-	}
-	case WM_SETCURSOR:
-		if (LOWORD(lp) == HTCLIENT) {
-			POINT p;
-			GetCursorPos(&p);
-			ScreenToClient(hwnd, &p);
-			LPCWSTR c = IDC_ARROW;
-			if (drag_ == Drag::Panel || (!panel_hidden_ && !lay_.panel_below && inside(lay_.panel_split, p))) c = IDC_SIZEWE;
-			else if (drag_ == Drag::Graph || (!panel_hidden_ && inside(lay_.splitter, p))) c = IDC_SIZENS;
-			else if (!panel_hidden_ && (inside(lay_.fx.box, p) || inside(lay_.fy.box, p) || inside(lay_.record_text, p))) c = IDC_IBEAM;
-			SetCursor(LoadCursorW(nullptr, c));
-			return TRUE;
-		}
-		break;
-	case WM_DROPFILES: {
-		HDROP drop = reinterpret_cast<HDROP>(wp);
-		wchar_t file[MAX_PATH * 4];
-		const bool got = DragQueryFileW(drop, 0, file, static_cast<UINT>(std::size(file))) > 0;
-		DragFinish(drop);
-		if (got) switch_book(file);
-		return 0;
-	}
-	case WM_COMMAND:
-		if (!lp) on_command(LOWORD(wp));  // (not the notes of the text box)
-		return 0;
-	case WM_CTLCOLOREDIT:
-	case WM_CTLCOLORSTATIC:  // (the text box while it is disabled)
-		return record_color(reinterpret_cast<HDC>(wp));
-	case WM_ENGINE:
-		on_engine(wp, lp != 0);
-		return 0;
-	case WM_CLOSE:
-		close_window();
-		return 0;
-	case WM_DESTROY: {
-		// the temporary folder of this run (empty books, files given to the engines)
-		std::error_code ec;
-		std::filesystem::remove_all(temp_dir_, ec);
-		PostQuitMessage(0);
-		return 0;
-	}
-	}
-	return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
 // The window closes (its button, Alt+F4, "quit" of a script). The main engine may save its book as it ends: the window
@@ -305,9 +106,9 @@ void App::close_window()
 	// (the log goes with the window: said in a box, but not to a script that ends the program, which nobody may watch)
 	const bool saved = save_config();
 	if (!saved && !script_quit_) message(lang::f("config.save_failed", {ini_path_}), MB_ICONWARNING);
-	KillTimer(hwnd_, kTimerAnim);
-	KillTimer(hwnd_, kTimerWatch);
-	KillTimer(hwnd_, kTimerScript);
+	kill_timer(kTimerAnim);
+	kill_timer(kTimerWatch);
+	kill_timer(kTimerScript);
 	script_.clear();
 	auto stop_task = [this] {
 		if (task_.joinable()) {
@@ -322,7 +123,7 @@ void App::close_window()
 		stop_task();
 		for (int role = 1; role < 5; ++role) eng_[role].proc.close();
 		if (!save_config() && saved && !script_quit_) message(lang::f("config.save_failed", {ini_path_}), MB_ICONWARNING);
-		DestroyWindow(hwnd_);
+		destroy_window(hwnd_);
 	});
 }
 
@@ -465,14 +266,13 @@ bool App::save_config()
 	ini_.set_int("window", "bookmarks", bookmarks_shown_);
 	ini_.set("engine", "kind", engine_section(kind_));
 	ini_.set_int("engine", "search", search_engine_);
-	WINDOWPLACEMENT wp{sizeof wp};
-	if (GetWindowPlacement(hwnd_, &wp)) {
-		const RECT &r = wp.rcNormalPosition;
-		ini_.set_int("window", "x", r.left);
-		ini_.set_int("window", "y", r.top);
-		ini_.set_int("window", "w", r.right - r.left);
-		ini_.set_int("window", "h", r.bottom - r.top);
-		ini_.set_int("window", "max", wp.showCmd == SW_SHOWMAXIMIZED);
+	int x = 0, y = 0, w = 0, h = 0;
+	if (bool max = false; window_placement(hwnd_, &x, &y, &w, &h, &max)) {
+		ini_.set_int("window", "x", x);
+		ini_.set_int("window", "y", y);
+		ini_.set_int("window", "w", w);
+		ini_.set_int("window", "h", h);
+		ini_.set_int("window", "max", max);
 	}
 	ini_.set_int("window", "panel_w", static_cast<int>(panel_w_));
 	ini_.set_int("window", "graph", static_cast<int>(std::lround(graph_ratio_ * 100)));
@@ -489,20 +289,18 @@ bool App::save_config()
 void App::build_menu()
 {
 	using lang::t;
-	auto item = [](HMENU m, int id, const std::wstring &text, const std::wstring &key = {}) {
+	auto item = [](MenuRef m, int id, const std::wstring &text, const std::wstring &key = {}) {
 		std::wstring s = text;
 		if (!key.empty()) s += L"\t" + key;
-		AppendMenuW(m, MF_STRING, id, s.c_str());
+		menu_item(m, id, s);
 	};
-	auto sub = [](HMENU parent, HMENU m, const std::wstring &text) {
-		AppendMenuW(parent, MF_POPUP, reinterpret_cast<UINT_PTR>(m), text.c_str());
-	};
-	auto sep = [](HMENU m) { AppendMenuW(m, MF_SEPARATOR, 0, nullptr); };
-	HMENU bar = CreateMenu();
+	auto sub = [](MenuRef parent, MenuRef m, const std::wstring &text) { menu_sub(parent, m, text); };
+	auto sep = [](MenuRef m) { menu_sep(m); };
+	MenuRef bar = menu_new(true);
 
-	HMENU game = CreatePopupMenu();
+	MenuRef game = menu_new();
 	item(game, cmd::NewGame, t("menu.game.new"));
-	HMENU pm = CreatePopupMenu();
+	MenuRef pm = menu_new();
 	item(pm, cmd::PlayFree, t("menu.play.free"));
 	item(pm, cmd::PlayHumanBlack, t("menu.play.human_black"));
 	item(pm, cmd::PlayHumanWhite, t("menu.play.human_white"));
@@ -513,7 +311,7 @@ void App::build_menu()
 	item(game, cmd::PlayStop, t("menu.play.stop"));
 	sep(game);
 	item(game, cmd::PlayLevel, t("menu.play.level"));
-	HMENU op = CreatePopupMenu();
+	MenuRef op = menu_new();
 	item(op, cmd::OpeningSearch, t("menu.opening.search"));
 	item(op, cmd::OpeningBest, t("menu.opening.best"));
 	item(op, cmd::OpeningWide, t("menu.opening.wide"));
@@ -533,7 +331,7 @@ void App::build_menu()
 	item(game, cmd::KeepNow, t("menu.kept.keep"), keys_.describe(Action::Keep));
 	sub(bar, game, t("menu.game"));
 
-	HMENU an = CreatePopupMenu();
+	MenuRef an = menu_new();
 	item(an, cmd::ShowEval, t("menu.analysis.show"), keys_.describe(Action::HideEval));
 	item(an, cmd::Recompute, t("menu.analysis.recompute"));
 	item(an, cmd::LevelChoose, lang::f("menu.analysis.level", {std::to_wstring(level_)}));
@@ -543,7 +341,7 @@ void App::build_menu()
 	item(an, cmd::BackgroundOff, t("menu.analysis.background_off"));
 	sep(an);
 	item(an, cmd::PrecisionOn, t("menu.analysis.precision"));
-	HMENU umi = CreatePopupMenu();
+	MenuRef umi = menu_new();
 	item(umi, cmd::UmiBest, t("menu.analysis.umi.best"));
 	item(umi, cmd::UmiLoss, t("menu.analysis.umi.loss"));
 	item(umi, cmd::UmiOff, t("menu.analysis.umi.off"));
@@ -554,12 +352,12 @@ void App::build_menu()
 	item(an, cmd::RangeSettings, t("menu.settings.range"));
 	sub(bar, an, t("menu.analysis"));
 
-	HMENU book = CreatePopupMenu();
+	MenuRef book = menu_new();
 	item(book, cmd::UseBook, t("menu.book.use"), keys_.describe(Action::ToggleBook));
 	item(book, cmd::ReloadBook, t("menu.book.reload"));
 	item(book, cmd::OpenBook, t("menu.book.open"));
 	{
-		HMENU rec = CreatePopupMenu();
+		MenuRef rec = menu_new();
 		int shown = 0;
 		for (int i = 1; i <= 8; ++i) {
 			const std::string r = ini_.get("books", "recent" + std::to_string(i));
@@ -567,10 +365,10 @@ void App::build_menu()
 			item(rec, cmd::RecentBook0 + i - 1, widen(r));
 			++shown;
 		}
-		if (!shown) AppendMenuW(rec, MF_STRING | MF_GRAYED, cmd::RecentBook0, t("menu.book.recent.none").c_str());
+		if (!shown) menu_item(rec, cmd::RecentBook0, t("menu.book.recent.none"), true);
 		sub(book, rec, t("menu.book.recent"));
 	}
-	HMENU base = CreatePopupMenu();
+	MenuRef base = menu_new();
 	item(base, cmd::BaseDeviate, L"book deviate");
 	item(base, cmd::BaseDeviate2, L"book deviate2");
 	item(base, cmd::BaseDeviate3, L"book deviate3");
@@ -578,7 +376,7 @@ void App::build_menu()
 	sep(book);
 	item(book, cmd::BookInfo, t("menu.book.info"));
 	item(book, cmd::TabTree, t("menu.book.tree"));
-	HMENU show = CreatePopupMenu();
+	MenuRef show = menu_new();
 	item(show, cmd::BookShowInfo, t("menu.book.show_info"));
 	item(show, cmd::BookShowStats, t("menu.book.show_stats"));
 	item(show, cmd::BookShowPosition, t("menu.book.show_position"));
@@ -587,7 +385,7 @@ void App::build_menu()
 	item(book, cmd::ExportBest, t("menu.book.export_best"));
 	item(book, cmd::ExportDeviate, t("menu.book.export_deviate"));
 	sep(book);
-	HMENU keep = CreatePopupMenu();
+	MenuRef keep = menu_new();
 	item(keep, cmd::BookSave, t("menu.book.save"));
 	item(keep, cmd::BookSaveAs, t("menu.book.save_as"));
 	item(keep, cmd::BookNewEmpty, t("menu.book.new"));
@@ -607,7 +405,7 @@ void App::build_menu()
 	keep_menu_ = keep;
 	sub(bar, book, t("menu.book"));
 
-	HMENU learn = CreatePopupMenu();
+	MenuRef learn = menu_new();
 	item(learn, cmd::LearnDeviate, t("menu.learn.deviate"));
 	item(learn, cmd::LearnDeviate2, t("menu.learn.deviate2"));
 	item(learn, cmd::LearnDeviate3, t("menu.learn.deviate3"));
@@ -625,7 +423,7 @@ void App::build_menu()
 	item(learn, cmd::LearnNegamax, t("menu.learn.negamax"));
 	item(learn, cmd::LearnFix, t("menu.learn.fix"));
 	item(learn, cmd::LearnCorrect, t("menu.learn.correct"));
-	HMENU leaf = CreatePopupMenu();
+	MenuRef leaf = menu_new();
 	item(leaf, cmd::LearnLeafRecalc1, t("menu.learn.leaf1"));
 	item(leaf, cmd::LearnLeafRecalc2, t("menu.learn.leaf2"));
 	item(leaf, cmd::LearnLeafRecalc3, t("menu.learn.leaf3"));
@@ -644,7 +442,7 @@ void App::build_menu()
 	item(learn, cmd::QueueClear, t("menu.queue.clear"));
 	sub(bar, learn, t("menu.learn"));
 
-	HMENU eng = CreatePopupMenu();
+	MenuRef eng = menu_new();
 	item(eng, cmd::EngineNikque, t("menu.engine.nikque"));
 	item(eng, cmd::EngineNewedax, t("menu.engine.newedax"));
 	sep(eng);
@@ -661,12 +459,12 @@ void App::build_menu()
 	item(eng, cmd::EngineCommand, t("menu.engine.command"));
 	sub(bar, eng, t("menu.engine"));
 
-	HMENU io = CreatePopupMenu();
+	MenuRef io = menu_new();
 	item(io, cmd::CopyMoves, t("menu.io.copy"), keys_.describe(Action::CopyMoves));
 	item(io, cmd::PasteMoves, t("menu.io.paste"), keys_.describe(Action::PasteMoves));
 	item(io, cmd::UpperMoves, t("menu.io.upper"));
 	item(io, cmd::FixRecord, t("menu.io.fix"));
-	HMENU pos = CreatePopupMenu();
+	MenuRef pos = menu_new();
 	item(pos, cmd::CopyBoardText, t("menu.io.copy_board"));
 	item(pos, cmd::CopyObf, t("menu.io.copy_obf"));
 	item(pos, cmd::CopyBitDecimal, t("menu.io.copy_dec"));
@@ -675,7 +473,7 @@ void App::build_menu()
 	sep(pos);
 	item(pos, cmd::ImportPosition, t("menu.io.import"));
 	sub(io, pos, t("menu.io.position"));
-	HMENU ed = CreatePopupMenu();
+	MenuRef ed = menu_new();
 	item(ed, cmd::EditBoard, t("menu.edit.start"), keys_.describe(Action::EditBoard));
 	item(ed, cmd::EditDone, t("menu.edit.done"), L"Enter");
 	item(ed, cmd::EditCancel, t("menu.edit.cancel"), L"Esc");
@@ -688,7 +486,7 @@ void App::build_menu()
 	item(io, cmd::Screenshot, t("menu.io.screenshot"), keys_.describe(Action::Screenshot));
 	item(io, cmd::SaveBoardImage, t("menu.io.board_image"));
 	sep(io);
-	HMENU lst = CreatePopupMenu();
+	MenuRef lst = menu_new();
 	item(lst, cmd::ListOpen, t("menu.list.open"));
 	item(lst, cmd::ListAdd, t("menu.list.add"));
 	item(lst, cmd::ListSave, t("menu.list.save"));
@@ -713,7 +511,7 @@ void App::build_menu()
 	item(io, cmd::ListSearchClear, t("menu.list.search_clear"));
 	item(io, cmd::TaskCancel, t("menu.task.cancel"));
 	sep(io);
-	HMENU bs = CreatePopupMenu();
+	MenuRef bs = menu_new();
 	item(bs, cmd::BaseConvert, t("menu.base.convert"));
 	item(bs, cmd::BaseUnique, t("menu.base.unique"));
 	item(bs, cmd::BaseCompare, t("menu.base.compare"));
@@ -728,24 +526,24 @@ void App::build_menu()
 	item(io, cmd::StopScript, t("menu.io.script_stop"));
 	sub(bar, io, t("menu.io"));
 
-	HMENU view = CreatePopupMenu();
+	MenuRef view = menu_new();
 	item(view, cmd::DesignToggle, t("menu.view.design.toggle"), keys_.describe(Action::ToggleDesign));
-	HMENU des = CreatePopupMenu();
+	MenuRef des = menu_new();
 	item(des, cmd::DesignStandard, t("menu.view.design.standard"));
 	item(des, cmd::DesignPaw, t("menu.view.design.paw"));
 	sub(view, des, t("menu.view.design"));
-	HMENU eff = CreatePopupMenu();
+	MenuRef eff = menu_new();
 	item(eff, cmd::EffectsOn, t("menu.view.effects.on"));
 	item(eff, cmd::EffectsSubdued, t("menu.view.effects.subdued"));
 	item(eff, cmd::EffectsOff, t("menu.view.effects.off"));
 	sep(eff);
-	AppendMenuW(eff, MF_STRING | MF_GRAYED, 0, t("menu.view.top").c_str());  // (a heading)
+	menu_item(eff, 0, t("menu.view.top"), true);  // (a heading)
 	item(eff, cmd::TopStrong, t("menu.view.top.strong"));
 	item(eff, cmd::TopNormal, t("menu.view.top.normal"));
 	item(eff, cmd::TopWeak, t("menu.view.top.weak"));
 	sub(view, eff, t("menu.view.effects"));
 	sep(view);
-	HMENU ori = CreatePopupMenu();
+	MenuRef ori = menu_new();
 	for (int s = 0; s < 8; ++s) item(ori, cmd::Rotate0 + s, t("orient." + std::to_string(s)));
 	sep(ori);
 	item(ori, cmd::RotateNext, t("menu.view.orient.next"), keys_.describe(Action::Rotate));
@@ -753,7 +551,7 @@ void App::build_menu()
 	item(view, cmd::MoveNumbers, t("menu.view.numbers"));
 	item(view, cmd::PvOnBoard, t("menu.view.pv"));
 	item(view, cmd::OpeningMarks, t("menu.view.opening_marks"));
-	HMENU ci = CreatePopupMenu();
+	MenuRef ci = menu_new();
 	item(ci, cmd::CellInfoNone, t("menu.view.cell.none"));
 	item(ci, cmd::CellInfoPositions, t("menu.view.cell.positions"));
 	item(ci, cmd::CellInfoLevel, t("menu.view.cell.level"));
@@ -768,7 +566,7 @@ void App::build_menu()
 	item(view, cmd::TabTree, t("menu.view.tab.tree"));
 	item(view, cmd::RecordBoxShow, t("menu.view.record_box"));
 	item(view, cmd::GraphEndShow, t("menu.view.graph_end"));
-	HMENU kp = CreatePopupMenu();
+	MenuRef kp = menu_new();
 	item(kp, cmd::KeepNow, t("menu.kept.keep"), keys_.describe(Action::Keep));
 	item(kp, cmd::BookmarksShow, t("menu.kept.strip"));
 	sep(kp);
@@ -783,11 +581,11 @@ void App::build_menu()
 	item(view, cmd::SaveLog, t("menu.view.save_log"));
 	sub(bar, view, t("menu.view"));
 
-	HMENU set = CreatePopupMenu();
+	MenuRef set = menu_new();
 	item(set, cmd::RangeSettings, t("menu.settings.range"));
 	item(set, cmd::LearnSettings, t("menu.learn.settings"));
 	item(set, cmd::OpenConfig, t("menu.settings.config"));
-	HMENU lg = CreatePopupMenu();
+	MenuRef lg = menu_new();
 	item(lg, cmd::LangJa, L"日本語");
 	item(lg, cmd::LangEn, L"English");
 	item(lg, cmd::LangZhHans, L"简体中文");
@@ -795,30 +593,24 @@ void App::build_menu()
 	sub(set, lg, t("menu.settings.lang"));
 	sub(bar, set, t("menu.settings"));
 
-	HMENU help = CreatePopupMenu();
+	MenuRef help = menu_new();
 	item(help, cmd::HelpKeys, t("menu.help.keys"));
 	item(help, cmd::HelpAbout, t("menu.help.about"));
 	sub(bar, help, t("menu.help"));
 
-	HMENU old = GetMenu(hwnd_);
-	SetMenu(hwnd_, bar);
-	if (old) DestroyMenu(old);
+	menu_set_bar(hwnd_, bar);
 	update_menu();
 }
 
 void App::update_menu()
 {
-	HMENU m = GetMenu(hwnd_);
+	MenuRef m = menu_bar(hwnd_);
 	if (!m) return;
-	auto check = [&](int id, bool on) { CheckMenuItem(m, id, MF_BYCOMMAND | (on ? MF_CHECKED : MF_UNCHECKED)); };
-	auto radio = [&](int first, int last, int on) { CheckMenuRadioItem(m, first, last, on, MF_BYCOMMAND); };
-	auto enable = [&](int id, bool on) { EnableMenuItem(m, id, MF_BYCOMMAND | (on ? MF_ENABLED : MF_GRAYED)); };
-	// a small menu as a whole (by its place in the menu above it)
-	auto enable_popup = [&](HMENU parent, HMENU child, bool on) {
-		if (!parent || !child) return;
-		for (int i = 0, n = GetMenuItemCount(parent); i < n; ++i)
-			if (GetSubMenu(parent, i) == child) EnableMenuItem(parent, static_cast<UINT>(i), MF_BYPOSITION | (on ? MF_ENABLED : MF_GRAYED));
-	};
+	auto check = [&](int id, bool on) { menu_check(m, id, on); };
+	auto radio = [&](int first, int last, int on) { menu_radio(m, first, last, on); };
+	auto enable = [&](int id, bool on) { menu_enable(m, id, on); };
+	// a small menu as a whole
+	auto enable_popup = [&](MenuRef parent, MenuRef child, bool on) { menu_enable_sub(parent, child, on); };
 	// the book commands of the main engine: not while it learns, nor while it saves its book as it ends
 	const bool book_free = !learning_ && !book_saving_;
 	enable_popup(book_menu_, keep_menu_, book_free);
@@ -877,7 +669,7 @@ void App::update_menu()
 	enable(cmd::PlayStop, play_mode_ != PlayMode::Free);
 	{
 		const std::wstring lv = lang::f("menu.analysis.level", {std::to_wstring(level_)});
-		ModifyMenuW(m, cmd::LevelChoose, MF_BYCOMMAND | MF_STRING, cmd::LevelChoose, lv.c_str());
+		menu_rename(m, cmd::LevelChoose, lv);
 	}
 	radio(cmd::UmiBest, cmd::UmiOff, umi_ == UmiMode::Best ? cmd::UmiBest : umi_ == UmiMode::Loss ? cmd::UmiLoss : cmd::UmiOff);
 	radio(cmd::BaseDeviate, cmd::BaseDeviate3,
@@ -899,37 +691,21 @@ void App::set_language(const std::string &code)
 	ini_.set("view", "language", code);
 	lang::load(exe_dir_, code);
 	gfx_.clear_fonts();
-	SetWindowTextW(hwnd_, lang::t("app.title").c_str());
+	set_window_title(hwnd_, lang::t("app.title"));
 	build_menu();
 	layout();
 	invalidate();
-}
-
-void App::set_window_icon()
-{
-	const int id = design_ == Design::Paw ? IDI_PAW : IDI_APP;
-	const UINT dpi = GetDpiForWindow(hwnd_);
-	HICON big = static_cast<HICON>(LoadImageW(inst_, MAKEINTRESOURCEW(id), IMAGE_ICON,
-	                                          GetSystemMetricsForDpi(SM_CXICON, dpi),
-	                                          GetSystemMetricsForDpi(SM_CYICON, dpi), 0));
-	HICON icon_s = static_cast<HICON>(LoadImageW(inst_, MAKEINTRESOURCEW(id), IMAGE_ICON,
-	                                            GetSystemMetricsForDpi(SM_CXSMICON, dpi),
-	                                            GetSystemMetricsForDpi(SM_CYSMICON, dpi), 0));
-	if (HICON old = reinterpret_cast<HICON>(SendMessageW(hwnd_, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(big))))
-		DestroyIcon(old);
-	if (HICON old = reinterpret_cast<HICON>(SendMessageW(hwnd_, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(icon_s))))
-		DestroyIcon(old);
 }
 
 // ---- layout
 
 void App::layout()
 {
-	if (!gfx_.factory()) return;  // (no window drawn yet)
+	if (!gfx_.ready()) return;  // (no window drawn yet)
 	Layout &L = lay_;
 	const float W = static_cast<float>(gfx_.width()), H = static_cast<float>(gfx_.height());
 	const Theme &th = theme(design_);
-	L.scale = GetDpiForWindow(hwnd_) / 96.0f;
+	L.scale = window_scale(hwnd_);
 	// the text grows with a tall window (14 to 22 pixels at 96 DPI), or is the size set in config.ini
 	const float base = font_px_ > 0 ? static_cast<float>(font_px_) : std::clamp(H / L.scale / 60.0f, 14.0f, 22.0f);
 	L.font = std::round(base * L.scale);
@@ -985,7 +761,7 @@ void App::layout()
 	L.panel_split = {L.panel.left - 4 * L.scale, top, L.panel.left + 4 * L.scale, bottom};
 
 	// the panel
-	const D2D1_RECT_F P{L.panel.left + pad, L.panel.top + pad, L.panel.right - pad, L.panel.bottom - pad};
+	const RectF P{L.panel.left + pad, L.panel.top + pad, L.panel.right - pad, L.panel.bottom - pad};
 	L.tabs = {P.left, P.top, P.right, P.top + L.row};
 	L.range = {P.left, L.tabs.bottom + 4 * L.scale, P.right, L.tabs.bottom + 4 * L.scale + L.row};
 	const float rest_top = L.range.bottom + 4 * L.scale;
@@ -1006,7 +782,7 @@ void App::layout()
 	L.graph = {P.left, L.record.bottom, P.right, P.bottom};
 
 	// the range row: "label  X [ 2 ] ---o---  Y [ 4 ] ---o---"
-	IDWriteTextFormat *f = gfx_.text(L.font, false);
+	TextFormat *f = gfx_.text(L.font, false);
 	const float gap = std::round(8 * L.scale);
 	float x = L.range.left + gfx_.text_width(lang::t("range.title"), f) + gap * 1.5f;
 	const float box_w = std::round(L.font * 2.8f);
@@ -1024,7 +800,7 @@ void App::layout()
 	// the row of the moves: the text box, then the buttons
 	L.record_text = L.record_copy = L.record_paste = {};
 	if (rec_h > 0) {
-		IDWriteTextFormat *fb = gfx_.text(L.font_s, false);
+		TextFormat *fb = gfx_.text(L.font_s, false);
 		const float rgap = std::round(4 * L.scale), rb = L.record.bottom - rgap;
 		const float paste_w = gfx_.text_width(lang::t("record.paste"), fb) + 2 * L.font_s;
 		const float copy_w = gfx_.text_width(lang::t("record.copy"), fb) + 2 * L.font_s;
@@ -1050,7 +826,7 @@ void App::paint()
 	prepare_glows();
 	if (!gfx_.begin_frame()) return;
 	const Theme &th = theme(design_);
-	gfx_.dc()->Clear(th.bg);
+	gfx_.dc()->clear(th.bg);
 	draw_board(*this);
 	draw_panel(*this);
 	draw_log(*this);
@@ -1062,20 +838,20 @@ void App::paint()
 void App::paint_animation()
 {
 	const std::vector<int> cells = animated_cells();
-	if (cells.empty() || !active_ || IsIconic(hwnd_)) {
+	if (cells.empty() || !active_ || window_minimized(hwnd_)) {
 		update_animation_timer();
 		return;
 	}
 	measure::Frame mf(false);
 	if (!gfx_.begin_frame()) return;
-	std::vector<D2D1_RECT_F> dirty;
+	std::vector<RectF> dirty;
 	dirty.reserve(cells.size());
 	const double t = now_s();
 	for (const int sq : cells) {
-		const D2D1_RECT_F r = lay_.cell_rect(sq);
-		gfx_.dc()->PushAxisAlignedClip(r, D2D1_ANTIALIAS_MODE_ALIASED);
+		const RectF r = lay_.cell_rect(sq);
+		gfx_.dc()->push_clip(r);
 		draw_cell(*this, sq, t);
-		gfx_.dc()->PopAxisAlignedClip();
+		gfx_.dc()->pop_clip();
 		dirty.push_back(r);
 	}
 	gfx_.end_frame(&dirty);
@@ -1084,25 +860,25 @@ void App::paint_animation()
 void App::paint_bar()
 {
 	// the meaning of a stage is drawn below the bar: then the whole window
-	if (IsIconic(hwnd_) || hover_stage_ >= 0) {
+	if (window_minimized(hwnd_) || hover_stage_ >= 0) {
 		invalidate();
 		return;
 	}
 	if (!gfx_.begin_frame()) return;
-	std::vector<D2D1_RECT_F> dirty{lay_.bar};
-	gfx_.dc()->PushAxisAlignedClip(lay_.bar, D2D1_ANTIALIAS_MODE_ALIASED);
+	std::vector<RectF> dirty{lay_.bar};
+	gfx_.dc()->push_clip(lay_.bar);
 	draw_bar(*this);
-	gfx_.dc()->PopAxisAlignedClip();
+	gfx_.dc()->pop_clip();
 	gfx_.end_frame(&dirty);
 }
 
 void App::update_animation_timer()
 {
-	const bool want = effects_ == Effects::On && active_ && hwnd_ && !IsIconic(hwnd_) && !animated_cells().empty();
+	const bool want = effects_ == Effects::On && active_ && hwnd_ && !window_minimized(hwnd_) && !animated_cells().empty();
 	if (want == animating_) return;
 	animating_ = want;
-	if (want) SetTimer(hwnd_, kTimerAnim, 1000 / anim_fps_, nullptr);
-	else KillTimer(hwnd_, kTimerAnim);
+	if (want) set_timer(kTimerAnim, 1000 / anim_fps_);
+	else kill_timer(kTimerAnim);
 }
 
 CellView App::cell_view(int sq) const
@@ -1214,13 +990,13 @@ void App::log(const std::wstring &line)
 	log_.push_back(line);
 	while (log_.size() > 500) log_.pop_front();
 	status_ = line;
-	InvalidateRect(hwnd_, nullptr, FALSE);
+	invalidate_window(hwnd_);
 }
 
 int App::message(const std::wstring &text, UINT flags)
 {
 	if (message_hook_) return message_hook_(text, flags);
-	return MessageBoxW(hwnd_, text.c_str(), lang::t("app.title").c_str(), flags);
+	return message_box(hwnd_, text, lang::t("app.title"), flags);
 }
 
 void App::set_status(const std::wstring &s)

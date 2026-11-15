@@ -1,9 +1,13 @@
 // Tests of the game list (reading, writing, sorting, joining, cutting, shuffling, orientations, searching),
 // the symmetries, the bitboards and the line found without the book; then timings on a large list.
 // Arguments: the game files of the test books (one game a line).
+#if defined(_WIN32)
 #include <windows.h>
 
 #include <psapi.h>
+#else
+#include <sys/resource.h>
+#endif
 
 #include <algorithm>
 #include <bit>
@@ -329,7 +333,7 @@ static void test_find_line(int argc, char **argv)
 // read in parts on threads whatever the length of its lines (a part of long lines has fewer than 4,096 of them).
 static void test_read_stopped()
 {
-	std::stop_source stop;
+	ng::stop_source stop;
 	stop.request_stop();
 	GameList a;
 	CHECK(read_list_text("f5\n", a, stop.get_token()).cancelled);
@@ -537,10 +541,17 @@ int main(int argc, char **argv)
 		const size_t dead_limit = argc >= 5 ? static_cast<size_t>(std::atoll(argv[4])) : kDeadLimit;
 		const auto t = std::chrono::steady_clock::now();
 		const LineSearch r = find_line(Position{}, *target, limit, {}, dead_limit);
+#if defined(_WIN32)
 		PROCESS_MEMORY_COUNTERS pmc{sizeof pmc};
 		K32GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof pmc);
+		const double peak = pmc.PeakWorkingSetSize / 1048576.0;
+#else
+		rusage ru{};
+		getrusage(RUSAGE_SELF, &ru);
+		const double peak = ru.ru_maxrss / 1048576.0;  // (bytes on macOS)
+#endif
 		std::printf("found %d, nodes %lld, gave up %d, dead %zu, %.0f ms, peak working set %.1f MB\n", r.line.has_value(), r.nodes,
-		            r.gave_up, r.dead, ms_since(t), pmc.PeakWorkingSetSize / 1048576.0);
+		            r.gave_up, r.dead, ms_since(t), peak);
 		return 0;
 	}
 	// list_test --write <file> <games>: a file of random games, for measuring the GUI with a large list

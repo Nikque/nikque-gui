@@ -57,7 +57,7 @@ struct Searcher {
 	Position target;
 	u64 tocc = 0;
 	long long limit = 0;
-	std::stop_token stop;
+	ng::stop_token stop;
 	long long nodes = 0;
 	bool gave_up = false;
 	std::unordered_set<Key, KeyHash> dead;  // positions that do not lead to the target (up to dead_limit)
@@ -130,7 +130,7 @@ struct Searcher {
 
 }  // namespace
 
-LineSearch find_line(const Position &from, const Position &target, long long node_limit, std::stop_token stop, size_t dead_limit)
+LineSearch find_line(const Position &from, const Position &target, long long node_limit, ng::stop_token stop, size_t dead_limit)
 {
 	LineSearch r;
 	Searcher s;

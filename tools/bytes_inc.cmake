@@ -1,0 +1,5 @@
+# cmake -DIN=<file> -DOUT=<file.inc> -P bytes_inc.cmake: the bytes of IN as the items of a C++ array ("0x41,0x42,...")
+file(READ "${IN}" hex HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," items "${hex}")
+string(REGEX REPLACE "(0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,0x..,)" "\\1\n" items "${items}")
+file(WRITE "${OUT}" "${items}\n")

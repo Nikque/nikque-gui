@@ -1,5 +1,7 @@
 #include "gamelist.h"
 
+#include "platform.h"
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -36,7 +38,7 @@ void in_parts(size_t n, unsigned k, F f)
 		f(size_t{0}, n, 0u);
 		return;
 	}
-	std::vector<std::jthread> threads;
+	std::vector<ng::jthread> threads;
 	for (unsigned part = 0; part < k; ++part) threads.emplace_back(f, n * part / k, n * (part + 1) / k, part);
 }
 
@@ -243,7 +245,7 @@ std::string list_line(const Position &start, std::span<const std::uint8_t> moves
 namespace {
 
 // reads the lines of text (whole lines; the last one may lack its end)
-void take_lines(std::string_view text, GameList &list, ListReadStats &st, std::stop_token stop, const Position &usual)
+void take_lines(std::string_view text, GameList &list, ListReadStats &st, ng::stop_token stop, const Position &usual)
 {
 	Position start;
 	std::vector<std::uint8_t> moves;
@@ -269,7 +271,7 @@ void take_lines(std::string_view text, GameList &list, ListReadStats &st, std::s
 }
 
 // A block of whole lines read in parts on threads (cut at line ends), the games added to `list` in their order.
-void take_block(std::string_view text, GameList &list, ListReadStats &st, std::stop_token stop, const Position &usual)
+void take_block(std::string_view text, GameList &list, ListReadStats &st, ng::stop_token stop, const Position &usual)
 {
 	// a part per 512 KB of text (about 4,000 games), at most 8
 	const unsigned hw = std::max(1u, std::thread::hardware_concurrency());
@@ -290,7 +292,7 @@ void take_block(std::string_view text, GameList &list, ListReadStats &st, std::s
 	};
 	std::vector<Part> parts(k);
 	{
-		std::vector<std::jthread> threads;
+		std::vector<ng::jthread> threads;
 		for (unsigned p = 0; p < k; ++p)
 			threads.emplace_back([&, p] {
 				const std::string_view t = text.substr(cut[p], cut[p + 1] - cut[p]);
@@ -310,7 +312,7 @@ void take_block(std::string_view text, GameList &list, ListReadStats &st, std::s
 
 }  // namespace
 
-ListReadStats read_list_text(std::string_view text, GameList &list, std::stop_token stop, const Position &usual)
+ListReadStats read_list_text(std::string_view text, GameList &list, ng::stop_token stop, const Position &usual)
 {
 	ListReadStats st;
 	st.opened = true;
@@ -318,17 +320,17 @@ ListReadStats read_list_text(std::string_view text, GameList &list, std::stop_to
 	return st;
 }
 
-ListReadStats read_list(const std::wstring &path, GameList &list, std::stop_token stop, const Position &usual)
+ListReadStats read_list(const std::wstring &path, GameList &list, ng::stop_token stop, const Position &usual)
 {
 	ListReadStats st;
-	FILE *f = nullptr;
-	if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return st;
+	FILE *f = open_file(path, L"rb");
+	if (!f) return st;
 	st.opened = true;
 	// room for the games at once: two letters a move; a full game is about 120 letters
-	if (_fseeki64(f, 0, SEEK_END) == 0) {
-		const long long size = _ftelli64(f);
+	if (seek64(f, 0, SEEK_END) == 0) {
+		const long long size = tell64(f);
 		if (size > 0) list.reserve(static_cast<size_t>(size / 100), static_cast<size_t>(size / 2));
-		_fseeki64(f, 0, SEEK_SET);
+		seek64(f, 0, SEEK_SET);
 	}
 	// blocks of 4 MB read after the rest of the block before: the whole lines are read on threads
 	constexpr size_t kBlock = 4u << 20;
@@ -354,8 +356,8 @@ ListReadStats read_list(const std::wstring &path, GameList &list, std::stop_toke
 
 bool write_list(const std::wstring &path, const GameList &list)
 {
-	FILE *f = nullptr;
-	if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f) return false;
+	FILE *f = open_file(path, L"wb");
+	if (!f) return false;
 	std::string out;
 	bool ok = true;
 	for (size_t i = 0; i < list.size() && ok; ++i) {
@@ -568,7 +570,7 @@ int drawn_pick(unsigned sym, std::uint64_t r)
 // orientation keeps every move, so no second list is made. False when stopped (the games done before the stop keep
 // their new moves: the same games, turned).
 template <class Make>
-bool rewrite(GameList &list, std::stop_token stop, Make make)
+bool rewrite(GameList &list, ng::stop_token stop, Make make)
 {
 	const size_t n = list.size();
 	std::atomic<bool> stopped{false};
@@ -606,14 +608,14 @@ std::vector<std::uint8_t> scattered_moves(const Position &start, std::span<const
 	return out;
 }
 
-void normalize_list(GameList &list, std::stop_token stop)
+void normalize_list(GameList &list, ng::stop_token stop)
 {
 	rewrite(list, stop, [&](size_t i, std::vector<std::uint8_t> &out) {
 		reoriented_into(list.start(i), list.moves(i), kNormalPick, out);
 	});
 }
 
-void scatter_list(GameList &list, std::uint64_t seed, int sides, std::stop_token stop)
+void scatter_list(GameList &list, std::uint64_t seed, int sides, ng::stop_token stop)
 {
 	// every game draws from its own numbers (the seed and its place): the same list whatever the threads
 	rewrite(list, stop, [&](size_t i, std::vector<std::uint8_t> &out) {
@@ -624,7 +626,7 @@ void scatter_list(GameList &list, std::uint64_t seed, int sides, std::stop_token
 	});
 }
 
-std::vector<ListHit> search_list(const GameList &list, const Position &target, bool symmetries, std::stop_token stop)
+std::vector<ListHit> search_list(const GameList &list, const Position &target, bool symmetries, ng::stop_token stop)
 {
 	const int td = std::popcount(target.black | target.white);
 	Position ts[8];

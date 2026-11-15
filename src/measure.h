@@ -2,6 +2,8 @@
 // In the default build every function here is empty.
 #pragma once
 
+#include "platform.h"
+
 #include <string>
 
 #ifdef NG_MEASURE
@@ -79,8 +81,8 @@ inline void summary(FILE *f, const char *name, std::vector<double> v)
 }
 inline void finish(const std::wstring &dir)
 {
-	FILE *f = nullptr;
-	if (_wfopen_s(&f, (dir + L"\\measure.log").c_str(), L"a") != 0 || !f) return;
+	FILE *f = open_file(path_join(dir, L"measure.log"), L"a");
+	if (!f) return;
 	std::fprintf(f, "first frame: %.1f ms\n", state().first_frame_ms);
 	std::fprintf(f, "first answer: main %.1f ms, search %.1f ms\n", state().first_answer_ms[0], state().first_answer_ms[1]);
 	summary(f, "full frames", state().full);
@@ -88,8 +90,8 @@ inline void finish(const std::wstring &dir)
 	std::fprintf(f, "----\n");
 	std::fclose(f);
 	if (state().trace.empty()) return;
-	FILE *g = nullptr;
-	if (_wfopen_s(&g, (dir + L"\\measure-trace.log").c_str(), L"a") != 0 || !g) return;
+	FILE *g = open_file(path_join(dir, L"measure-trace.log"), L"a");
+	if (!g) return;
 	for (const auto &s : state().trace) std::fprintf(g, "%s\n", s.c_str());
 	std::fprintf(g, "----\n");
 	std::fclose(g);

@@ -1,9 +1,5 @@
 // The engines: the main one reads the book (book analyses), the search one reads no book (hint).
 // A request is sent once per position; answers are kept in the cache, so a position seen again is shown at once.
-#include <windows.h>
-
-#include <intrin.h>
-
 #include <cstdio>
 
 #include "app.h"
@@ -18,44 +14,14 @@ namespace {
 // the names of the engines in the log, by their roles (eng_)
 constexpr const char *kRoleNames[] = {"engine.main", "engine.search", "engine.tool", "engine.play", "engine.compare"};
 
-bool dir_exists(const std::wstring &p)
-{
-	const DWORD a = GetFileAttributesW(p.c_str());
-	return a != INVALID_FILE_ATTRIBUTES && (a & FILE_ATTRIBUTE_DIRECTORY);
-}
-
 // the size of a file, for the log
 std::wstring size_text(u64 bytes)
 {
 	wchar_t s[32];
-	if (bytes >= 1u << 30) swprintf_s(s, L"%.1f GB", static_cast<double>(bytes) / (1u << 30));
-	else if (bytes >= 1u << 20) swprintf_s(s, L"%.1f MB", static_cast<double>(bytes) / (1u << 20));
-	else swprintf_s(s, L"%llu B", bytes);
+	if (bytes >= 1u << 30) swprintf(s, std::size(s), L"%.1f GB", static_cast<double>(bytes) / (1u << 30));
+	else if (bytes >= 1u << 20) swprintf(s, std::size(s), L"%.1f MB", static_cast<double>(bytes) / (1u << 20));
+	else swprintf(s, std::size(s), L"%llu B", static_cast<unsigned long long>(bytes));
 	return s;
-}
-
-// 4: AVX-512 (x86-64-v4), 3: AVX2 (x86-64-v3), 1: other
-int cpu_level()
-{
-	int r[4];
-	__cpuid(r, 0);
-	const int max_leaf = r[0];
-	__cpuid(r, 1);
-	const bool osxsave = (r[2] >> 27) & 1, avx = (r[2] >> 28) & 1, fma = (r[2] >> 12) & 1, movbe = (r[2] >> 22) & 1;
-	const bool popcnt = (r[2] >> 23) & 1, f16c = (r[2] >> 29) & 1;
-	if (!osxsave || !avx || max_leaf < 7) return 1;
-	const unsigned long long xcr0 = _xgetbv(0);
-	if ((xcr0 & 6) != 6) return 1;
-	__cpuidex(r, 7, 0);
-	const unsigned b = static_cast<unsigned>(r[1]);
-	const bool avx2 = (b >> 5) & 1, bmi1 = (b >> 3) & 1, bmi2 = (b >> 8) & 1;
-	int e[4];
-	__cpuid(e, static_cast<int>(0x80000001));
-	const bool lzcnt = (e[2] >> 5) & 1;
-	if (!(avx2 && bmi1 && bmi2 && fma && movbe && popcnt && f16c && lzcnt)) return 1;
-	const bool avx512 = ((b >> 16) & 1) && ((b >> 17) & 1) && ((b >> 28) & 1) && ((b >> 30) & 1) && ((b >> 31) & 1);
-	if (avx512 && (xcr0 & 0xe6) == 0xe6) return 4;
-	return 3;
 }
 
 }  // namespace
@@ -65,9 +31,9 @@ std::wstring App::engine_dir(EngineKind k) const
 	const char *sec = engine_section(k);
 	const std::string d = ini_.get(sec, "dir");
 	if (!d.empty()) return absolute(exe_dir_, d);
-	const std::wstring dir = exe_dir_ + L"\\engines\\" + widen(sec);
+	const std::wstring dir = path_join(exe_dir_, L"engines\\" + widen(sec));
 	// (the folder of the C version in a distribution of 0.2.0 or before)
-	if (k == EngineKind::Nikque18 && !dir_exists(dir) && dir_exists(exe_dir_ + L"\\engines\\nikque18")) return exe_dir_ + L"\\engines\\nikque18";
+	if (k == EngineKind::Nikque18 && !dir_exists(dir) && dir_exists(path_join(exe_dir_, L"engines\\nikque18"))) return path_join(exe_dir_, L"engines\\nikque18");
 	return dir;
 }
 
@@ -107,13 +73,8 @@ std::wstring App::engine_exe(EngineKind k) const
 	const std::wstring dir = engine_dir(k);
 	const std::string e = ini_.get(sec, "exe", "auto");
 	if (!e.empty() && !iequals(e, "auto")) return absolute(dir, e);
-	const int lv = cpu_level();
-	std::vector<std::wstring> names;
-	if (lv >= 4) names.push_back(L"wEdax-x86-64-v4.exe");
-	if (lv >= 3) names.push_back(L"wEdax-x86-64-v3.exe");
-	names.push_back(L"wEdax-x86-64.exe");
-	for (const auto &n : names)
-		if (file_exists(dir + L"\\" + n)) return dir + L"\\" + n;
+	for (const auto &n : engine_exe_names())
+		if (file_exists(path_join(dir, n))) return path_join(dir, n);
 	return {};
 }
 
@@ -121,7 +82,7 @@ std::wstring App::engine_eval(EngineKind k) const
 {
 	const char *sec = engine_section(k);
 	const std::string ev = ini_.get(sec, "eval");
-	return ev.empty() ? engine_dir(k) + L"\\data\\eval.dat" : absolute(engine_dir(k), ev);
+	return ev.empty() ? path_join(engine_dir(k), L"data\\eval.dat") : absolute(engine_dir(k), ev);
 }
 
 bool App::engine_files_ok(EngineKind k)
@@ -149,7 +110,7 @@ std::optional<std::wstring> App::engine_args(EngineKind k)
 		return std::nullopt;
 	}
 	int n = threads_;
-	if (n <= 0) n = static_cast<int>(GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
+	if (n <= 0) n = cpu_count();
 	std::wstring a = L"-q -eval-file \"" + *e + L"\" -n-tasks " + std::to_wstring(n) + L" -level " + std::to_wstring(level_);
 	if (hash_bits_ > 0) a += L" -hash-table-size " + std::to_wstring(hash_bits_);
 	return a;
@@ -158,7 +119,7 @@ std::optional<std::wstring> App::engine_args(EngineKind k)
 std::optional<std::wstring> App::nobook_args(const wchar_t *name) const
 {
 	// a name the engine cannot keep would be ignored, and the engine would read its own book (data\book.dat)
-	const auto f = engine_arg_path(temp_dir_ + L"\\" + name, EngineName::Book);
+	const auto f = engine_arg_path(path_join(temp_dir_, name), EngineName::Book);
 	if (!f) return std::nullopt;
 	return L" -book-file \"" + *f + L"\" -book-usage off";
 }
@@ -193,7 +154,7 @@ void App::cancel_reduce(std::string *out)
 	if (reduce_.id) {  // still counted
 		if (out) stop_request(*out, reduce_.id);
 		reduce_.id = 0;
-		if (hwnd_) PostMessageW(hwnd_, WM_REDUCE, 0, 0);  // (a script waits no longer)
+		if (hwnd_) post(WM_REDUCE);  // (a script waits no longer)
 	}
 	reduce_.state = ReduceJob::Stopped;  // (an answer that has come is not taken: WM_REDUCE is on its way)
 }
@@ -268,8 +229,7 @@ void App::start_engines()
 	// (not while the main engine runs: it may be saving the book, and a handle on the file makes its replacing fail)
 	if (kind_ == EngineKind::Nikque18 && !eng_[0].proc.running()) {
 		// nikque.18 cannot read the book form 2 of newedax ("NEDXBOOK")
-		FILE *f = nullptr;
-		if (_wfopen_s(&f, book.c_str(), L"rb") == 0 && f) {
+		if (FILE *f = open_file(book, L"rb")) {
 			char head[8] = {};
 			const size_t got = fread(head, 1, 8, f);
 			fclose(f);
@@ -303,10 +263,8 @@ void App::start_engines()
 		s.book_arg = role == 0 ? *book_arg : std::wstring();
 		s.book_changed = false;
 		if (role == 0) {
-			WIN32_FILE_ATTRIBUTE_DATA attr{};
 			book_bytes_.reset();
-			if (GetFileAttributesExW(book.c_str(), GetFileExInfoStandard, &attr))
-				book_bytes_ = u64{attr.nFileSizeHigh} << 32 | attr.nFileSizeLow;
+			if (const auto n = file_size(book)) book_bytes_ = *n;
 		}
 		engine_level_[role] = level_;
 		if (!s.alive) {
@@ -371,7 +329,7 @@ void App::close_main_engine(std::function<void()> then)
 	save_shown_s_ = -1;
 	after_save_ = std::move(then);
 	log(lang::t("log.engine_saving"));
-	SetTimer(hwnd_, kTimerSave, 250, nullptr);
+	set_timer(kTimerSave, 250);
 	update_menu();
 	invalidate();
 }
@@ -379,7 +337,7 @@ void App::close_main_engine(std::function<void()> then)
 void App::watch_save()
 {
 	if (!book_saving_) {
-		KillTimer(hwnd_, kTimerSave);
+		kill_timer(kTimerSave);
 		return;
 	}
 	if (!eng_[0].proc.exited()) {
@@ -391,13 +349,13 @@ void App::watch_save()
 		return;
 	}
 	// a box or a small window open on the window (it is disabled then: the question of ask_cut_save too): after it
-	if (hwnd_ && !IsWindowEnabled(hwnd_)) return;
+	if (hwnd_ && !window_enabled()) return;
 	end_save(false);
 }
 
 void App::end_save(bool cut)
 {
-	KillTimer(hwnd_, kTimerSave);
+	kill_timer(kTimerSave);
 	EngineSlot &s = eng_[0];
 	// its last lines first (the save said by the engine, or why it could not save), which close() would drop: it has
 	// read them all when it has ended (exited)
@@ -417,7 +375,7 @@ void App::end_save(bool cut)
 
 void App::ask_cut_save()
 {
-	if (!book_saving_ || (hwnd_ && !IsWindowEnabled(hwnd_))) return;  // (the question, or another box, is open)
+	if (!book_saving_ || (hwnd_ && !window_enabled())) return;  // (the question, or another box, is open)
 	const auto sec = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - save_t0_).count();
 	const int r = message(lang::f("ask.cut_save", {std::to_wstring(sec / 60), std::to_wstring(sec % 60)}),
 	                      MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2);
@@ -447,8 +405,8 @@ void App::stop_engines(std::function<void()> then)
 	com_thinking_ = com_pondering_ = com_waiting_book_ = com_accept_ = false;
 	com_book_move_ = kNoMove;
 	cmp_busy_ = cmp_accept_ = false;
-	DeleteFileW((temp_dir_ + L"\\nobook.dat").c_str());
-	DeleteFileW((temp_dir_ + L"\\nobook-tool.dat").c_str());
+	delete_file(path_join(temp_dir_, L"nobook.dat"));
+	delete_file(path_join(temp_dir_, L"nobook-tool.dat"));
 	close_main_engine(std::move(then));  // (last: what was asked is done after it)
 }
 
@@ -767,7 +725,7 @@ void App::eval_mismatch(int role)
 	if (eval_warned_) return;
 	eval_warned_ = true;
 	eval_warned_role_ = role;
-	if (hwnd_) PostMessageW(hwnd_, WM_EVAL_WARN, 0, 0);  // (a message box is not shown while the lines of the engine are read)
+	if (hwnd_) post(WM_EVAL_WARN);  // (a message box is not shown while the lines of the engine are read)
 }
 
 void App::eval_mismatch_box()
@@ -1052,7 +1010,7 @@ void App::on_engine(WPARAM tag, bool ended)
 			requests_.erase(reduce_.id);
 			reduce_.id = 0;
 			reduce_.state = ReduceJob::Unknown;
-			PostMessageW(hwnd_, WM_REDUCE, 0, 0);
+			post(WM_REDUCE);
 			continue;
 		}
 		// other lines of the engines go to the log (not the prompts and the search lines)
@@ -1090,7 +1048,7 @@ void App::on_engine(WPARAM tag, bool ended)
 		const PosInfo *info = cache_.peek(game_.now());
 		if (info && info->values_done) {
 			com_waiting_book_ = false;
-			KillTimer(hwnd_, kTimerCom);
+			kill_timer(kTimerCom);
 			com_think();
 		}
 	}
@@ -1166,8 +1124,8 @@ bool App::write_missing(const std::wstring &file)
 		out += "\r\n";
 	}
 	// (as the other exports: the log says it with the file, written or not, also when the file cannot be opened)
-	FILE *f = nullptr;
-	bool ok = _wfopen_s(&f, file.c_str(), L"wb") == 0 && f;
+	FILE *f = open_file(file, L"wb");
+	bool ok = f != nullptr;
 	if (ok) {
 		const bool written = fwrite(out.data(), 1, out.size(), f) == out.size();
 		ok = fclose(f) == 0 && written;  // (the last part is written as the file closes: a full drive fails there)

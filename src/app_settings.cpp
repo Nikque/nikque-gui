@@ -1,6 +1,6 @@
 // The windows of settings: the range of the analyses (stages, umigame numbers, level, threads) and the
 // settings of book learning, sent to the main engine as commands.
-#include <windows.h>
+#include "platform.h"
 
 #include <algorithm>
 #include <cwchar>
@@ -19,7 +19,11 @@ bool stage_pair(const std::wstring &s, std::string *out)
 {
 	int x, y;
 	wchar_t extra;
+#if defined(_WIN32)
 	if (swscanf_s(s.c_str(), L"%d/%d%lc", &x, &y, &extra, 1) != 2) return false;
+#else
+	if (swscanf(s.c_str(), L"%d/%d%lc", &x, &y, &extra) != 2) return false;
+#endif
 	if (x < 0 || x > 129 || y < 0 || y > 254) return false;
 	*out = std::to_string(x) + "/" + std::to_string(y);
 	return true;

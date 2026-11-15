@@ -1,12 +1,15 @@
 #include "lang.h"
 
+#if defined(_WIN32)
 #include <windows.h>
+#endif
 
 #include <cstdio>
 #include <string>
 #include <unordered_map>
 
 #include "ini.h"
+#include "platform.h"
 #include "resource.h"
 
 namespace ng::lang {
@@ -59,13 +62,21 @@ void load(const std::wstring &exe_dir, std::string_view code)
 	words.clear();
 	loaded = std::string(code);
 	// Japanese in the exe first, then the file over it
+#if defined(_WIN32)
 	if (HRSRC r = FindResourceW(nullptr, MAKEINTRESOURCEW(IDR_LANG_JA), RT_RCDATA)) {
 		if (HGLOBAL g = LoadResource(nullptr, r)) {
 			const char *p = static_cast<const char *>(LockResource(g));
 			read_text(std::string_view(p, SizeofResource(nullptr, r)));
 		}
 	}
-	const std::wstring path = exe_dir + L"\\lang\\" + widen(code) + L".txt";
+#else
+	// (lang/ja.txt made into a C++ string by the build: CMakeLists.txt)
+	static constexpr unsigned char kJapanese[] = {
+#include "lang_ja.inc"
+	};
+	read_text(std::string_view(reinterpret_cast<const char *>(kJapanese), sizeof kJapanese));
+#endif
+	const std::wstring path = path_join(exe_dir, L"lang\\" + widen(code) + L".txt");
 	if (std::string all; read_file(path, &all)) read_text(all);
 }
 
@@ -113,10 +124,17 @@ std::wstring number(long long n)
 
 const wchar_t *ui_font()
 {
+#if defined(_WIN32)
 	if (loaded == "en") return L"Segoe UI";
 	if (loaded == "zh-Hans") return L"Microsoft YaHei UI";
 	if (loaded == "zh-Hant") return L"Microsoft JhengHei UI";
 	return L"Yu Gothic UI";
+#else
+	if (loaded == "en") return L"Helvetica Neue";
+	if (loaded == "zh-Hans") return L"PingFang SC";
+	if (loaded == "zh-Hant") return L"PingFang TC";
+	return L"Hiragino Sans";
+#endif
 }
 
 const wchar_t *locale()

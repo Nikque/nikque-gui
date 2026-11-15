@@ -1,7 +1,7 @@
 // The board: its orientation (the game turned by a symmetry), setting up a position, the line of moves of a
 // position (the book first, else a search without the book), positions as text and bitboards, images of the
 // window and of the board, the numbers of the moves.
-#include <windows.h>
+#include "platform.h"
 
 #include <ctime>
 
@@ -21,7 +21,7 @@ std::wstring stamp()
 {
 	const std::time_t t = std::time(nullptr);
 	std::tm tm{};
-	localtime_s(&tm, &t);
+	local_tm(t, &tm);
 	wchar_t b[32];
 	wcsftime(b, 32, L"%Y%m%d-%H%M%S", &tm);
 	return b;
@@ -198,7 +198,7 @@ void App::findline_answer(const Fields &f, bool end)
 
 void App::estimate_without_book(const Position &target)
 {
-	run_task(lang::t("estimate.searching"), [this, target](std::stop_token st) -> std::function<void()> {
+	run_task(lang::t("estimate.searching"), [this, target](ng::stop_token st) -> std::function<void()> {
 		const auto t0 = std::chrono::steady_clock::now();
 		LineSearch r = find_line(Position{}, target, kSearchNodes, st);
 		int sym = 0;
@@ -230,49 +230,9 @@ void App::estimate_without_book(const Position &target)
 
 // ---- positions as text
 
-namespace {
+bool App::copy_text(const std::wstring &text) { return set_clipboard_text(hwnd_, text); }
 
-// other programs hold the clipboard for a moment, right after it changed for one
-bool open_clipboard(HWND hwnd)
-{
-	for (int i = 0; i < 20; ++i) {
-		if (OpenClipboard(hwnd)) return true;
-		Sleep(10);
-	}
-	return false;
-}
-
-}  // namespace
-
-bool App::copy_text(const std::wstring &text)
-{
-	if (!open_clipboard(hwnd_)) return false;
-	EmptyClipboard();
-	bool ok = false;
-	if (HGLOBAL h = GlobalAlloc(GMEM_MOVEABLE, (text.size() + 1) * sizeof(wchar_t))) {
-		if (wchar_t *p = static_cast<wchar_t *>(GlobalLock(h))) {
-			std::copy_n(text.c_str(), text.size() + 1, p);
-			GlobalUnlock(h);
-			ok = SetClipboardData(CF_UNICODETEXT, h) != nullptr;
-		}
-		if (!ok) GlobalFree(h);  // (the clipboard owns it only when it took it)
-	}
-	CloseClipboard();
-	return ok;
-}
-
-std::wstring App::clipboard_text()
-{
-	std::wstring text;
-	if (open_clipboard(hwnd_)) {
-		if (HANDLE h = GetClipboardData(CF_UNICODETEXT)) {
-			if (const wchar_t *p = static_cast<const wchar_t *>(GlobalLock(h))) text = p;
-			GlobalUnlock(h);
-		}
-		CloseClipboard();
-	}
-	return text;
-}
+std::wstring App::clipboard_text() { return ng::clipboard_text(hwnd_); }
 
 void App::copy_position(int id)
 {
@@ -341,8 +301,8 @@ void App::import_position()
 std::wstring App::images_dir() const
 {
 	const std::string d = ini_.get("view", "screenshot_dir");
-	std::wstring dir = d.empty() ? exe_dir_ + L"\\screenshots" : from_exe_dir(d);
-	CreateDirectoryW(dir.c_str(), nullptr);
+	std::wstring dir = d.empty() ? path_join(exe_dir_, L"screenshots") : from_exe_dir(d);
+	make_dir(dir);
 	return dir;
 }
 
@@ -351,15 +311,14 @@ void App::screenshot(const std::wstring &file)
 	std::wstring path = file;
 	if (path.empty()) {
 		const std::wstring dir = images_dir();
-		path = dir + L"\\" + stamp() + L".png";
-		for (int k = 2; GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES; ++k)
-			path = dir + L"\\" + stamp() + L"-" + std::to_wstring(k) + L".png";
+		path = path_join(dir, stamp() + L".png");
+		for (int k = 2; path_exists(path); ++k) path = path_join(dir, stamp() + L"-" + std::to_wstring(k) + L".png");
 	}
 	compute_line();
 	prepare_glows();
 	const Theme &th = theme(design_);
-	const bool ok = gfx_.save_png(path, D2D1::RectU(0, 0, gfx_.width(), gfx_.height()), [&] {
-		gfx_.dc()->Clear(th.bg);
+	const bool ok = gfx_.save_png(path, rect_u(0, 0, gfx_.width(), gfx_.height()), [&] {
+		gfx_.dc()->clear(th.bg);
 		draw_board(*this);
 		draw_panel(*this);
 		draw_log(*this);
@@ -371,7 +330,7 @@ void App::screenshot(const std::wstring &file)
 void App::save_board_image()
 {
 	const std::wstring flt = lang::t("filter.png") + std::wstring(L" (*.png)\0*.png\0", 16);
-	const std::wstring f = pick_save(flt.c_str(), L"png", images_dir() + L"\\board-" + stamp() + L".png");
+	const std::wstring f = pick_save(flt.c_str(), L"png", path_join(images_dir(), L"board-" + stamp() + L".png"));
 	if (f.empty()) return;
 	compute_line();
 	prepare_glows();
@@ -381,8 +340,8 @@ void App::save_board_image()
 	const UINT left = static_cast<UINT>(std::max(0, lay_.bx - coord - pad)), top = static_cast<UINT>(std::max(0, lay_.by - coord - pad));
 	const UINT right = std::min<UINT>(gfx_.width(), static_cast<UINT>(lay_.bx + lay_.board_px + pad));
 	const UINT bottom = std::min<UINT>(gfx_.height(), static_cast<UINT>(lay_.by + lay_.board_px + pad));
-	const bool ok = gfx_.save_png(f, D2D1::RectU(left, top, right, bottom), [&] {
-		gfx_.dc()->Clear(th.bg);
+	const bool ok = gfx_.save_png(f, rect_u(left, top, right, bottom), [&] {
+		gfx_.dc()->clear(th.bg);
 		draw_board(*this);
 	});
 	log(ok ? lang::f("status.screenshot", {f}) : lang::f("status.screenshot_failed", {f}));

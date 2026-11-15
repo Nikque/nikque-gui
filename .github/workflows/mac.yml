@@ -1,0 +1,92 @@
+# The macOS build of nikque GUI: the app for Apple silicon and Intel (one bundle), the tests that need no test books,
+# the distribution (tools/make_dist_mac.sh: the app, the engine of Edax nikque from its release ZIP, newedax built from
+# the source of its release's tag), and a run of the distribution with a script (pictures of the window, the log).
+name: macOS
+
+on:
+  push:
+    branches: [mac1]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
+          cmake --build build -j 4 -- -k || { cmake --build build -j 1 -- -k 2>&1 | grep -E "error:|warning:" | sort -u | head -150; exit 1; }
+          lipo -info "build/nikque GUI.app/Contents/MacOS/nikque GUI"
+
+      - name: Tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: The source of newedax (the tag of its release)
+        uses: actions/checkout@v4
+        with:
+          repository: Nikque/newedax
+          ref: v4.5.5-newedax.14
+          path: ne
+
+      - name: Boost 1.92 (headers, for newedax)
+        id: boost
+        uses: actions/cache@v4
+        with:
+          path: boost/boost_1_92_0/boost
+          key: boost-1.92.0-c46baee75ed4b558cf6553630d0615a147ed582812917b57e6f0839d1954549f
+
+      - name: Boost 1.92 from boost.org (the same ZIP as the Windows releases of newedax)
+        if: steps.boost.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o boost_1_92_0.zip https://archives.boost.io/release/1.92.0/source/boost_1_92_0.zip
+          echo "c46baee75ed4b558cf6553630d0615a147ed582812917b57e6f0839d1954549f  boost_1_92_0.zip" | shasum -a 256 -c
+          mkdir -p boost
+          unzip -q boost_1_92_0.zip 'boost_1_92_0/boost/*' -d boost
+          rm boost_1_92_0.zip
+
+      - name: The release ZIPs of the engines
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v4.5.5-nikque.27 -R Nikque/edax-reversi-AVX -p 'edax-4.5.5-nikque.27.zip' -D dl
+          gh release download v4.5.5-newedax.14 -R Nikque/newedax -p 'edax-4.5.5-newedax.14-64.zip' -D dl
+
+      - name: The distribution
+        run: BOOST_DIR="$PWD/boost/boost_1_92_0" bash tools/make_dist_mac.sh "build/nikque GUI.app" dl/edax-4.5.5-nikque.27.zip dl/edax-4.5.5-newedax.14-64.zip ne
+
+      - name: Run the distribution with a script
+        run: |
+          d=$(ls -d dist/nikque-gui-*-mac | head -1)
+          cp -R "$d" run
+          cp .github/ci/smoke.txt run/
+          sed -i '' -e 's/^startup=.*/startup=smoke.txt/' -e 's/^level=21/level=10/' run/config.ini
+          grep -n "startup\|^level\|^kind" run/config.ini
+          cd run
+          ( sleep 900; pkill -f "nikque GUI.app" ) &
+          "./nikque GUI.app/Contents/MacOS/nikque GUI" || echo "exit $?"
+          ls -la
+
+      - name: Keep the pictures and the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-run
+          path: |
+            run/*.png
+            run/*.txt
+            run/config.ini
+          if-no-files-found: warn
+
+      - name: Keep the distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-dist
+          path: |
+            dist/*.zip
+            dist/*-files.txt
+          compression-level: 0

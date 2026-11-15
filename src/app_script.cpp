@@ -1,7 +1,7 @@
 // Command scripts: a text file of commands (one a line, "#" notes) run one after another, also at the start
 // (config.ini [script] startup). A command that starts work (reading a list, learning, a tool, the analysis of
 // the position) waits for its end before the next line. The commands are listed in readme.txt.
-#include <windows.h>
+#include "platform.h"
 
 #include <cstdio>
 
@@ -155,7 +155,7 @@ void App::pump_script()
 			if ((script_wait_ == ScriptWait::Game || script_wait_ == ScriptWait::Analysis) && script_condition())
 				log(lang::t("script.wait_timeout"));
 			script_wait_ = ScriptWait::None;
-			KillTimer(hwnd_, kTimerScript);
+			kill_timer(kTimerScript);
 		}
 		if (script_.empty()) break;
 		const ScriptLine l = script_.front();
@@ -373,7 +373,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		const int s = w.size() > 1 ? number(a1).value_or(30) : 30;
 		script_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(std::clamp(s, 1, 3600));
 		wait(ScriptWait::Analysis);
-		SetTimer(hwnd_, kTimerScript, 250, nullptr);
+		set_timer(kTimerScript, 250);
 		return true;
 	}
 	if (c == "search") {
@@ -466,7 +466,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 			const auto text = engine_command(std::string_view(cmd).substr(i, a - i));
 			if (!text) return "err.command_letters";
 			const std::wstring f = path(cmd.substr(a + 1, b - a - 1));
-			const bool there = GetFileAttributesW(f.c_str()) != INVALID_FILE_ATTRIBUTES;
+			const bool there = path_exists(f);
 			const auto p = engine_path_or_say(f, there ? (rewrites ? FileUse::Rewrite : FileUse::Read) : FileUse::Write, role);
 			if (!p) return "script.bad_file";
 			r += *text + *p;
@@ -556,7 +556,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		com_once_pos_ = key_of(game_.now());
 		com_think();
 		wait(ScriptWait::Com);
-		SetTimer(hwnd_, kTimerScript, 250, nullptr);
+		set_timer(kTimerScript, 250);
 		return true;
 	}
 	if (c == "takeback") {
@@ -567,7 +567,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		const int s = w.size() > 1 ? number(a1).value_or(600) : 600;
 		script_until_ = std::chrono::steady_clock::now() + std::chrono::seconds(std::clamp(s, 1, 36000));
 		wait(ScriptWait::Game);
-		SetTimer(hwnd_, kTimerScript, 250, nullptr);
+		set_timer(kTimerScript, 250);
 		return true;
 	}
 	if (c == "compare") {
@@ -589,7 +589,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 	if (c == "quit") {
 		script_.clear();
 		script_quit_ = true;
-		PostMessageW(hwnd_, WM_CLOSE, 0, 0);
+		post(WM_CLOSE);
 		return true;
 	}
 	return bad("script.unknown");
@@ -597,7 +597,7 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 
 void App::schedule_script()
 {
-	if (!script_.empty() || script_wait_ != ScriptWait::None) PostMessageW(hwnd_, WM_SCRIPT, 0, 0);
+	if (!script_.empty() || script_wait_ != ScriptWait::None) post(WM_SCRIPT);
 }
 
 }  // namespace ng

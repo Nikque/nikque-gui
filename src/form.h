@@ -2,7 +2,7 @@
 // with a slider, and OK / Cancel. Built from code (no dialog resources), sized for the DPI of the owner.
 #pragma once
 
-#include <windows.h>
+#include "platform.h"
 
 #include <string>
 #include <vector>
@@ -18,8 +18,8 @@ struct FormField {
 	int choice = 0;                     // Choice (in and out)
 	bool checked = false;               // Check (in and out)
 	std::wstring note;                  // a hint on the right
-	HWND control = nullptr;             // set while the window is open
-	HWND slider = nullptr;              // Slider: the slider beside the number
+	NativeWindow control = nullptr;     // set while the window is open
+	NativeWindow slider = nullptr;      // Slider: the slider beside the number
 };
 
 // a field of a number from lo to hi (the note: a hint on the right)
@@ -35,6 +35,6 @@ FormField check_field(const std::wstring &label, bool checked, const std::wstrin
 
 // Shows the window; returns true when OK was pressed (and every number is in its range). The buttons and the warning
 // of a number out of its range are in the language of the app.
-bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fields);
+bool run_form(NativeWindow owner, const std::wstring &title, std::vector<FormField> &fields);
 
 }  // namespace ng

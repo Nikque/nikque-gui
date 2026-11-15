@@ -1,7 +1,5 @@
 // Keys, mouse and menu commands.
-#include <windows.h>
-
-#include <shellapi.h>
+#include "platform.h"
 
 #include <algorithm>
 #include <cmath>
@@ -181,9 +179,9 @@ void App::on_key(WPARAM vk)
 	}
 	KeyChord k;
 	k.vk = static_cast<UINT>(vk);
-	k.ctrl = GetKeyState(VK_CONTROL) < 0;
-	k.shift = GetKeyState(VK_SHIFT) < 0;
-	k.alt = GetKeyState(VK_MENU) < 0;
+	k.ctrl = key_held(VK_CONTROL);
+	k.shift = key_held(VK_SHIFT);
+	k.alt = key_held(VK_MENU);
 	if (auto a = keys_.find(k)) {
 		// while a position is set up, the game is not moved
 		if (editing_ && *a != Action::Screenshot && *a != Action::TogglePanel && *a != Action::ToggleLog) return;
@@ -296,7 +294,7 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 		return;
 	}
 	auto slider = [&](const Layout::Field &f, Drag d) {
-		D2D1_RECT_F r = f.track;
+		RectF r = f.track;
 		r.left -= 8 * lay_.scale;
 		r.right += 8 * lay_.scale;
 		if (f.track.right - f.track.left < 4 || !inside(r, fx, fy)) return false;
@@ -395,8 +393,7 @@ void App::on_mouse_move(int x, int y)
 {
 	const float fx = static_cast<float>(x), fy = static_cast<float>(y);
 	if (x >= 0) {  // (WM_MOUSELEAVE when it leaves the window)
-		TRACKMOUSEEVENT tme{sizeof tme, TME_LEAVE, hwnd_, 0};
-		TrackMouseEvent(&tme);
+		track_mouse_leave(hwnd_);
 	}
 	mouse_ = {x, y};
 	switch (drag_) {
@@ -876,7 +873,7 @@ void App::on_command(int id)
 		break;
 	case cmd::OpenConfig:
 		save_config();
-		ShellExecuteW(hwnd_, L"open", L"notepad.exe", (L"\"" + ini_path_ + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
+		open_text_file(hwnd_, ini_path_);
 		break;
 	case cmd::HelpKeys: {
 		std::wstring s;
@@ -885,7 +882,7 @@ void App::on_command(int id)
 			s += lang::t(std::string("action.") + KeyMap::name(a)) + L"\t" + keys_.describe(a) + L"\n";
 		}
 		s += lang::t("action.right_click") + L"\n\n" + lang::t("help.keys_change");
-		MessageBoxW(hwnd_, s.c_str(), lang::t("menu.help.keys").c_str(), MB_OK);
+		message_box(hwnd_, s, lang::t("menu.help.keys"), MB_OK);
 		break;
 	}
 	case cmd::HelpAbout:

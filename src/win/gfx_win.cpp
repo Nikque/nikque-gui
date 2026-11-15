@@ -12,7 +12,7 @@
 
 namespace ng {
 
-bool Gfx::init(HWND hwnd)
+bool Gfx::init(NativeWindow hwnd)
 {
 	hwnd_ = hwnd;
 	D2D1_FACTORY_OPTIONS fo{};
@@ -108,6 +108,8 @@ bool Gfx::create_device()
 	if (FAILED(factory_->CreateDevice(dxgi.Get(), &device_))) return false;
 	if (FAILED(device_->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &dc_))) return false;
 	dc_.As(&dc1_);
+	canvas_.d = dc_.Get();
+	canvas_.factory = factory_.Get();
 	dc_->SetDpi(96.0f, 96.0f);
 	dc_->SetUnitMode(D2D1_UNIT_MODE_PIXELS);
 
@@ -152,6 +154,7 @@ void Gfx::release_device()
 	shapes_.clear();  // the realizations belong to the device
 	brush_.Reset();
 	target_.Reset();
+	canvas_.d = nullptr;
 	dc_.Reset();
 	dc1_.Reset();
 	device_.Reset();
@@ -237,7 +240,7 @@ ID2D1LinearGradientBrush *Gfx::gradient(int id, const D2D1_GRADIENT_STOP *stops,
 	return (gradients_[id] = b).Get();
 }
 
-IDWriteTextFormat *Gfx::text(float px, bool bold, DWRITE_TEXT_ALIGNMENT align, Face face)
+IDWriteTextFormat *Gfx::text(float px, bool bold, Align align, Face face)
 {
 	const std::wstring key = std::to_wstring(static_cast<int>(px * 4)) + (bold ? L"b" : L"n") +
 	                         std::to_wstring(static_cast<int>(align)) + (face == Face::Number ? L"N" : L"U");
@@ -250,7 +253,7 @@ IDWriteTextFormat *Gfx::text(float px, bool bold, DWRITE_TEXT_ALIGNMENT align, F
 	                                     DWRITE_FONT_STRETCH_NORMAL, px, lang::locale(), &f)) ||
 	    !f)
 		return nullptr;
-	f->SetTextAlignment(align);
+	f->SetTextAlignment(static_cast<DWRITE_TEXT_ALIGNMENT>(align));
 	f->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 	f->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
 	return (formats_[key] = f).Get();

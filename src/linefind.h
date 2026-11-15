@@ -4,7 +4,7 @@
 #pragma once
 
 #include <optional>
-#include <stop_token>
+#include "stop.h"
 #include <vector>
 
 #include "rules.h"
@@ -23,7 +23,7 @@ struct LineSearch {
 // again when met again. A search that ends before `node_limit` finds the same line; the positions searched again count
 // toward the limit, so a search near it may give up where keeping them all would have found the line.
 inline constexpr size_t kDeadLimit = 2'000'000;
-LineSearch find_line(const Position &from, const Position &target, long long node_limit, std::stop_token stop = {},
+LineSearch find_line(const Position &from, const Position &target, long long node_limit, ng::stop_token stop = {},
                      size_t dead_limit = kDeadLimit);
 
 }  // namespace ng

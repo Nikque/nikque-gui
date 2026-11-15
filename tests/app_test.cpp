@@ -1681,7 +1681,7 @@ static void test_close_waits_for_save()
 		const HWND w = a->hwnd_;
 		a->proc(w, WM_CLOSE, 0, 0);
 		start_search_engine(*a);
-		a->run_task(L"ng-wait", [](std::stop_token st) {
+		a->run_task(L"ng-wait", [](ng::stop_token st) {
 			while (!st.stop_requested()) Sleep(5);
 			return std::function<void()>{};
 		});
@@ -1791,8 +1791,8 @@ static void test_opening_marks()
 // color of the number itself on stage 4 (white bands made its color pale)
 static void test_stage_colors()
 {
-	auto same = [](const D2D1_COLOR_F &c, std::uint32_t hex) {
-		const D2D1_COLOR_F e = rgb(hex);
+	auto same = [](const Color &c, std::uint32_t hex) {
+		const Color e = rgb(hex);
 		return std::abs(c.r - e.r) < 1e-4f && std::abs(c.g - e.g) < 1e-4f && std::abs(c.b - e.b) < 1e-4f;
 	};
 	for (const Design d : {Design::Standard, Design::Paw}) {
@@ -2267,9 +2267,9 @@ static void test_bookmark_right_click()
 	a->game_.go_to(3);
 	CHECK(a->kept_.size() == 2);
 	a->bookmarks_shown_ = true;
-	a->lay_.panel = D2D1::RectF(480, 0, 1000, 700);
-	a->lay_.bookmarks = D2D1::RectF(500, 300, 900, 360);
-	a->kept_rects_ = {{0, D2D1::RectF(500, 300, 560, 360)}, {1, D2D1::RectF(570, 300, 630, 360)}};
+	a->lay_.panel = rect_f(480, 0, 1000, 700);
+	a->lay_.bookmarks = rect_f(500, 300, 900, 360);
+	a->kept_rects_ = {{0, rect_f(500, 300, 560, 360)}, {1, rect_f(570, 300, 630, 360)}};
 	// (no screen: the menu, if it is shown, is closed by a timer of this thread)
 	const UINT_PTR timer = SetTimer(nullptr, 0, 200, [](HWND, UINT, UINT_PTR, DWORD) { EndMenu(); });
 	a->on_mouse_down(600, 330, true, false);
@@ -2511,14 +2511,14 @@ static void test_gfx_failed()
 	Gfx &gx = a->gfx_;
 	CHECK(gx.init(a->hwnd_));
 	gx.resize();
-	CHECK(gx.text(0, false) == nullptr && gx.text(-3, true, DWRITE_TEXT_ALIGNMENT_CENTER, Face::Number) == nullptr);
+	CHECK(gx.text(0, false) == nullptr && gx.text(-3, true, Align::Center, Face::Number) == nullptr);
 	CHECK(gx.text(12, false) != nullptr && gx.text(0, false) == nullptr);
 	CHECK(gx.text_width(L"f5", nullptr) == 0);
 	if (gx.begin_frame()) {
-		gx.draw_text(L"f5", nullptr, D2D1::RectF(0, 0, 50, 20), D2D1::ColorF(0, 0, 0));
+		gx.draw_text(L"f5", nullptr, rect_f(0, 0, 50, 20), D2D1::ColorF(0, 0, 0));
 		gx.end_frame();
 	}
-	const D2D1_GRADIENT_STOP stops[2] = {{0, D2D1::ColorF(1, 0, 0)}, {1, D2D1::ColorF(0, 0, 1)}};
+	const GradientStop stops[2] = {{0, D2D1::ColorF(1, 0, 0)}, {1, D2D1::ColorF(0, 0, 1)}};
 	CHECK(gx.gradient(999, stops, 0) == nullptr);
 	CHECK(gx.gradient(999, stops, 2) != nullptr);
 	// a shape without its outline (the font or the geometry could not be made: Gfx::shape) is drawn as nothing
@@ -2725,7 +2725,7 @@ static int real_engine(const std::wstring &exe, const std::wstring &book)
 static bool render(App &a, std::vector<BYTE> &px, double t, bool board)
 {
 	Gfx &g = a.gfx_;
-	auto *dc = g.dc();
+	ID2D1DeviceContext *dc = g.dc()->d;  // (Windows: the Direct2D device context of the canvas)
 	const UINT w = g.width(), h = g.height();
 	const D2D1_PIXEL_FORMAT pf = D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED);
 	Microsoft::WRL::ComPtr<ID2D1Bitmap1> frame, read;
@@ -2734,7 +2734,7 @@ static bool render(App &a, std::vector<BYTE> &px, double t, bool board)
 	dc->GetTarget(&old);
 	dc->SetTarget(frame.Get());
 	dc->BeginDraw();
-	dc->SetTransform(D2D1::Matrix3x2F::Identity());
+	dc->SetTransform(Matrix::Identity());
 	dc->Clear(theme(a.design_).bg);
 	if (board) draw_board(a);
 	for (int sq = 0; sq < 64; ++sq) draw_cell(a, sq, t);
@@ -2744,7 +2744,7 @@ static bool render(App &a, std::vector<BYTE> &px, double t, bool board)
 	if (FAILED(dc->CreateBitmap({w, h}, nullptr, 0, D2D1::BitmapProperties1(D2D1_BITMAP_OPTIONS_CPU_READ | D2D1_BITMAP_OPTIONS_CANNOT_DRAW, pf, 96, 96), &read)))
 		return false;
 	const D2D1_POINT_2U at{0, 0};
-	const D2D1_RECT_U all{0, 0, w, h};
+	const RectU all{0, 0, w, h};
 	if (FAILED(read->CopyFromBitmap(&at, frame.Get(), &all))) return false;
 	D2D1_MAPPED_RECT mr{};
 	if (FAILED(read->Map(D2D1_MAP_OPTIONS_READ, &mr))) return false;
@@ -2754,7 +2754,7 @@ static bool render(App &a, std::vector<BYTE> &px, double t, bool board)
 	return true;
 }
 
-static double brightness(const std::vector<BYTE> &px, UINT w, const D2D1_RECT_F &r, const std::vector<BYTE> *base, double *gain)
+static double brightness(const std::vector<BYTE> &px, UINT w, const RectF &r, const std::vector<BYTE> *base, double *gain)
 {
 	double sum = 0, g = 0;
 	for (int y = static_cast<int>(r.top); y < static_cast<int>(r.bottom); ++y)
@@ -2810,7 +2810,7 @@ static int glow_measure(const std::wstring &dir)
 				const double t = 0.05 * f;
 				if (!render(*a, on, t, false)) return 4;
 				for (int k = 0; k < 8; ++k) {
-					const D2D1_RECT_F r = a->lay_.cell_rect(sqs[static_cast<size_t>(k)]);
+					const RectF r = a->lay_.cell_rect(sqs[static_cast<size_t>(k)]);
 					double g = 0;
 					brightness(on, a->gfx_.width(), r, &off, &g);
 					light[k] += g / frames;
@@ -2832,11 +2832,11 @@ static int glow_measure(const std::wstring &dir)
 			if (top == TopEffect::Normal) {
 				for (const double t : {0.4, 1.3, 2.2}) {
 					for (int k = 3; k < 8; ++k) {
-						const D2D1_RECT_F r = a->lay_.cell_rect(sqs[static_cast<size_t>(k)]);
+						const RectF r = a->lay_.cell_rect(sqs[static_cast<size_t>(k)]);
 						const std::wstring name = dir + L"\\cell-" + (d == Design::Paw ? L"paw" : L"std") + L"-" + std::to_wstring(k) + L"-" +
 						                          std::to_wstring(static_cast<int>(t * 10)) + L".png";
 						a->gfx_.save_png(name, {static_cast<UINT32>(r.left), static_cast<UINT32>(r.top), static_cast<UINT32>(r.right), static_cast<UINT32>(r.bottom)}, [&] {
-							a->gfx_.dc()->Clear(theme(a->design_).bg);
+							a->gfx_.dc()->clear(theme(a->design_).bg);
 							draw_board(*a);
 							for (int sq = 0; sq < 64; ++sq) draw_cell(*a, sq, t);
 						});
@@ -2849,7 +2849,7 @@ static int glow_measure(const std::wstring &dir)
 					const std::wstring name = dir + L"\\glow-" + (d == Design::Paw ? L"paw" : L"std") + L"-" +
 					                          (top == TopEffect::Strong ? L"strong" : L"normal") + L"-" + std::to_wstring(static_cast<int>(t * 10)) + L".png";
 					a->gfx_.save_png(name, {0, 0, a->gfx_.width(), a->gfx_.height()}, [&] {
-						a->gfx_.dc()->Clear(theme(a->design_).bg);
+						a->gfx_.dc()->clear(theme(a->design_).bg);
 						draw_board(*a);
 						for (int sq = 0; sq < 64; ++sq) draw_cell(*a, sq, t);
 					});

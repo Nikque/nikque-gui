@@ -2,7 +2,7 @@
 // are searched by the play engine (a fourth engine, no book); its opening moves come from the book analyses of
 // the main engine (the GUI has them), so that a large book is read once. The time of a game, taking back,
 // what is done at the end of a game. And the compare mode: the other engine (search only) beside the table.
-#include <windows.h>
+#include "platform.h"
 
 #include <algorithm>
 #include <optional>
@@ -97,7 +97,7 @@ void App::com_stop()
 	com_thinking_ = com_pondering_ = com_accept_ = false;
 	com_book_move_ = kNoMove;
 	com_waiting_book_ = false;
-	KillTimer(hwnd_, kTimerCom);
+	kill_timer(kTimerCom);
 }
 
 void App::com_think()
@@ -124,7 +124,7 @@ void App::com_think()
 		const PosInfo *info = cache_.peek(p);
 		if (!info || !info->values_done) {
 			com_waiting_book_ = true;  // com_think again when the answer has come (or the timer)
-			SetTimer(hwnd_, kTimerCom, kBookWaitMs, nullptr);
+			set_timer(kTimerCom, kBookWaitMs);
 			return;
 		}
 		// the moves of the book position: its links and its leaf, as Edax plays from its book
@@ -143,7 +143,7 @@ void App::com_think()
 			for (const auto &m : info->moves)
 				if (const auto v = book_value(m); v && *v >= best - width) choice.push_back(m.sq);
 			com_book_move_ = choice[rng()() % choice.size()];
-			SetTimer(hwnd_, kTimerCom, kBookMoveDelayMs, nullptr);
+			set_timer(kTimerCom, kBookMoveDelayMs);
 			return;
 		}
 	}
@@ -177,7 +177,7 @@ void App::com_think()
 
 void App::com_timer()
 {
-	KillTimer(hwnd_, kTimerCom);
+	kill_timer(kTimerCom);
 	if (com_waiting_book_) {
 		// the book analysis has not come: this move is searched
 		com_waiting_book_ = false;
@@ -250,7 +250,7 @@ void App::set_play_mode(PlayMode m, int games)
 		log(lang::f("play.started", {play_mode_name(m), std::to_wstring(com_level_)}));
 	} else {
 		clock_side_ = -1;
-		KillTimer(hwnd_, kTimerClock);
+		kill_timer(kTimerClock);
 	}
 	update_menu();
 	invalidate();
@@ -266,17 +266,17 @@ void App::clock_switch()
 	const Position &p = game_.now();
 	if (!game_clock_ || play_mode_ == PlayMode::Free || p.game_over()) {
 		clock_side_ = -1;
-		KillTimer(hwnd_, kTimerClock);
+		kill_timer(kTimerClock);
 		return;
 	}
 	clock_side_ = p.side;
-	SetTimer(hwnd_, kTimerClock, 1000, nullptr);
+	set_timer(kTimerClock, 1000);
 }
 
 void App::clock_tick()
 {
 	if (clock_side_ < 0) {
-		KillTimer(hwnd_, kTimerClock);
+		kill_timer(kTimerClock);
 		return;
 	}
 	const long long left = clock_left_ms_[clock_side_] -
@@ -318,7 +318,7 @@ void App::game_end_check()
 	if (end_keep_) keep_now(true);
 	if (end_list_ && !task_busy_) list_add_game();
 	// the count goes down when the next game starts, so a script waiting for the games waits for that one too
-	if (play_mode_ == PlayMode::Engines && engine_games_left_ > 0) SetTimer(hwnd_, kTimerNextGame, 1500, nullptr);
+	if (play_mode_ == PlayMode::Engines && engine_games_left_ > 0) set_timer(kTimerNextGame, 1500);
 }
 
 void App::play_command(int id)
@@ -509,7 +509,7 @@ bool play_timer(App &app, UINT_PTR id)
 	case kTimerCom: app.com_timer(); return true;
 	case kTimerClock: app.clock_tick(); return true;
 	case kTimerNextGame:
-		KillTimer(app.hwnd_, kTimerNextGame);
+		app.kill_timer(kTimerNextGame);
 		if (app.play_mode_ == PlayMode::Engines && app.engine_games_left_ > 0) {
 			--app.engine_games_left_;
 			app.game_end_done_ = false;

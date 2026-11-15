@@ -4,7 +4,7 @@
 
 ## Installing
 
-1. Unpack the ZIP (`nikque-gui-0.4.2.zip`) anywhere. No installation is needed.
+1. Unpack the ZIP (`nikque-gui-0.4.3.zip`) anywhere. No installation is needed.
 2. Start `nikque-gui.exe`.
 
 Contents of the folder:
@@ -15,7 +15,7 @@ Contents of the folder:
 | `config.ini` | settings ([11. Settings](11-settings.md)) |
 | `lang\*.txt` | the words of the screen (Japanese, English, Simplified and Traditional Chinese) |
 | `engines\nikque` | Edax v4.5.5-nikque.27, C version |
-| `engines\newedax` | newedax.13, C++ version (the 64-slot build) |
+| `engines\newedax` | newedax.14, C++ version (the 64-slot build) |
 | `readme.txt` | short notes |
 
 - Each engine folder contains:
@@ -25,15 +25,38 @@ Contents of the folder:
   - `data\eval.dat`
 - A `config.ini` from 0.2.0 or earlier (with the section `[nikque18]`) is read as is. It is then saved with `[nikque]`.
 
+## Mac (trial version)
+
+From 0.4.3 there is a Mac version (`nikque-gui-0.4.3-mac.zip`). It runs on macOS 13 or later, on Apple silicon and Intel Macs. It is still a trial version: please report anything that does not work well.
+
+1. Unpack the ZIP anywhere.
+2. The app is not signed, so macOS stops it as it is. Once, at first, type this in Terminal (replace `~/Downloads/nikque-gui-0.4.3-mac` with the folder you unpacked):
+
+   ```
+   xattr -dr com.apple.quarantine ~/Downloads/nikque-gui-0.4.3-mac
+   ```
+
+   The app and the engines in the folder can then all be opened.
+3. Open `nikque GUI.app`.
+
+The folder holds the same as the Windows version: `config.ini`, `lang` and `engines` are next to `nikque GUI.app`.
+
+- Each engine folder holds `mEdax-arm64` (Apple silicon), `mEdax-x64-modern` (Intel) and `data/eval.dat`. With `exe=auto`, the one for your Mac is chosen.
+- The nikque engine is the one of the release ZIP of v4.5.5-nikque.27. The release of newedax.14 has no engine for macOS, so the newedax engine is built for this distribution from the source of its tag (64 slots; see `engines/newedax/SOURCE.txt`).
+- Names are separated with `/`. Places written in `config.ini` (`dir=` and others) are written the Mac way (for example `/Users/name/books/book.dat`).
+- Keys: use Command (⌘) where Windows uses Ctrl (Command+C copies the moves, for example). A right click is a two-finger click on a trackpad, or a click with control held.
+- A file whose name contains a space cannot be given to the engine directly; the GUI gives it through a temporary folder (the log says so).
+- If you move the app into Applications, keep `config.ini`, `lang` and `engines` in the same folder as the app.
+
 ## Choosing the engine
 
 Switch with Engine → nikque type / newedax type. The first start uses the newedax type (up to 0.4.0 it was the nikque type). The type you choose is saved in `config.ini` and used at the next start.
 
 - Both engines have the same book analysis commands and give the same results.
-- newedax.13 uses a newly trained evaluation function (64 slots). Its `eval.dat` is about 108 MB and is not the `eval.dat` of nikque.
+- From newedax.13 on, newedax uses a newly trained evaluation function (64 slots). Its `eval.dat` is about 108 MB and is not the `eval.dat` of nikque.
 - Use the `eval.dat` from the release of the same version as the newedax engine. With the `eval.dat` of an earlier newedax, of eval2 or of nikque, the engine runs but its evaluation is wrong. The GUI then tells you so in a message ([12. Troubleshooting](12-troubleshooting.md)).
-- The 48-slot build (`edax-4.5.5-newedax.13-48.zip` in the newedax release) is not included. To use it, unpack that ZIP into another folder and write its `bin` folder in `dir=` of `[newedax]` in `config.ini`. Use the 48-slot `eval.dat` of the same ZIP with the 48-slot exe files (if they are mixed up, the evaluation is wrong without any message).
-- Memory: one newedax.13 engine uses about 160 MB (`wEdax-x86-64.exe`) to about 275 MB (`wEdax-x86-64-v4.exe`, AVX-512). The GUI starts up to five engines (main, search, tool, game and compare), so with newedax for all of them it is about 0.8 to 1.4 GB. A larger hash table or more threads use more, and the book adds its own size.
+- The 48-slot build (`edax-4.5.5-newedax.14-48.zip` in the newedax release) is not included. To use it, unpack that ZIP into another folder and write its `bin` folder in `dir=` of `[newedax]` in `config.ini`. Use the 48-slot `eval.dat` of the same ZIP with the 48-slot exe files (if they are mixed up, the evaluation is wrong without any message).
+- Memory: one newedax.14 engine uses about 160 MB (`wEdax-x86-64.exe`) to about 275 MB (`wEdax-x86-64-v4.exe`, AVX-512). The GUI starts up to five engines (main, search, tool, game and compare), so with newedax for all of them it is about 0.8 to 1.4 GB. A larger hash table or more threads use more, and the book adds its own size.
 - The book format has not changed, so the books you used with earlier versions are read as they are. Their values, however, were made with the earlier evaluation function if they were learned with an earlier version.
 
 ## The book

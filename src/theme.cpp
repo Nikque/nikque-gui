@@ -4,7 +4,7 @@ namespace ng {
 
 namespace {
 
-constexpr D2D1_COLOR_F kOutline = rgb(0x09090b);  // the thick black outline of the numbers
+constexpr Color kOutline = rgb(0x09090b);  // the thick black outline of the numbers
 
 // SPEC-2 11.8: the same number colors in both designs
 constexpr std::array<StageStyle, 8> kStages = {{
@@ -108,7 +108,7 @@ const Theme &theme(Design d)
 	return d == Design::Paw ? kPaw : kStandard;
 }
 
-D2D1_COLOR_F stage_band(const Theme &th, int stage)
+Color stage_band(const Theme &th, int stage)
 {
 	// stage 4 has two bands: white ones would cover much of its orange
 	return stage == 4 ? th.stage[4].top : rgb(0xffffff);

@@ -1,9 +1,7 @@
 // The tool engine (solve, bench, count, perft, estimate and the base commands: a third engine started for one
 // job and closed after it, reading no book), the book commands of the menus that run on the main engine like
 // book learning, and the file dialogs.
-#include <windows.h>
-
-#include <commdlg.h>
+#include "platform.h"
 
 #include <cwctype>
 
@@ -14,12 +12,6 @@
 
 namespace ng {
 
-bool file_exists(const std::wstring &p)
-{
-	const DWORD a = GetFileAttributesW(p.c_str());
-	return a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY);
-}
-
 std::wstring file_name(const std::wstring &p)
 {
 	const size_t s = p.find_last_of(L"\\/");
@@ -29,8 +21,8 @@ std::wstring file_name(const std::wstring &p)
 std::wstring absolute(const std::wstring &base, const std::string &name)
 {
 	const std::wstring w = widen(name);
-	if (w.size() >= 2 && (w[1] == L':' || (w[0] == L'\\' && w[1] == L'\\'))) return w;
-	return base + L"\\" + w;
+	if (is_full_path(w)) return w;
+	return path_join(base, w);
 }
 
 std::wstring file_filter(const char *key, const wchar_t *patterns)
@@ -60,41 +52,7 @@ namespace {
 constexpr const wchar_t *kGames = L"*.txt;*.ggf;*.sgf;*.pgn;*.wtb;*.edx";
 constexpr const wchar_t *kBooks = L"*.dat;*.dev*;*.store;*.mrg;*.enh;*.fill*;*.lexp;*.leaf*;*.play;*.gam";
 
-bool same_file(const std::wstring &a, const std::wstring &b)
-{
-	return CompareStringOrdinal(a.c_str(), -1, b.c_str(), -1, TRUE) == CSTR_EQUAL;
-}
-
 }  // namespace
-
-std::wstring App::pick_open(const wchar_t *patterns_or_filter, const std::wstring &title)
-{
-	wchar_t file[MAX_PATH * 4] = L"";
-	OPENFILENAMEW of{sizeof of};
-	of.hwndOwner = hwnd_;
-	of.lpstrFilter = patterns_or_filter;
-	of.lpstrFile = file;
-	of.nMaxFile = static_cast<DWORD>(std::size(file));
-	if (!title.empty()) of.lpstrTitle = title.c_str();
-	of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-	return GetOpenFileNameW(&of) ? std::wstring(file) : std::wstring();
-}
-
-std::wstring App::pick_save(const wchar_t *patterns_or_filter, const wchar_t *ext, const std::wstring &name,
-                            const std::wstring &title)
-{
-	wchar_t file[MAX_PATH * 4] = L"";
-	wcsncpy_s(file, name.c_str(), _TRUNCATE);
-	OPENFILENAMEW of{sizeof of};
-	of.hwndOwner = hwnd_;
-	of.lpstrFilter = patterns_or_filter;
-	of.lpstrFile = file;
-	of.nMaxFile = static_cast<DWORD>(std::size(file));
-	of.lpstrDefExt = ext;
-	if (!title.empty()) of.lpstrTitle = title.c_str();
-	of.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
-	return GetSaveFileNameW(&of) ? std::wstring(file) : std::wstring();
-}
 
 std::optional<std::string> App::engine_path_or_say(const std::wstring &path, FileUse use, int role)
 {
@@ -103,14 +61,14 @@ std::optional<std::string> App::engine_path_or_say(const std::wstring &path, Fil
 	// tells the engine the form of the file)
 	const size_t slash = path.find_last_of(L"\\/"), dot = path.find_last_of(L'.');
 	const std::wstring ext = dot != std::wstring::npos && (slash == std::wstring::npos || dot > slash) ? path.substr(dot) : L"";
-	const std::wstring tmp = temp_dir_ + L"\\f" + std::to_wstring(++temp_files_) + ext;
+	const std::wstring tmp = path_join(temp_dir_, L"f" + std::to_wstring(++temp_files_) + ext);
 	const auto tp = engine_path(tmp, false);
 	if (!tp) {
 		message(lang::f("err.engine_path", {path}), MB_ICONWARNING);
 		return std::nullopt;
 	}
 	if (use != FileUse::Write) {
-		if (!CopyFileW(path.c_str(), tmp.c_str(), FALSE)) {
+		if (!copy_file(path, tmp)) {
 			message(lang::f("err.engine_path", {path}), MB_ICONWARNING);
 			return std::nullopt;
 		}
@@ -128,8 +86,8 @@ void App::finish_moves(int role)
 			++it;
 			continue;
 		}
-		if (GetFileAttributesW(it->from.c_str()) != INVALID_FILE_ATTRIBUTES) {
-			const bool ok = MoveFileExW(it->from.c_str(), it->to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED);
+		if (path_exists(it->from)) {
+			const bool ok = move_file(it->from, it->to, true);
 			log(lang::f(ok ? "log.file_moved" : "log.file_not_moved", {it->to, it->from}));
 		}
 		it = moves_after_job_.erase(it);
@@ -141,8 +99,8 @@ bool App::save_log(const std::wstring &path) const
 {
 	std::string out;
 	for (const auto &l : log_) out += narrow(l) + "\r\n";
-	FILE *f = nullptr;
-	if (_wfopen_s(&f, path.c_str(), L"wb") != 0 || !f) return false;
+	FILE *f = open_file(path, L"wb");
+	if (!f) return false;
 	const bool ok = fwrite(out.data(), 1, out.size(), f) == out.size();
 	return fclose(f) == 0 && ok;
 }
@@ -217,7 +175,7 @@ void App::tool_ended(bool stopped)
 	eng_[2].proc.close(stopped ? 0 : 2000);
 	eng_[2].alive = false;
 	finish_moves(2);
-	DeleteFileW((temp_dir_ + L"\\nobook-tool.dat").c_str());
+	delete_file(path_join(temp_dir_, L"nobook-tool.dat"));
 	update_menu();
 	invalidate();
 	schedule_script();
@@ -313,7 +271,7 @@ void App::base_command(int id)
 			message(t("base.same_file"), MB_ICONWARNING);
 			return std::nullopt;
 		}
-		if (file_exists(f) && !DeleteFileW(f.c_str())) {
+		if (file_exists(f) && !delete_file(f)) {
 			message(lang::f("base.cannot_replace", {f}), MB_ICONWARNING);
 			return std::nullopt;
 		}
@@ -420,7 +378,7 @@ bool App::book_job(int id, std::string *command, std::wstring *warning)
 		                                 t(ex ? "menu.learn.export" : "menu.learn.extract"));
 		if (f.empty()) return false;
 		// the engine adds to a file already there (extract): the file confirmed to be replaced goes first
-		if (file_exists(f) && !DeleteFileW(f.c_str())) {
+		if (file_exists(f) && !delete_file(f)) {
 			message(lang::f("base.cannot_replace", {f}), MB_ICONWARNING);
 			return false;
 		}

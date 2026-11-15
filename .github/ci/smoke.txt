@@ -1,0 +1,44 @@
+# the run of the macOS build: the window in a few states, the log, then the end
+log smoke start
+wait 60
+screenshot mac-01-start.png
+moves f5d6c3d3c4f4c5b3c2e6
+wait 60
+screenshot mac-02-moves.png
+tab book
+wait 30
+screenshot mac-03-book.png
+tab moves
+effects on
+wait 30
+screenshot mac-04-effects.png
+design paw
+wait 30
+screenshot mac-05-paw.png
+design standard
+lang en
+wait 20
+screenshot mac-06-en.png
+lang ja
+tab record
+wait 10
+screenshot mac-07-record.png
+# a few positions learned into the empty book: the values of the book with their stages and effects
+savelog smoke-log-1.txt
+new
+moves f5d6c3d3c4f4c5b3c2e6c6b4
+learn book store
+learn book deviate 1 1
+learn start
+savelog smoke-log-2.txt
+wait 60
+cellinfo stage
+effects on
+wait 30
+screenshot mac-08-stages.png
+design paw
+wait 30
+screenshot mac-09-stages-paw.png
+design standard
+savelog smoke-log.txt
+quit

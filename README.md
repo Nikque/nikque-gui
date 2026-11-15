@@ -6,7 +6,7 @@
 
 ## 日本語
 
-オセロのエンジン [Edax 4.5.5 nikque](https://github.com/Nikque/edax-reversi-AVX)（C 版）と [newedax](https://github.com/Nikque/newedax)（C++ 版）を画面から使うための、Windows 用のソフトです。
+オセロのエンジン [Edax 4.5.5 nikque](https://github.com/Nikque/edax-reversi-AVX)（C 版）と [newedax](https://github.com/Nikque/newedax)（C++ 版）を画面から使うための、Windows 用のソフトです。0.4.3 から、試しの Mac 版もあります。
 
 ### できること
 
@@ -23,6 +23,8 @@
 1. [最新の Release](https://github.com/Nikque/nikque-gui/releases/latest) の zip をダウンロードし、好きな場所に展開します。インストールは要りません。
 2. `nikque-gui.exe` を起動します。
 
+Mac 版（`nikque-gui-<版>-mac.zip`、macOS 13 以上、Apple シリコンと Intel）は署名していないので、展開した後に一度だけ「ターミナル」で `xattr -dr com.apple.quarantine <展開したフォルダ>` を打ってから `nikque GUI.app` を開きます（[2 章](manual/ja/02-setup.md#mac試しの版)）。
+
 エンジン 2 つ（Edax nikque と newedax）が同梱されています。**book は付いていません**。お持ちの `book.dat` を使う方法は、マニュアルの [2 章「置き方と起動」](manual/ja/02-setup.md#book-を置く) を見てください。
 
 **マニュアル**：[manual/ja](manual/ja/README.md)
@@ -34,6 +36,7 @@ Visual Studio 2022（C++、x64）と CMake を使います。
 - `build.cmd`：`build\Release` にビルドし、単体テスト 6 本を実行します。
 - `build.cmd measure`：計測用のビルド（`build-measure`）。
 - `tools\make_dist.ps1`：配布用の zip を作ります。
+- Mac 版：CMake と Xcode のコマンドラインツールで `cmake -S . -B build -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"`、`cmake --build build`。配布用の zip は `tools/make_dist_mac.sh`（GitHub Actions の `.github/workflows/mac.yml`）。
 
 ### ライセンス
 
@@ -41,7 +44,7 @@ nikque GUI は MIT License（[LICENSE.txt](LICENSE.txt)）です。同梱のエ�
 
 ## English
 
-A Windows GUI for the Othello engines [Edax 4.5.5 nikque](https://github.com/Nikque/edax-reversi-AVX) (C) and [newedax](https://github.com/Nikque/newedax) (C++).
+A GUI for Windows (and, from 0.4.3, a trial version for Mac) for the Othello engines [Edax 4.5.5 nikque](https://github.com/Nikque/edax-reversi-AVX) (C) and [newedax](https://github.com/Nikque/newedax) (C++).
 
 ### Features
 
@@ -58,6 +61,8 @@ A Windows GUI for the Othello engines [Edax 4.5.5 nikque](https://github.com/Nik
 1. Download the zip from the [latest release](https://github.com/Nikque/nikque-gui/releases/latest) and unpack it anywhere. No installation is needed.
 2. Start `nikque-gui.exe`.
 
+The Mac version (`nikque-gui-<version>-mac.zip`, macOS 13 or later, Apple silicon and Intel) is not signed: after unpacking it, type `xattr -dr com.apple.quarantine <the folder>` once in Terminal, then open `nikque GUI.app` ([chapter 2](manual/en/02-setup.md#mac-trial-version)).
+
 Two engines (Edax nikque and newedax) are included. **No book is included**; to use your own `book.dat`, see [chapter 2 of the manual](manual/en/02-setup.md).
 
 **Manual**: [manual/en](manual/en/README.md)
@@ -69,6 +74,7 @@ Visual Studio 2022 (C++, x64) and CMake.
 - `build.cmd`: builds into `build\Release` and runs the 6 unit tests.
 - `build.cmd measure`: a build for measurements (`build-measure`).
 - `tools\make_dist.ps1`: makes the distribution zip.
+- Mac: CMake and the Xcode command line tools: `cmake -S . -B build -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"`, `cmake --build build`. The distribution zip: `tools/make_dist_mac.sh` (GitHub Actions, `.github/workflows/mac.yml`).
 
 ### License
 

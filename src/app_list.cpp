@@ -1,7 +1,7 @@
 // The game list (a file of games: read, add, save, sort, join the same games, cut, shuffle, one orientation,
 // random orientations, delete, the move to open at, the lines of the book), the search of the position in the
 // list, the kept lines, and the background jobs that do the heavy work.
-#include <windows.h>
+#include "platform.h"
 
 #include <cstdio>
 #include <ctime>
@@ -46,7 +46,7 @@ std::uint64_t seed_or_clock(int seed)
 
 // ---- background jobs
 
-void App::run_task(const std::wstring &label, std::function<std::function<void()>(std::stop_token)> work)
+void App::run_task(const std::wstring &label, std::function<std::function<void()>(ng::stop_token)> work)
 {
 	if (task_busy_) {
 		message(lang::t("task.busy"), MB_ICONINFORMATION);
@@ -56,14 +56,14 @@ void App::run_task(const std::wstring &label, std::function<std::function<void()
 	task_busy_ = true;
 	task_label_ = label;
 	task_t0_ = std::chrono::steady_clock::now();
-	const HWND h = hwnd_;
-	task_ = std::jthread([this, h, work = std::move(work)](std::stop_token st) {
+	const NativeWindow h = hwnd_;
+	task_ = ng::jthread([this, h, work = std::move(work)](ng::stop_token st) {
 		std::function<void()> done = work(st);
 		{
 			std::lock_guard lock(task_mutex_);
 			task_done_ = std::move(done);
 		}
-		PostMessageW(h, WM_TASK, 0, 0);
+		post_message(h, WM_TASK);
 	});
 	update_menu();
 	invalidate();
@@ -115,7 +115,7 @@ void App::list_load(const std::wstring &file, bool add)
 {
 	if (task_busy_) return;
 	auto nl = std::make_shared<GameList>();
-	run_task(lang::f("list.reading", {file_name(file)}), [this, nl, file, add](std::stop_token st) -> std::function<void()> {
+	run_task(lang::f("list.reading", {file_name(file)}), [this, nl, file, add](ng::stop_token st) -> std::function<void()> {
 		const auto t0 = std::chrono::steady_clock::now();
 		const ListReadStats r = read_list(file, *nl, st);
 		const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
@@ -147,7 +147,7 @@ void App::list_load(const std::wstring &file, bool add)
 }
 
 // the list moves to a job and comes back after it (the window shows it as busy meanwhile)
-static void list_job(App &app, const std::wstring &label, std::function<std::wstring(GameList &, std::stop_token)> work)
+static void list_job(App &app, const std::wstring &label, std::function<std::wstring(GameList &, ng::stop_token)> work)
 {
 	if (app.task_busy_) {  // the list stays where it is
 		app.set_status(lang::t("task.busy"));
@@ -157,7 +157,7 @@ static void list_job(App &app, const std::wstring &label, std::function<std::wst
 	app.list_.clear();
 	app.list_index_ = -1;
 	app.clear_hits();
-	app.run_task(label, [&app, l, work](std::stop_token st) -> std::function<void()> {
+	app.run_task(label, [&app, l, work](ng::stop_token st) -> std::function<void()> {
 		const auto t0 = std::chrono::steady_clock::now();
 		const std::wstring msg = work(*l, st);
 		const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
@@ -171,7 +171,7 @@ static void list_job(App &app, const std::wstring &label, std::function<std::wst
 
 void App::list_job_script(const std::wstring &label, std::function<void(GameList &)> work)
 {
-	list_job(*this, label, [work](GameList &l, std::stop_token) {
+	list_job(*this, label, [work](GameList &l, ng::stop_token) {
 		work(l);
 		return lang::f("list.done", {std::to_wstring(l.size())});
 	});
@@ -231,7 +231,7 @@ void App::list_search()
 	const Position target = game_.now();
 	const bool sym = ini_.get_bool("list", "search_symmetries", true);
 	auto out = std::make_shared<std::vector<ListHit>>();
-	run_task(lang::t("list.searching"), [this, target, sym, out](std::stop_token st) -> std::function<void()> {
+	run_task(lang::t("list.searching"), [this, target, sym, out](ng::stop_token st) -> std::function<void()> {
 		const auto t0 = std::chrono::steady_clock::now();
 		*out = search_list(list_, target, sym, st);
 		const long long ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
@@ -287,13 +287,13 @@ void App::list_command(int id)
 		break;
 	}
 	case cmd::ListSort:
-		list_job(*this, t("menu.list.sort"), [](GameList &l, std::stop_token) {
+		list_job(*this, t("menu.list.sort"), [](GameList &l, ng::stop_token) {
 			sort_list(l);
 			return lang::f("list.sorted", {std::to_wstring(l.size())});
 		});
 		break;
 	case cmd::ListUnique:
-		list_job(*this, t("menu.list.unique"), [](GameList &l, std::stop_token) {
+		list_job(*this, t("menu.list.unique"), [](GameList &l, ng::stop_token) {
 			const size_t n = unique_list(l);
 			return lang::f("list.uniqued", {std::to_wstring(n), std::to_wstring(l.size())});
 		});
@@ -303,7 +303,7 @@ void App::list_command(int id)
 		if (!n) break;
 		ini_.set_int("list", "truncate", *n);
 		const int k = *n;
-		list_job(*this, t("menu.list.truncate"), [k](GameList &l, std::stop_token) {
+		list_job(*this, t("menu.list.truncate"), [k](GameList &l, ng::stop_token) {
 			truncate_list(l, k);
 			return lang::f("list.truncated", {std::to_wstring(k)});
 		});
@@ -313,14 +313,14 @@ void App::list_command(int id)
 		const auto n = ask_number(hwnd_, t("menu.list.shuffle"), t("list.seed"), 0, 0, 2000000000, t("list.seed.note"));
 		if (!n) break;
 		const std::uint64_t seed = seed_or_clock(*n);
-		list_job(*this, t("menu.list.shuffle"), [seed](GameList &l, std::stop_token) {
+		list_job(*this, t("menu.list.shuffle"), [seed](GameList &l, ng::stop_token) {
 			shuffle_list(l, seed);
 			return lang::f("list.shuffled", {std::to_wstring(seed)});
 		});
 		break;
 	}
 	case cmd::ListNormalize:
-		list_job(*this, t("menu.list.normalize"), [](GameList &l, std::stop_token st) {
+		list_job(*this, t("menu.list.normalize"), [](GameList &l, ng::stop_token st) {
 			normalize_list(l, st);
 			return st.stop_requested() ? lang::t("task.cancelled") : lang::t("list.normalized");
 		});
@@ -335,7 +335,7 @@ void App::list_command(int id)
 		if (!run_form(hwnd_, t("menu.list.scatter"), f)) break;
 		const int sides = f[0].choice + 1;
 		const std::uint64_t seed = seed_or_clock(std::stoi(f[1].text));
-		list_job(*this, t("menu.list.scatter"), [sides, seed](GameList &l, std::stop_token st) {
+		list_job(*this, t("menu.list.scatter"), [sides, seed](GameList &l, ng::stop_token st) {
 			scatter_list(l, seed, sides, st);
 			return st.stop_requested() ? lang::t("task.cancelled") : lang::f("list.scattered", {std::to_wstring(seed)});
 		});
@@ -418,8 +418,8 @@ void App::list_from_book()
 bool App::ask_book_lines(int loss, int depth, int n, bool add)
 {
 	if (!eng_[0].alive || learning_) return false;
-	const std::wstring file = temp_dir_ + L"\\book-lines.txt";
-	DeleteFileW(file.c_str());
+	const std::wstring file = path_join(temp_dir_, L"book-lines.txt");
+	delete_file(file);
 	const auto path = engine_path(file, false);  // the temporary folder
 	if (!path) {
 		message(lang::f("err.engine_path", {file}), MB_ICONWARNING);
@@ -442,7 +442,7 @@ bool App::ask_book_lines(int loss, int depth, int n, bool add)
 void App::list_book_written(bool add, bool ok)
 {
 	list_book_id_ = 0;
-	const std::wstring file = temp_dir_ + L"\\book-lines.txt";
+	const std::wstring file = path_join(temp_dir_, L"book-lines.txt");
 	if (!ok) {
 		log(lang::f("best.export_failed", {file}));
 		return;
@@ -450,9 +450,9 @@ void App::list_book_written(bool add, bool ok)
 	auto nl = std::make_shared<GameList>();
 	const int limit = list_book_limit_;
 	const Position start = list_book_start_;
-	run_task(lang::t("menu.list.book"), [this, nl, file, add, limit, start](std::stop_token st) -> std::function<void()> {
+	run_task(lang::t("menu.list.book"), [this, nl, file, add, limit, start](ng::stop_token st) -> std::function<void()> {
 		const bool cancelled = read_list(file, *nl, st, start).cancelled;
-		DeleteFileW(file.c_str());
+		delete_file(file);
 		return [this, nl, add, limit, cancelled] {
 			if (cancelled) {  // (the parts read in on threads stop half way each: nothing is added)
 				log(lang::t("task.cancelled"));
@@ -545,15 +545,12 @@ void App::kept_command(int id)
 // the menu of a bookmark: the right button on its picture
 void App::bookmark_menu(int x, int y)
 {
-	HMENU m = CreatePopupMenu();
-	AppendMenuW(m, MF_STRING, cmd::KeptShow, lang::t("menu.kept.show").c_str());
-	AppendMenuW(m, MF_STRING, cmd::KeptCompare, lang::t("menu.kept.compare").c_str());
-	AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-	AppendMenuW(m, MF_STRING, cmd::KeptDelete, lang::t("menu.kept.delete").c_str());
-	POINT pt{x, y};
-	ClientToScreen(hwnd_, &pt);
-	const int id = TrackPopupMenu(m, TPM_RETURNCMD | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hwnd_, nullptr);
-	DestroyMenu(m);
+	MenuRef m = menu_new();
+	menu_item(m, cmd::KeptShow, lang::t("menu.kept.show"));
+	menu_item(m, cmd::KeptCompare, lang::t("menu.kept.compare"));
+	menu_sep(m);
+	menu_item(m, cmd::KeptDelete, lang::t("menu.kept.delete"));
+	const int id = popup_menu(hwnd_, x, y, m);
 	if (id) on_command(id);
 }
 
@@ -561,7 +558,7 @@ void App::bookmark_menu(int x, int y)
 void App::load_kept()
 {
 	std::string all;
-	if (!read_file(exe_dir_ + L"\\kept.txt", &all)) return;
+	if (!read_file(path_join(exe_dir_, L"kept.txt"), &all)) return;
 	size_t i = 0;
 	while (i < all.size()) {
 		size_t e = all.find('\n', i);
@@ -608,12 +605,8 @@ void App::save_kept()
 			if (m != kPass) out += square_name(m);
 		out += "\t" + std::to_string(k.cursor) + (k.asked ? "\tasked" : "") + "\r\n";  // (0.2.0 reads the first four)
 	}
-	const std::wstring path = exe_dir_ + L"\\kept.txt";
-	auto gone = [&] {
-		if (DeleteFileW(path.c_str())) return true;
-		const DWORD e = GetLastError();
-		return e == ERROR_FILE_NOT_FOUND || e == ERROR_PATH_NOT_FOUND;
-	};
+	const std::wstring path = path_join(exe_dir_, L"kept.txt");
+	auto gone = [&] { return delete_file(path) || !path_exists(path); };
 	if (!(out.empty() ? gone() : write_file(path, out))) log(lang::f("kept.save_failed", {path}));
 }
 

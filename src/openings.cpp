@@ -1,10 +1,9 @@
 #include "openings.h"
 
-#include <windows.h>
-
 #include <cstdio>
 
 #include "ini.h"
+#include "platform.h"
 
 namespace ng {
 
@@ -17,13 +16,8 @@ std::wstring decode(const std::string &bytes)
 	const char *p = bytes.data() + i;
 	const int len = static_cast<int>(bytes.size() - i);
 	if (len <= 0) return {};
-	for (const UINT cp : {static_cast<UINT>(CP_UTF8), 932u}) {
-		const int n = MultiByteToWideChar(cp, MB_ERR_INVALID_CHARS, p, len, nullptr, 0);
-		if (n <= 0) continue;
-		std::wstring w(n, L'\0');
-		MultiByteToWideChar(cp, MB_ERR_INVALID_CHARS, p, len, w.data(), n);
-		return w;
-	}
+	for (const unsigned cp : {65001u, 932u})
+		if (auto w = decode_text(std::string_view(p, len), cp)) return *w;
 	return widen(std::string_view(p, len));
 }
 

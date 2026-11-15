@@ -9,7 +9,11 @@
 namespace ng {
 
 // WideCharToMultiByte, or a stand-in for the tests
+#if defined(_WIN32)
 using WideToMulti = int(__stdcall *)(unsigned, unsigned long, const wchar_t *, int, char *, int, const char *, int *);
+#else
+using WideToMulti = int (*)(unsigned, unsigned long, const wchar_t *, int, char *, int, const char *, int *);
+#endif
 // the text in a code page (nothing when a letter is not there); `convert`: nullptr for WideCharToMultiByte
 std::optional<std::string> to_codepage(const std::wstring &w, unsigned code_page, WideToMulti convert = nullptr);
 // the code page the engines read names in: the code page of the system (not CP_ACP of the GUI, which is UTF-8)

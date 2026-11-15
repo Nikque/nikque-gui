@@ -1,6 +1,6 @@
 #include "ini.h"
 
-#include <windows.h>
+#include "platform.h"
 
 #include <charconv>
 #include <cstdio>
@@ -38,8 +38,8 @@ std::string lower(std::string s)
 
 bool read_file(const std::wstring &path, std::string *out)
 {
-	FILE *f = nullptr;
-	if (_wfopen_s(&f, path.c_str(), L"rb") != 0 || !f) return false;
+	FILE *f = open_file(path, L"rb");
+	if (!f) return false;
 	out->clear();
 	char buf[16384];
 	size_t n;
@@ -51,17 +51,18 @@ bool read_file(const std::wstring &path, std::string *out)
 bool write_file(const std::wstring &path, std::string_view data)
 {
 	const std::wstring tmp = path + L".tmp";
-	FILE *f = nullptr;
-	if (_wfopen_s(&f, tmp.c_str(), L"wb") != 0) f = nullptr;
+	FILE *f = open_file(tmp, L"wb");
 	if (!f) return false;
 	bool ok = fwrite(data.data(), 1, data.size(), f) == data.size();
 	ok = (fclose(f) == 0) && ok;
-	if (!ok || !MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
-		DeleteFileW(tmp.c_str());
+	if (!ok || !move_file(tmp, path)) {
+		delete_file(tmp);
 		return false;
 	}
 	return true;
 }
+
+#if defined(_WIN32)
 
 std::wstring widen(std::string_view s)
 {
@@ -80,6 +81,64 @@ std::string narrow(std::wstring_view w)
 	WideCharToMultiByte(CP_UTF8, 0, w.data(), static_cast<int>(w.size()), s.data(), n, nullptr, nullptr);
 	return s;
 }
+
+#else
+
+// wchar_t is a code point (UTF-32); a byte that does not make UTF-8 becomes U+FFFD, as on Windows
+std::wstring widen(std::string_view s)
+{
+	std::wstring w;
+	w.reserve(s.size());
+	for (size_t i = 0; i < s.size();) {
+		const unsigned char c = static_cast<unsigned char>(s[i]);
+		int len = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : (c >> 3) == 30 ? 4 : 0;
+		char32_t cp = len == 1 ? c : len == 2 ? c & 0x1f : len == 3 ? c & 0x0f : c & 0x07;
+		bool ok = len > 0 && i + len <= s.size();
+		for (int k = 1; ok && k < len; ++k) {
+			const unsigned char d = static_cast<unsigned char>(s[i + k]);
+			if ((d >> 6) != 2) ok = false;
+			else cp = (cp << 6) | (d & 0x3f);
+		}
+		static constexpr char32_t kMin[5] = {0, 0, 0x80, 0x800, 0x10000};
+		if (ok && (cp < kMin[len] || cp > 0x10ffff || (cp >= 0xd800 && cp < 0xe000))) ok = false;
+		if (!ok) {
+			w += static_cast<wchar_t>(0xfffd);
+			++i;
+			continue;
+		}
+		w += static_cast<wchar_t>(cp);
+		i += len;
+	}
+	return w;
+}
+
+std::string narrow(std::wstring_view w)
+{
+	std::string s;
+	s.reserve(w.size());
+	for (const wchar_t wc : w) {
+		char32_t c = static_cast<char32_t>(wc);
+		if (c > 0x10ffff || (c >= 0xd800 && c < 0xe000)) c = 0xfffd;
+		if (c < 0x80) {
+			s += static_cast<char>(c);
+		} else if (c < 0x800) {
+			s += static_cast<char>(0xc0 | (c >> 6));
+			s += static_cast<char>(0x80 | (c & 0x3f));
+		} else if (c < 0x10000) {
+			s += static_cast<char>(0xe0 | (c >> 12));
+			s += static_cast<char>(0x80 | ((c >> 6) & 0x3f));
+			s += static_cast<char>(0x80 | (c & 0x3f));
+		} else {
+			s += static_cast<char>(0xf0 | (c >> 18));
+			s += static_cast<char>(0x80 | ((c >> 12) & 0x3f));
+			s += static_cast<char>(0x80 | ((c >> 6) & 0x3f));
+			s += static_cast<char>(0x80 | (c & 0x3f));
+		}
+	}
+	return s;
+}
+
+#endif
 
 bool Ini::load(const std::wstring &path)
 {

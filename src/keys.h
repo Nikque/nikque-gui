@@ -2,7 +2,7 @@
 // several keys with ",".
 #pragma once
 
-#include <windows.h>
+#include "platform.h"
 
 #include <array>
 #include <optional>

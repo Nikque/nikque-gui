@@ -1,9 +1,12 @@
+// src/engine.h on Windows: CreateProcessW with pipes, in a job object that ends with the GUI.
 #include "engine.h"
 
 namespace ng {
 
-bool EngineProcess::start(const std::wstring &exe, const std::wstring &args, const std::wstring &dir, HWND notify,
-                          UINT msg, WPARAM tag, std::wstring *error)
+bool EngineProcess::running() const noexcept { return process_ != nullptr; }
+
+bool EngineProcess::start(const std::wstring &exe, const std::wstring &args, const std::wstring &dir, NativeWindow notify,
+                          unsigned msg, std::uintptr_t tag, std::wstring *error)
 {
 	close();
 	notify_ = notify;
@@ -149,7 +152,7 @@ bool EngineProcess::exited() const
 	return WaitForSingleObject(process_, 0) != WAIT_TIMEOUT && (read_ended_ || !reader_.joinable());
 }
 
-void EngineProcess::close(DWORD wait_ms)
+void EngineProcess::close(unsigned wait_ms)
 {
 	quit();
 	if (process_ && WaitForSingleObject(process_, wait_ms) == WAIT_TIMEOUT) {

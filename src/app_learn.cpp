@@ -1,6 +1,6 @@
 // Book learning on the main engine: the commands of the menu, the progress, stopping and going on from the
 // file saved on the way. The search engine keeps giving values meanwhile.
-#include <windows.h>
+#include "platform.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -12,6 +12,17 @@
 #include "paths.h"
 
 namespace ng {
+
+// sscanf (the formats here have no %s or %c: sscanf_s takes the same arguments on Windows)
+template <class... Args>
+int scan_text(const char *s, const char *format, Args... args)
+{
+#if defined(_WIN32)
+	return sscanf_s(s, format, args...);
+#else
+	return std::sscanf(s, format, args...);
+#endif
+}
 
 namespace {
 
@@ -41,10 +52,15 @@ SavedFile newest_saved(const std::wstring &book)
 
 std::wstring local_time(std::filesystem::file_time_type t)
 {
+#if defined(_WIN32)
 	const auto sys = std::chrono::clock_cast<std::chrono::system_clock>(t);
+#else
+	// (libc++ has no clock_cast for the clock of the files)
+	const auto sys = std::chrono::time_point_cast<std::chrono::system_clock::duration>(std::chrono::file_clock::to_sys(t));
+#endif
 	const std::time_t tt = std::chrono::system_clock::to_time_t(sys);
 	std::tm tm{};
-	localtime_s(&tm, &tt);
+	local_tm(tt, &tm);
 	wchar_t b[32];
 	wcsftime(b, 32, L"%m/%d %H:%M", &tm);
 	return b;
@@ -84,7 +100,7 @@ std::wstring App::book_file() const
 	const char *sec = engine_section(kind_);
 	const std::string bk = ini_.get(sec, "book");
 	const std::wstring dir = engine_dir();
-	return bk.empty() ? dir + L"\\data\\book.dat" : absolute(dir, bk);
+	return bk.empty() ? path_join(dir, L"data\\book.dat") : absolute(dir, bk);
 }
 
 std::wstring App::saved_base() const
@@ -186,7 +202,7 @@ void App::learning_line(const std::string &line)
 		const size_t at = line.find("finished:");
 		learn_progress_.clear();
 		if (line.find("not in the book", at) != std::string::npos) log(lang::f("devexp.notinbook", {devexp_file_}));
-		else if (sscanf_s(line.c_str() + at, "finished: %lld lines written", &n) == 1)
+		else if (scan_text(line.c_str() + at, "finished: %lld lines written", &n) == 1)
 			log(lang::f("devexp.written", {lang::number(n), devexp_file_}));
 		else log(engine_text(line));
 		return;
@@ -200,7 +216,7 @@ void App::learning_line(const std::string &line)
 		int x = 0, y = 0;
 		long long kept = 0, removed = 0;
 		if (line.starts_with("Book reduce ") &&
-		    sscanf_s(line.c_str(), "Book reduce %d %d: %lld positions kept, %lld removed", &x, &y, &kept, &removed) == 4) {
+		    scan_text(line.c_str(), "Book reduce %d %d: %lld positions kept, %lld removed", &x, &y, &kept, &removed) == 4) {
 			learn_progress_.clear();
 			log(lang::f("reduce.done", {lang::number(kept), lang::number(removed), std::to_wstring(x), std::to_wstring(y)}));
 			return;
@@ -365,7 +381,7 @@ void App::reduce_answer(const Fields &f, bool done)
 	reduce_.kept = f.num("kept").value_or(0);
 	reduce_.removed = f.num("removed").value_or(0);
 	reduce_.positions = f.num("positions").value_or(0);
-	PostMessageW(hwnd_, WM_REDUCE, 0, 0);  // (a message box is not shown while the lines of the engine are read)
+	post(WM_REDUCE);  // (a message box is not shown while the lines of the engine are read)
 }
 
 void App::reduce_counted()
