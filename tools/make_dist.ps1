@@ -10,10 +10,10 @@ param(
 	[long]$NikqueSize = 17880449,
 	[string]$NikqueCommit = "48cf70426ae6aee1641fe418cbcf307272e32d03",
 	[long]$NikqueEvalSize = 13952436,
-	[string]$NewedaxName = "v4.5.5-newedax.13",
-	[string]$NewedaxSha = "78c1f1d894fac5c1c8a835633082d7f5406f27bbe7c1a1a99702b720f9790e89",
-	[long]$NewedaxSize = 68080405,
-	[string]$NewedaxCommit = "fc5f4fe65af4f9a1f35d045271239d03a67c1ba6",
+	[string]$NewedaxName = "v4.5.5-newedax.14",
+	[string]$NewedaxSha = "336068c8173473d974e2fd9b73ac64fd0ee30c66c51c183c84c3f712cfdad203",
+	[long]$NewedaxSize = 68094345,
+	[string]$NewedaxCommit = "87361b8b46c1976f759f645b547c6dac40535dbb",
 	[long]$NewedaxEvalSize = 107612578,
 	[string]$Out = "D:\nikque-gui\dist",
 	[string]$Eng = ""   # the new empty folder the ZIPs are unpacked in (default: $Out\engines-<version>)
@@ -59,6 +59,9 @@ New-Item -ItemType Directory $Eng | Out-Null
 foreach ($k in $Engines.Keys) {
 	$en = $Engines[$k]
 	$z = Get-Item $en.Zip
+	# the ZIP is of the version named (edax-4.5.5-newedax.14-64.zip for v4.5.5-newedax.14): the values below are of that release
+	$ver = $en.Tag -replace '^v', ''
+	if ($z.Name -notmatch ('^edax-' + [regex]::Escape($ver) + '(-\d+)?\.zip$')) { throw "$($z.Name) is not the ZIP of $($en.Tag) (give -${k}Name and the values of its release)" }
 	$h = (Get-FileHash -Algorithm SHA256 $z.FullName).Hash.ToLower()
 	if ($h -ne $en.Sha.ToLower() -or $z.Length -ne $en.Size) { throw "$($z.Name): SHA-256 $h, $($z.Length) bytes (not the values of the release)" }
 	"zip ok  $h  $($z.Length)  $($z.Name)"
