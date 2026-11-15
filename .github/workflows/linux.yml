@@ -1,0 +1,118 @@
+# The Linux build of nikque GUI (x86-64, GTK 3; built on Ubuntu 22.04, the oldest system it is for): the program, the
+# tests that need no test books, the distribution (tools/make_dist_linux.sh: the program, the engines of Edax nikque
+# and newedax built from the sources of the tags of their releases), and a run of the distribution with a script on a
+# screen in memory (pictures of the window, the log).
+name: Linux
+
+on:
+  push:
+    branches: [port2]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: GTK 3, a screen in memory, the fonts of the pictures
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libgtk-3-dev xvfb fonts-noto-cjk imagemagick x11-utils x11-apps
+
+      - name: The compiler (the newest g++ of the runner)
+        run: |
+          for v in 14 13 12; do
+            if command -v g++-$v > /dev/null; then echo "CXX=g++-$v" >> "$GITHUB_ENV"; g++-$v --version | head -1; break; fi
+          done
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j 4 -- -k || { cmake --build build -j 1 -- -k 2>&1 | grep -E "error|Error" | sort -u | head -150; exit 1; }
+          cmake --build build 2>&1 | grep -c "warning:" || true
+          file build/nikque-gui
+
+      - name: Tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: The source of newedax (the tag of its release)
+        uses: actions/checkout@v4
+        with:
+          repository: Nikque/newedax
+          ref: v4.5.5-newedax.14
+          path: ne
+
+      - name: The source of Edax nikque (the tag of its release)
+        uses: actions/checkout@v4
+        with:
+          repository: Nikque/edax-reversi-AVX
+          ref: v4.5.5-nikque.27
+          path: nk
+
+      - name: Boost 1.92 (headers, for newedax)
+        id: boost
+        uses: actions/cache@v4
+        with:
+          path: boost/boost_1_92_0/boost
+          key: boost-1.92.0-linux-c46baee75ed4b558cf6553630d0615a147ed582812917b57e6f0839d1954549f
+
+      - name: Boost 1.92 from boost.org (the same ZIP as the Windows releases of newedax)
+        if: steps.boost.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o boost_1_92_0.zip https://archives.boost.io/release/1.92.0/source/boost_1_92_0.zip
+          echo "c46baee75ed4b558cf6553630d0615a147ed582812917b57e6f0839d1954549f  boost_1_92_0.zip" | sha256sum -c
+          mkdir -p boost
+          unzip -q boost_1_92_0.zip 'boost_1_92_0/boost/*' -d boost
+          rm boost_1_92_0.zip
+
+      - name: The release ZIPs of the engines
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v4.5.5-nikque.27 -R Nikque/edax-reversi-AVX -p 'edax-4.5.5-nikque.27.zip' -D dl
+          gh release download v4.5.5-newedax.14 -R Nikque/newedax -p 'edax-4.5.5-newedax.14-64.zip' -D dl
+
+      - name: The distribution
+        run: BOOST_DIR="$PWD/boost/boost_1_92_0" bash tools/make_dist_linux.sh build/nikque-gui dl/edax-4.5.5-nikque.27.zip dl/edax-4.5.5-newedax.14-64.zip ne nk
+
+      - name: Run the distribution with a script
+        run: |
+          mkdir unpack
+          tar -C unpack -xzf dist/nikque-gui-*-linux.tar.gz
+          mv unpack/nikque-gui-*-linux run
+          sed -e 's/mac-/linux-/g' -e 's/macOS/Linux/' .github/ci/smoke.txt > run/smoke.txt
+          sed -i -e 's/^startup=.*/startup=smoke.txt/' -e 's/^level=21/level=10/' run/config.ini
+          grep -n "startup\|^level\|^kind" run/config.ini
+          cd run
+          Xvfb :99 -screen 0 1600x1000x24 > /dev/null 2>&1 &
+          sleep 2
+          # (the whole screen once, with the menu bar and the text box of the moves, which the app's own pictures do not hold)
+          ( sleep 40; xwininfo -display :99 -root -tree > x-windows.txt 2>&1; import -display :99 -window root linux-screen.png;
+            xwd -display :99 -root -silent | convert xwd:- linux-screen-xwd.png ) &
+          DISPLAY=:99 timeout 900 ./nikque-gui > run-out.txt 2>&1 || echo "exit $?"
+          tail -30 run-out.txt
+          ls -la
+
+      - name: Keep the pictures and the log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-run
+          path: |
+            run/*.png
+            run/*.txt
+            run/config.ini
+          if-no-files-found: warn
+
+      - name: Keep the distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-dist
+          path: |
+            dist/*.tar.gz
+            dist/*-files.txt
+          compression-level: 0

@@ -1,0 +1,240 @@
+// src/engine.h on Linux and Android: fork and exec with pipes. The engine reads its commands from its standard input
+// and ends at its end ("quit", or the end of the input when the GUI ends without closing it).
+#include "../engine.h"
+
+#include <fcntl.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <chrono>
+#include <cstring>
+#include <initializer_list>
+
+#include "../ini.h"
+
+namespace ng {
+
+namespace {
+
+// the words of a command line: separated by spaces, a part in double quotes is one word (with its spaces)
+std::vector<std::string> split_args(const std::string &s)
+{
+	std::vector<std::string> out;
+	std::string cur;
+	bool quoted = false, any = false;
+	for (const char c : s) {
+		if (c == '"') {
+			quoted = !quoted;
+			any = true;
+		} else if (c == ' ' && !quoted) {
+			if (any) out.push_back(cur);
+			cur.clear();
+			any = false;
+		} else {
+			cur += c;
+			any = true;
+		}
+	}
+	if (any) out.push_back(cur);
+	return out;
+}
+
+void close_all(std::initializer_list<int> fds)
+{
+	for (int fd : fds)
+		if (fd >= 0) ::close(fd);
+}
+
+}  // namespace
+
+bool EngineProcess::running() const noexcept { return pid_ > 0; }
+
+bool EngineProcess::start(const std::wstring &exe, const std::wstring &args, const std::wstring &dir, NativeWindow notify,
+                          unsigned msg, std::uintptr_t tag, std::wstring *error)
+{
+	close();
+	notify_ = notify;
+	msg_ = msg;
+	tag_ = tag;
+
+	// the ends of the pipes are closed in a program started meanwhile (another engine); `fail` tells why the engine
+	// did not start (it closes by itself when the engine starts)
+	int in[2] = {-1, -1}, out[2] = {-1, -1}, fail[2] = {-1, -1};
+	if (::pipe2(in, O_CLOEXEC) != 0 || ::pipe2(out, O_CLOEXEC) != 0 || ::pipe2(fail, O_CLOEXEC) != 0) {
+		if (error) *error = L"pipe: " + widen(std::strerror(errno));
+		close_all({in[0], in[1], out[0], out[1], fail[0], fail[1]});
+		return false;
+	}
+
+	const std::string path = narrow(exe), folder = narrow(dir);
+	std::vector<std::string> words = split_args(narrow(args));
+	words.insert(words.begin(), path);
+	std::vector<char *> argv;
+	for (auto &w : words) argv.push_back(w.data());
+	argv.push_back(nullptr);
+
+	const pid_t pid = ::fork();
+	if (pid < 0) {
+		if (error) *error = L"fork: " + widen(std::strerror(errno));
+		close_all({in[0], in[1], out[0], out[1], fail[0], fail[1]});
+		return false;
+	}
+	if (pid == 0) {
+		// (the child, of a program with other threads: only calls that are safe after a fork, up to the exec)
+		::dup2(in[0], 0);
+		::dup2(out[1], 1);
+		::dup2(out[1], 2);
+		int err = 0;
+		if (!folder.empty() && ::chdir(folder.c_str()) != 0) err = errno;
+		if (!err) {
+			::execv(path.c_str(), argv.data());
+			err = errno;
+		}
+		const ssize_t w = ::write(fail[1], &err, sizeof err);
+		(void)w;
+		::_exit(127);
+	}
+	close_all({in[0], out[1], fail[1]});
+	int err = 0;
+	ssize_t got;
+	do got = ::read(fail[0], &err, sizeof err);
+	while (got < 0 && errno == EINTR);
+	::close(fail[0]);
+	if (got == static_cast<ssize_t>(sizeof err)) {
+		int st = 0;
+		::waitpid(pid, &st, 0);
+		if (error) *error = widen(std::strerror(err));
+		close_all({in[1], out[0]});
+		return false;
+	}
+	pid_ = pid;
+	reaped_ = false;
+	in_write_ = in[1];
+	out_read_ = out[0];
+	read_ended_ = false;
+	reader_ = std::thread([this] { read_loop(); });
+	return true;
+}
+
+// (a write to an engine that has ended fails: the program ignores SIGPIPE, src/linux/main_linux.cpp and src/android)
+bool EngineProcess::send(std::string_view text)
+{
+	if (in_write_ < 0) return false;
+	while (!text.empty()) {
+		const ssize_t n = ::write(in_write_, text.data(), text.size());
+		if (n < 0) {
+			if (errno == EINTR) continue;
+			return false;
+		}
+		text.remove_prefix(static_cast<size_t>(n));
+	}
+	return true;
+}
+
+void EngineProcess::take_lines(std::vector<std::string> &out)
+{
+	std::lock_guard lock(mutex_);
+	if (out.empty()) {
+		out.swap(lines_);
+	} else {
+		for (auto &l : lines_) out.push_back(std::move(l));
+		lines_.clear();
+	}
+}
+
+void EngineProcess::read_loop()
+{
+	char buf[1 << 16];
+	std::vector<std::string> batch;
+	for (;;) {
+		const ssize_t got = ::read(out_read_, buf, sizeof buf);
+		if (got < 0 && errno == EINTR) continue;
+		if (got <= 0) break;
+		const size_t n = static_cast<size_t>(got);
+		size_t i = 0;
+		for (size_t k = 0; k < n; ++k) {
+			// a line ends with '\n'; the progress of the book commands is rewritten after '\r'
+			if (buf[k] != '\n' && buf[k] != '\r') continue;
+			partial_.append(buf + i, k - i);
+			i = k + 1;
+			// the engine's prompt ">" may come before a line
+			size_t a = 0;
+			while (a < partial_.size() && (partial_[a] == '>' || partial_[a] == ' ')) ++a;
+			// ... and after one ("Sorting book...done>")
+			while (partial_.size() > a && partial_.back() == '>') partial_.pop_back();
+			if (a < partial_.size()) batch.emplace_back(partial_.substr(a));
+			partial_.clear();
+		}
+		partial_.append(buf + i, n - i);
+		if (!batch.empty()) {
+			bool was_empty;
+			{
+				std::lock_guard lock(mutex_);
+				was_empty = lines_.empty();
+				for (auto &l : batch) lines_.push_back(std::move(l));
+			}
+			batch.clear();
+			if (was_empty && notify_) post_message(notify_, msg_, tag_, 0);
+		}
+	}
+	read_ended_ = true;
+	if (notify_) post_message(notify_, msg_, tag_, 1);  // the output has ended
+}
+
+namespace {
+
+// the process has ended (and is reaped); false while it runs
+bool ended(int pid, bool *reaped)
+{
+	if (*reaped) return true;
+	int st = 0;
+	const pid_t r = ::waitpid(pid, &st, WNOHANG);
+	if (r == pid || (r < 0 && errno == ECHILD)) *reaped = true;
+	return *reaped;
+}
+
+}  // namespace
+
+void EngineProcess::quit()
+{
+	if (pid_ > 0 && in_write_ >= 0 && !ended(pid_, &reaped_)) send("quit\n");
+	if (in_write_ >= 0) {
+		::close(in_write_);
+		in_write_ = -1;
+	}
+}
+
+bool EngineProcess::exited() const
+{
+	if (pid_ <= 0) return true;
+	// (its last lines may be still in the pipe a moment after its end)
+	auto *self = const_cast<EngineProcess *>(this);
+	return ended(pid_, &self->reaped_) && (read_ended_ || !reader_.joinable());
+}
+
+void EngineProcess::close(unsigned wait_ms)
+{
+	quit();
+	if (pid_ > 0) {
+		const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(wait_ms);
+		while (!ended(pid_, &reaped_) && std::chrono::steady_clock::now() < until) ::usleep(10 * 1000);
+		if (!ended(pid_, &reaped_)) {
+			::kill(pid_, SIGKILL);
+			for (int i = 0; i < 500 && !ended(pid_, &reaped_); ++i) ::usleep(10 * 1000);
+		}
+	}
+	if (reader_.joinable()) reader_.join();  // (the pipe closes when the process ends; the thread then stops)
+	if (out_read_ >= 0) {
+		::close(out_read_);
+		out_read_ = -1;
+	}
+	pid_ = -1;
+	reaped_ = false;
+	partial_.clear();
+	std::lock_guard lock(mutex_);
+	lines_.clear();
+}
+
+}  // namespace ng

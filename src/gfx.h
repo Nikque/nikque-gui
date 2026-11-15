@@ -1,4 +1,5 @@
-// The drawing of the window. On Windows: Direct2D on a DXGI flip swap chain; on macOS: Core Graphics (src/mac). One
+// The drawing of the window. On Windows: Direct2D on a DXGI flip swap chain; on macOS: Core Graphics (src/mac); on
+// Linux: Cairo and Pango (src/linux); on Android: the Canvas of the system (src/android). One
 // pixel is one DIP (the DPI scale is applied by the layout), so the board's squares are whole pixels. Shapes of numbers
 // and their glows are kept between frames.
 #pragma once
@@ -54,12 +55,12 @@ struct NumberShape {
 };
 
 struct Glow {
-	std::shared_ptr<void> image;  // a CGImageRef
+	std::shared_ptr<void> image;  // macOS: a CGImageRef; Linux: a cairo_surface_t; Android: a Bitmap (a global reference)
 	PointF offset{};
 	SizeF size{};
 };
 
-using NativeWindow = void *;  // the NSView
+using NativeWindow = void *;  // the view of the window
 #endif
 
 enum class Face { Number, Ui };
@@ -113,9 +114,10 @@ public:
 	void clear_shapes();  // after a size change
 	void clear_fonts();   // after the language changed (the font of the screen)
 #if !defined(_WIN32)
-	// macOS: the picture of the frame for the view (a CGImageRef the caller releases; null: none yet)
+	// the picture of the frame for the view (null: none yet). macOS: a CGImageRef the caller releases; Linux: the
+	// cairo_surface_t of the frame, kept by the Gfx; Android: not used (the frame is put on the screen by end_frame)
 	void *copy_frame_image() const;
-	// macOS: the view is being drawn (a frame drawn meanwhile does not ask for another drawing of the view)
+	// the view is being drawn (a frame drawn meanwhile does not ask for another drawing of the view)
 	void set_in_view_draw(bool on) { in_view_draw_ = on; }
 #endif
 
@@ -147,11 +149,12 @@ private:
 	std::unordered_map<std::wstring, NumberShape> shapes_;
 	std::unordered_map<std::wstring, Glow> glows_;
 #else
-	struct Mac;
-	struct MacDeleter {
-		void operator()(Mac *m) const;
+	// what the system's own drawing keeps (src/mac/gfx_mac.mm, src/linux/gfx_linux.cpp, src/android/gfx_android.cpp)
+	struct Impl;
+	struct ImplDeleter {
+		void operator()(Impl *m) const;
 	};
-	std::unique_ptr<Mac, MacDeleter> mac_;
+	std::unique_ptr<Impl, ImplDeleter> impl_;
 	bool in_view_draw_ = false;
 	std::wstring shape_key(std::wstring_view text, float em, Face face) const;
 	std::unordered_map<std::wstring, NumberShape> shapes_;

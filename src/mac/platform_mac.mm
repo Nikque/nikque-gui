@@ -14,6 +14,7 @@
 #include <system_error>
 
 #include "../ini.h"
+#include "../menu_text.h"
 #include "mac_view.h"
 
 namespace {
@@ -382,8 +383,8 @@ void menu_sub(MenuRef parent, MenuRef m, const std::wstring &text)
 {
 	NSMenu *p = (__bridge NSMenu *)parent;
 	NSMenu *sub = (__bridge_transfer NSMenu *)m;  // (the parent keeps it now)
-	sub.title = ns(text);
-	NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:ns(text) action:nil keyEquivalent:@""];
+	sub.title = ns(menu_words(text));
+	NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:ns(menu_words(text)) action:nil keyEquivalent:@""];
 	item.submenu = sub;
 	[p addItem:item];
 }

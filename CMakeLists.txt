@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(nikque_gui VERSION 0.4.3 LANGUAGES CXX)
+project(nikque_gui VERSION 0.4.4 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,7 +12,8 @@ endif()
 # Timings of the frames and the start written to a file: never in the default build (Windows only).
 option(NG_MEASURE "build the measuring version (not for release)" OFF)
 
-# The shared code (src) and the system's own parts: src/win (Win32, Direct2D) or src/mac (Cocoa, Core Graphics).
+# The shared code (src) and the system's own parts: src/win (Win32, Direct2D), src/mac (Cocoa, Core Graphics) or
+# src/linux (GTK 3, Cairo, Pango) with src/posix (files, the engines as child processes).
 set(NG_SHARED
 	src/app.cpp
 	src/app_input.cpp
@@ -69,8 +70,25 @@ elseif(APPLE)
 		src/mac/engine_mac.cpp
 		src/mac/gfx_mac.mm
 	)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+	# GTK 3 with Cairo and Pango (LGPL), linked as the shared libraries of the system
+	find_package(PkgConfig REQUIRED)
+	pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
+	find_package(Threads REQUIRED)
+	add_compile_options(-Wall -Wextra -Wno-unused-parameter)
+	set(NG_PLATFORM src/posix/files_posix.cpp src/linux/platform_linux.cpp)
+	set(NG_CORE_LIBS PkgConfig::GTK3 Threads::Threads)
+	set(NG_SYSTEM
+		src/linux/app_linux.cpp
+		src/posix/paths_posix.cpp
+		src/linux/app_record_linux.cpp
+		src/linux/form_linux.cpp
+		src/posix/engine_posix.cpp
+		src/linux/gfx_linux.cpp
+	)
 else()
-	message(FATAL_ERROR "nikque GUI is built for Windows or macOS")
+	# (Android: android/app/src/main/cpp/CMakeLists.txt, built by Gradle)
+	message(FATAL_ERROR "nikque GUI is built for Windows, macOS or Linux")
 endif()
 
 set(NG_CORE
@@ -128,6 +146,19 @@ else()
 		COMMENT "the Japanese words")
 	target_sources(ng_app PRIVATE ${NG_LANG_INC})
 	target_include_directories(ng_app PRIVATE ${CMAKE_BINARY_DIR}/gen)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+	target_link_libraries(ng_app PUBLIC PkgConfig::GTK3 Threads::Threads)
+	add_executable(nikque-gui src/linux/main_linux.cpp)
+	target_link_libraries(nikque-gui PRIVATE ng_app)
+	# (the C++ library of the compiler is in the program: it runs where the system has an older one)
+	target_link_options(nikque-gui PRIVATE -static-libstdc++ -static-libgcc)
+	# the language files and the readme next to the program
+	add_custom_command(TARGET nikque-gui POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/lang $<TARGET_FILE_DIR:nikque-gui>/lang
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/readme.txt $<TARGET_FILE_DIR:nikque-gui>/readme.txt)
+elseif(APPLE)
 	target_link_libraries(ng_app PUBLIC "-framework Cocoa" "-framework CoreText" "-framework CoreGraphics"
 		"-framework ImageIO" "-framework UniformTypeIdentifiers")
 

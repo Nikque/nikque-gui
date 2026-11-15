@@ -1,0 +1,4 @@
+// (the plugin of the app module; no other libraries are used: the app is the classes of the system and our C++)
+plugins {
+	id 'com.android.application' version '8.7.3' apply false
+}

@@ -4,7 +4,7 @@
 
 ## Installing
 
-1. Unpack the ZIP (`nikque-gui-0.4.3.zip`) anywhere. No installation is needed.
+1. Unpack the ZIP (`nikque-gui-0.4.4.zip`) anywhere. No installation is needed.
 2. Start `nikque-gui.exe`.
 
 Contents of the folder:
@@ -27,13 +27,13 @@ Contents of the folder:
 
 ## Mac (trial version)
 
-From 0.4.3 there is a Mac version (`nikque-gui-0.4.3-mac.zip`). It runs on macOS 13 or later, on Apple silicon and Intel Macs. It is still a trial version: please report anything that does not work well.
+From 0.4.3 there is a Mac version (`nikque-gui-0.4.4-mac.zip`). It runs on macOS 13 or later, on Apple silicon and Intel Macs. It is still a trial version: please report anything that does not work well.
 
 1. Unpack the ZIP anywhere.
-2. The app is not signed, so macOS stops it as it is. Once, at first, type this in Terminal (replace `~/Downloads/nikque-gui-0.4.3-mac` with the folder you unpacked):
+2. The app is not signed, so macOS stops it as it is. Once, at first, type this in Terminal (replace `~/Downloads/nikque-gui-0.4.4-mac` with the folder you unpacked):
 
    ```
-   xattr -dr com.apple.quarantine ~/Downloads/nikque-gui-0.4.3-mac
+   xattr -dr com.apple.quarantine ~/Downloads/nikque-gui-0.4.4-mac
    ```
 
    The app and the engines in the folder can then all be opened.
@@ -47,6 +47,55 @@ The folder holds the same as the Windows version: `config.ini`, `lang` and `engi
 - Keys: use Command (⌘) where Windows uses Ctrl (Command+C copies the moves, for example). A right click is a two-finger click on a trackpad, or a click with control held.
 - A file whose name contains a space cannot be given to the engine directly; the GUI gives it through a temporary folder (the log says so).
 - If you move the app into Applications, keep `config.ini`, `lang` and `engines` in the same folder as the app.
+
+## Linux (trial version)
+
+From 0.4.4 there is a Linux version (`nikque-gui-0.4.4-linux.tar.gz`). It runs on x86-64 Ubuntu 22.04 or later (it should run on other distributions of that time or later), with GTK 3. It is still a trial version: please report anything that does not work well.
+
+1. Unpack it anywhere:
+
+   ```
+   tar -xzf nikque-gui-0.4.4-linux.tar.gz
+   ```
+
+2. Start `nikque-gui` in it (open it from the file manager, or type `./nikque-gui` in a terminal).
+
+The folder holds the same as the Windows version: `config.ini`, `lang` and `engines` are next to `nikque-gui`.
+
+- GTK 3 is there on a usual desktop Ubuntu. If it is not, install it with `sudo apt install libgtk-3-0`.
+- Japanese and Chinese are drawn with the fonts of the system (Noto Sans CJK and others). If the letters are boxes, install them with `sudo apt install fonts-noto-cjk`.
+- Each engine folder holds `lEdax-x86-64-v4` (AVX-512), `lEdax-x86-64-v3` (AVX2), `lEdax-x86-64` (other x64 CPUs) and `data/eval.dat`. With `exe=auto`, the one for your CPU is chosen.
+- The engines are built for this distribution from the sources of their tags (v4.5.5-nikque.27, and newedax.14 with 64 slots; see `engines/*/SOURCE.txt`). The Linux programs of the release ZIP of nikque.27 are for Ubuntu 24.04 or later, and the release of newedax.14 has no engine for Linux.
+- Names are separated with `/`. Places written in `config.ini` (`dir=` and others) are written the Linux way (for example `/home/name/books/book.dat`).
+- A file whose name contains a space cannot be given to the engine directly; the GUI gives it through a temporary folder (the log says so).
+- If you move the folder, move `nikque-gui`, `config.ini`, `lang` and `engines` together.
+
+## Android (trial version)
+
+From 0.4.4 there is an Android version (`nikque-gui-0.4.4-android.apk`), for arm64 devices (most phones and tablets of today) with Android 10 or later. It is still a trial version, checked on an emulator only (not yet on a real device): please report anything that does not work well.
+
+1. Download the APK on the device, open it and install it. It is not from a store, so the system first asks you to allow installing apps from this source.
+2. Open "nikque GUI". The first start, and the first start after an update, take a moment to prepare the files.
+
+The screen and the touches:
+
+- A row of buttons at the top: "Menu" (the menus of the Windows version, as lists), to the start, one move back, one move forward, to the end.
+- Held upright, the board is at the top and the panel (the tabs Moves, Book, Record, List and Tree, and the graph) under it. Held sideways, the layout is that of the Windows version.
+- A tap is a click (a tap on a square plays there), a long press is a right click (on the board: one move back; on the picture of a bookmark: its menu), two fingers moved up or down scroll.
+- The Back button of the device asks whether to quit. Quitting saves the settings and closes the engines.
+
+Not in this version:
+
+- Learning and tidying the book, the game lists, the scripts, and everything that asks for a file (opening a book, exports, saving pictures). They are not in the menus either.
+- Typing in the row of the moves (its Copy and Paste buttons work).
+- There is no way yet to use a book of your own (the engine makes a small book of the initial position).
+
+Other notes:
+
+- Both engines are in the app (`aEdax-arm64-v8a` of the release ZIPs of v4.5.5-nikque.27 and newedax.14). They run as separate programs.
+- newedax uses about 160 to 275 MB of memory for each engine. On a device with little memory, Engine → Edax nikque is lighter.
+- The engines may go on thinking while another app is in front. Quit with Back when you are done.
+- The APK is signed with a trial key. If a later version cannot be installed over this one (the system says the keys differ), uninstall this one first (the settings start again).
 
 ## Choosing the engine
 

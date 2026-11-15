@@ -304,7 +304,7 @@ void Canvas::draw_glow(const Glow &glow, float opacity)
 
 // ---- Gfx
 
-struct Gfx::Mac {
+struct Gfx::Impl {
 	__weak NgView *view = nil;
 	CGContextRef bitmap = nullptr;
 	CGFloat scale = 1;
@@ -314,13 +314,13 @@ struct Gfx::Mac {
 	std::map<std::wstring, std::unique_ptr<TextFormat>> formats;
 	std::unique_ptr<Geometry> sparkle, star, heart, ribbon, paw, rays;
 
-	~Mac()
+	~Impl()
 	{
 		if (bitmap) CGContextRelease(bitmap);
 	}
 };
 
-void Gfx::MacDeleter::operator()(Mac *m) const { delete m; }
+void Gfx::ImplDeleter::operator()(Impl *m) const { delete m; }
 
 namespace {
 
@@ -348,29 +348,29 @@ std::unique_ptr<Geometry> poly(const PointF *pts, int n) { return std::make_uniq
 
 bool Gfx::init(NativeWindow window)
 {
-	mac_.reset(new Mac);
-	mac_->view = (__bridge NgView *)window;
+	impl_.reset(new Impl);
+	impl_->view = (__bridge NgView *)window;
 
 	// unit shapes (as on Windows)
 	const PointF spark[] = {{0, -0.5f}, {0.09f, -0.09f}, {0.5f, 0}, {0.09f, 0.09f},
 	                        {0, 0.5f},  {-0.09f, 0.09f}, {-0.5f, 0}, {-0.09f, -0.09f}};
-	mac_->sparkle = poly(spark, 8);
+	impl_->sparkle = poly(spark, 8);
 	PointF st[10];
 	for (int i = 0; i < 10; ++i) {
 		const float a = static_cast<float>(-std::numbers::pi / 2 + i * std::numbers::pi / 5);
 		const float r = (i & 1) ? 0.2f : 0.5f;
 		st[i] = {r * std::cos(a), r * std::sin(a) + 0.04f};
 	}
-	mac_->star = poly(st, 10);
+	impl_->star = poly(st, 10);
 	const PointF rib[] = {{-0.35f, -0.5f}, {0.35f, -0.5f}, {0.35f, 0.5f}, {0, 0.22f}, {-0.35f, 0.5f}};
-	mac_->ribbon = poly(rib, 5);
+	impl_->ribbon = poly(rib, 5);
 	{
 		CGMutablePathRef p = CGPathCreateMutable();
 		CGPathMoveToPoint(p, nullptr, 0, 0.42f);
 		CGPathAddCurveToPoint(p, nullptr, -0.62f, 0.02f, -0.36f, -0.52f, 0, -0.2f);
 		CGPathAddCurveToPoint(p, nullptr, 0.36f, -0.52f, 0.62f, 0.02f, 0, 0.42f);
 		CGPathCloseSubpath(p);
-		mac_->heart = std::make_unique<Geometry>(p);
+		impl_->heart = std::make_unique<Geometry>(p);
 	}
 	{
 		// a paw: one large pad and four toes
@@ -381,7 +381,7 @@ bool Gfx::init(NativeWindow window)
 		CGMutablePathRef p = CGPathCreateMutable();
 		for (const auto &e : parts)
 			CGPathAddEllipseInRect(p, nullptr, CGRectMake(e.point.x - e.radiusX, e.point.y - e.radiusY, 2 * e.radiusX, 2 * e.radiusY));
-		mac_->paw = std::make_unique<Geometry>(p);
+		impl_->paw = std::make_unique<Geometry>(p);
 	}
 	{
 		CGMutablePathRef p = CGPathCreateMutable();
@@ -392,41 +392,41 @@ bool Gfx::init(NativeWindow window)
 			CGPathAddLineToPoint(p, nullptr, std::cos(a + w), std::sin(a + w));
 			CGPathCloseSubpath(p);
 		}
-		mac_->rays = std::make_unique<Geometry>(p);
+		impl_->rays = std::make_unique<Geometry>(p);
 	}
 	resize();
 	return true;
 }
 
-bool Gfx::ready() const noexcept { return mac_ && mac_->view != nil; }
+bool Gfx::ready() const noexcept { return impl_ && impl_->view != nil; }
 
-Canvas *Gfx::dc() noexcept { return mac_ && mac_->bitmap ? &canvas_ : nullptr; }
+Canvas *Gfx::dc() noexcept { return impl_ && impl_->bitmap ? &canvas_ : nullptr; }
 
-Geometry *Gfx::sparkle() const { return mac_->sparkle.get(); }
-Geometry *Gfx::star() const { return mac_->star.get(); }
-Geometry *Gfx::heart() const { return mac_->heart.get(); }
-Geometry *Gfx::ribbon() const { return mac_->ribbon.get(); }
-Geometry *Gfx::paw() const { return mac_->paw.get(); }
-Geometry *Gfx::rays() const { return mac_->rays.get(); }
+Geometry *Gfx::sparkle() const { return impl_->sparkle.get(); }
+Geometry *Gfx::star() const { return impl_->star.get(); }
+Geometry *Gfx::heart() const { return impl_->heart.get(); }
+Geometry *Gfx::ribbon() const { return impl_->ribbon.get(); }
+Geometry *Gfx::paw() const { return impl_->paw.get(); }
+Geometry *Gfx::rays() const { return impl_->rays.get(); }
 
 void Gfx::resize()
 {
-	if (!mac_) return;
-	NgView *v = mac_->view;
+	if (!impl_) return;
+	NgView *v = impl_->view;
 	if (!v) return;
 	const NSSize s = v.bounds.size;
 	const CGFloat scale = v.window ? v.window.backingScaleFactor : NSScreen.mainScreen.backingScaleFactor;
 	const unsigned w = std::max(1u, static_cast<unsigned>(std::lround(s.width)));
 	const unsigned h = std::max(1u, static_cast<unsigned>(std::lround(s.height)));
-	if (mac_->bitmap && w == width_ && h == height_ && scale == mac_->scale) return;
+	if (impl_->bitmap && w == width_ && h == height_ && scale == impl_->scale) return;
 	const size_t pw = static_cast<size_t>(std::ceil(w * scale)), ph = static_cast<size_t>(std::ceil(h * scale));
 	CGContextRef g = make_bitmap(pw, ph, scale);
 	if (!g) return;
-	if (mac_->bitmap) CGContextRelease(mac_->bitmap);
-	mac_->bitmap = g;
-	mac_->scale = scale;
-	mac_->px_w = pw;
-	mac_->px_h = ph;
+	if (impl_->bitmap) CGContextRelease(impl_->bitmap);
+	impl_->bitmap = g;
+	impl_->scale = scale;
+	impl_->px_w = pw;
+	impl_->px_h = ph;
 	width_ = w;
 	height_ = h;
 	canvas_.cg = g;
@@ -435,8 +435,8 @@ void Gfx::resize()
 
 bool Gfx::begin_frame()
 {
-	if (!mac_ || !mac_->bitmap) return false;
-	canvas_.cg = mac_->bitmap;
+	if (!impl_ || !impl_->bitmap) return false;
+	canvas_.cg = impl_->bitmap;
 	canvas_.transform_ = Matrix::Identity();
 	drawing_ = true;
 	return true;
@@ -446,8 +446,8 @@ void Gfx::end_frame(const std::vector<RectF> *dirty)
 {
 	drawing_ = false;
 	canvas_.transform_ = Matrix::Identity();
-	if (in_view_draw_ || !mac_) return;
-	NgView *v = mac_->view;
+	if (in_view_draw_ || !impl_) return;
+	NgView *v = impl_->view;
 	if (!v) return;
 	if (dirty && !dirty->empty()) {
 		for (const auto &r : *dirty) [v setNeedsDisplayInRect:NSMakeRect(r.left, r.top, r.right - r.left, r.bottom - r.top)];
@@ -458,25 +458,25 @@ void Gfx::end_frame(const std::vector<RectF> *dirty)
 
 void *Gfx::copy_frame_image() const
 {
-	if (!mac_ || !mac_->bitmap) return nullptr;
-	return CGBitmapContextCreateImage(mac_->bitmap);
+	if (!impl_ || !impl_->bitmap) return nullptr;
+	return CGBitmapContextCreateImage(impl_->bitmap);
 }
 
 SolidBrush *Gfx::brush(const Color &c)
 {
-	mac_->brush.SetColor(c);
-	mac_->brush.SetOpacity(1.0f);
-	return &mac_->brush;
+	impl_->brush.SetColor(c);
+	impl_->brush.SetOpacity(1.0f);
+	return &impl_->brush;
 }
 
 Gradient *Gfx::gradient(int id, const GradientStop *stops, unsigned n)
 {
-	auto it = mac_->gradients.find(id);
-	if (it != mac_->gradients.end()) return it->second.get();
+	auto it = impl_->gradients.find(id);
+	if (it != impl_->gradients.end()) return it->second.get();
 	if (n == 0) return nullptr;
 	auto g = std::make_unique<Gradient>(std::vector<GradientStop>(stops, stops + n));
 	Gradient *p = g.get();
-	mac_->gradients[id] = std::move(g);
+	impl_->gradients[id] = std::move(g);
 	return p;
 }
 
@@ -485,13 +485,13 @@ TextFormat *Gfx::text(float px, bool bold, Align align, Face face)
 	if (!(px > 0)) return nullptr;
 	const std::wstring key = std::to_wstring(static_cast<int>(px * 4)) + (bold ? L"b" : L"n") + std::to_wstring(static_cast<int>(align)) +
 	                         (face == Face::Number ? L"N" : L"U");
-	auto it = mac_->formats.find(key);
-	if (it != mac_->formats.end()) return it->second.get();
+	auto it = impl_->formats.find(key);
+	if (it != impl_->formats.end()) return it->second.get();
 	CTFontRef f = make_font(face, px, bold);
 	if (!f) return nullptr;
 	auto tf = std::make_unique<TextFormat>(f, align);
 	TextFormat *p = tf.get();
-	mac_->formats[key] = std::move(tf);
+	impl_->formats[key] = std::move(tf);
 	return p;
 }
 
@@ -600,7 +600,7 @@ std::wstring glow_key(std::wstring_view shape_key, const Color &c, float radius)
 
 void Gfx::prepare_glow(std::wstring_view text, float em, const Color &c, float radius, Face face)
 {
-	if (!mac_ || !mac_->bitmap || drawing_) return;
+	if (!impl_ || !impl_->bitmap || drawing_) return;
 	const std::wstring key = glow_key(shape_key(text, em, face), c, radius);
 	if (glows_.count(key)) return;
 	const NumberShape &s = shape(text, em, face);
@@ -608,7 +608,7 @@ void Gfx::prepare_glow(std::wstring_view text, float em, const Color &c, float r
 	const float pad = std::ceil(radius * 3.0f) + 2.0f;
 	const float w = std::ceil(s.bounds.right - s.bounds.left + 2 * pad), h = std::ceil(s.bounds.bottom - s.bounds.top + 2 * pad);
 	if (!(w > 0) || !(h > 0) || w > 4096 || h > 4096) return;
-	const CGFloat scale = mac_->scale;
+	const CGFloat scale = impl_->scale;
 	CGContextRef g = make_bitmap(static_cast<size_t>(std::ceil(w * scale)), static_cast<size_t>(std::ceil(h * scale)), scale);
 	if (!g) return;
 	const PointF origin{pad - s.bounds.left, pad - s.bounds.top};
@@ -646,15 +646,15 @@ void Gfx::clear_shapes()
 
 void Gfx::clear_fonts()
 {
-	if (mac_) mac_->formats.clear();
+	if (impl_) impl_->formats.clear();
 	clear_shapes();
 }
 
 bool Gfx::save_png(const std::wstring &path, const RectU &crop, const std::function<void()> &draw)
 {
-	if (!mac_ || !mac_->bitmap || drawing_ || width_ == 0 || height_ == 0) return false;
+	if (!impl_ || !impl_->bitmap || drawing_ || width_ == 0 || height_ == 0) return false;
 	if (crop.right <= crop.left || crop.bottom <= crop.top || crop.right > width_ || crop.bottom > height_) return false;
-	CGContextRef g = make_bitmap(mac_->px_w, mac_->px_h, mac_->scale);
+	CGContextRef g = make_bitmap(impl_->px_w, impl_->px_h, impl_->scale);
 	if (!g) return false;
 	void *const old = canvas_.cg;
 	canvas_.cg = g;
@@ -667,7 +667,7 @@ bool Gfx::save_png(const std::wstring &path, const RectU &crop, const std::funct
 	CGImageRef all = CGBitmapContextCreateImage(g);
 	CGContextRelease(g);
 	if (!all) return false;
-	const CGFloat sc = mac_->scale;
+	const CGFloat sc = impl_->scale;
 	CGImageRef part = CGImageCreateWithImageInRect(
 		all, CGRectMake(crop.left * sc, crop.top * sc, (crop.right - crop.left) * sc, (crop.bottom - crop.top) * sc));
 	CGImageRelease(all);

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<string name="app_name" translatable="false">nikque GUI</string>
+	<string name="menu">Menu</string>
+	<string name="preparing">Preparing the files…</string>
+	<string name="prepare_failed">The files of the app could not be prepared.</string>
+	<string name="exit_ask">Quit nikque GUI?</string>
+	<string name="exit_yes">Quit</string>
+</resources>

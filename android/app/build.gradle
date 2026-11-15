@@ -1,0 +1,88 @@
+// The app: the Java classes of the screen (src/main/java) and libnikquegui.so (the shared C++ of the GUI with
+// src/android and src/posix, built by src/main/cpp/CMakeLists.txt).
+//   -PngAssets=<folder>   the files of the app (config.ini, lang, the eval files of the engines): tools/make_dist_android.sh
+//   -PngJniLibs=<folder>  the engines as lib<name>.so for each ABI (programs started as child processes)
+//   -PngAbi=<abi,abi>     the ABIs of the APK (arm64-v8a for devices; x86_64 for the emulator of the CI)
+// The release build is signed when the keystore is given in the environment (NG_KEYSTORE, NG_KEYSTORE_PASSWORD,
+// NG_KEY_ALIAS, NG_KEY_PASSWORD).
+plugins {
+	id 'com.android.application'
+}
+
+def cmakeLists = new File(rootDir, '../CMakeLists.txt').getText('UTF-8')
+def versionMatch = (cmakeLists =~ /project\(nikque_gui VERSION ([0-9]+)\.([0-9]+)\.([0-9]+)/)
+if (!versionMatch.find()) throw new GradleException('no version in CMakeLists.txt')
+def ngVersion = "${versionMatch.group(1)}.${versionMatch.group(2)}.${versionMatch.group(3)}"
+def ngCode = versionMatch.group(1).toInteger() * 10000 + versionMatch.group(2).toInteger() * 100 + versionMatch.group(3).toInteger()
+def keystore = System.getenv('NG_KEYSTORE')
+
+android {
+	namespace 'io.github.nikque.gui'
+	compileSdk 35
+	if (System.getenv('NG_NDK_VERSION')) ndkVersion System.getenv('NG_NDK_VERSION')
+
+	defaultConfig {
+		applicationId 'io.github.nikque.gui'
+		minSdk 29
+		targetSdk 35
+		versionCode ngCode
+		versionName ngVersion
+		ndk {
+			abiFilters(*((project.findProperty('ngAbi') ?: 'arm64-v8a').toString().split(',')))
+		}
+		externalNativeBuild {
+			cmake {
+				arguments '-DANDROID_STL=c++_static', "-DNG_VERSION=${ngVersion}"
+			}
+		}
+	}
+
+	externalNativeBuild {
+		cmake {
+			path 'src/main/cpp/CMakeLists.txt'
+		}
+	}
+
+	sourceSets {
+		main {
+			assets.srcDirs = [(project.findProperty('ngAssets') ?: "${buildDir}/ng-assets").toString()]
+			jniLibs.srcDirs = [(project.findProperty('ngJniLibs') ?: "${buildDir}/ng-jnilibs").toString()]
+		}
+	}
+
+	// the engines are programs: they are taken out of the APK when it is installed, and started from there
+	packaging {
+		jniLibs {
+			useLegacyPackaging = true
+			keepDebugSymbols += ['**/libedax_*.so']
+		}
+	}
+
+	signingConfigs {
+		if (keystore) {
+			trial {
+				storeFile file(keystore)
+				storePassword System.getenv('NG_KEYSTORE_PASSWORD')
+				keyAlias System.getenv('NG_KEY_ALIAS')
+				keyPassword System.getenv('NG_KEY_PASSWORD')
+			}
+		}
+	}
+
+	buildTypes {
+		release {
+			minifyEnabled false
+			if (keystore) signingConfig signingConfigs.trial
+		}
+	}
+
+	compileOptions {
+		sourceCompatibility JavaVersion.VERSION_11
+		targetCompatibility JavaVersion.VERSION_11
+	}
+
+	lint {
+		checkReleaseBuilds false
+		abortOnError false
+	}
+}

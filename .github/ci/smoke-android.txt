@@ -1,0 +1,27 @@
+# the run of the Android build on the emulator: the screen in a few states, the log, then the end
+log smoke start
+wait 90
+screenshot android-01-start.png
+moves f5d6c3d3c4f4c5b3c2e6
+wait 90
+screenshot android-02-moves.png
+tab book
+wait 30
+screenshot android-03-book.png
+tab moves
+effects on
+wait 30
+screenshot android-04-effects.png
+design paw
+wait 30
+screenshot android-05-paw.png
+design standard
+lang en
+wait 20
+screenshot android-06-en.png
+lang ja
+tab record
+wait 10
+screenshot android-07-record.png
+savelog smoke-log.txt
+quit

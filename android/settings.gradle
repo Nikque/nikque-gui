@@ -1,0 +1,17 @@
+// The Android app of nikque GUI: one module (app). Built by .github/workflows/android.yml with tools/make_dist_android.sh.
+pluginManagement {
+	repositories {
+		google()
+		mavenCentral()
+		gradlePluginPortal()
+	}
+}
+dependencyResolutionManagement {
+	repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+	repositories {
+		google()
+		mavenCentral()
+	}
+}
+rootProject.name = 'nikque-gui'
+include ':app'

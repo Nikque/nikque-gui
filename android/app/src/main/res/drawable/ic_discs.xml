@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the two discs of the icon, in the middle 66 of 108 (the part of an adaptive icon that is always in sight) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+	android:width="108dp"
+	android:height="108dp"
+	android:viewportWidth="108"
+	android:viewportHeight="108">
+	<!-- the white disc: center (62.6, 62.6), radius 17.8 -->
+	<path
+		android:fillColor="#f1f1f1"
+		android:strokeColor="#9f9fa9"
+		android:strokeWidth="1.9"
+		android:pathData="M44.8,62.6a17.8,17.8 0 1,0 35.6,0a17.8,17.8 0 1,0 -35.6,0z" />
+	<!-- the black disc: center (45.4, 45.4), radius 17.8 -->
+	<path
+		android:fillColor="#101113"
+		android:strokeColor="#52525c"
+		android:strokeWidth="1.9"
+		android:pathData="M27.6,45.4a17.8,17.8 0 1,0 35.6,0a17.8,17.8 0 1,0 -35.6,0z" />
+</vector>
