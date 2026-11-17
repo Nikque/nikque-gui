@@ -137,4 +137,4 @@ View → Number on the squares shows one of the following at the lower left of e
 
 Analysis → Compare mode starts the engine of the other kind for a search without the book. The Moves table gets a Compare column.
 
-This lets you compare the evaluation functions of the nikque and newedax types side by side.
+This lets you compare the evaluation functions of the nikque type and Heath (formerly newedax) side by side.

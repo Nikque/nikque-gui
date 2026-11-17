@@ -46,7 +46,7 @@ As a result, values keep appearing while the book is learning, and the board ana
 ## License
 
 - nikque GUI: MIT License (`LICENSE.txt`).
-- The included engines (Edax nikque, newedax): GNU GPL v3. They run as separate programs.
+- The included engines Edax nikque and Heath (formerly newedax): GNU GPL v3. They run as separate programs.
 - The GPL text and the location of the source code are in `LICENSE.txt` and `SOURCE.txt` in `engines\nikque` and `engines\newedax`.
 
 ## System requirements

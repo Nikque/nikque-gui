@@ -46,7 +46,7 @@ GUI はエンジンを子プロセスとして起動し、テキストのコマ�
 ## ライセンス
 
 - nikque GUI：MIT License（`LICENSE.txt`）。
-- 付属のエンジン（Edax nikque・newedax）：GNU GPL v3。別のプログラムとして動きます。
+- 付属のエンジン Edax nikque と Heath（旧名 newedax）：GNU GPL v3。別のプログラムとして動きます。
 - GPL の文とソースの場所は、配布版の `engines\nikque`・`engines\newedax` にある `LICENSE.txt` と `SOURCE.txt` に書いてあります。
 
 ## 動作環境

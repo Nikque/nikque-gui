@@ -4,7 +4,7 @@
 
 ## 置き方
 
-1. 配布の ZIP（`nikque-gui-0.4.5.zip`）を好きな場所に展開します。インストールは要りません。
+1. 配布の ZIP（`nikque-gui-0.4.6.zip`）を好きな場所に展開します。インストールは要りません。
 2. `nikque-gui.exe` を起動します。
 
 フォルダの中身：
@@ -14,8 +14,8 @@
 | `nikque-gui.exe` | GUI |
 | `config.ini` | 設定（[11. 設定](11-settings.md)） |
 | `lang\*.txt` | 画面の言葉（日本語・English・简体中文・繁體中文） |
-| `engines\nikque` | C 版の Edax v4.5.5-nikque.28 |
-| `engines\newedax` | newedax.15（C++ 版、64 枠の版） |
+| `engines\nikque` | C 版の Edax v4.5.5-nikque.29 |
+| `engines\newedax` | Heath（旧名 newedax）の heath.16（C++ 版、64 枠の版） |
 | `readme.txt` | 短い説明 |
 
 - どちらのエンジンのフォルダにも、次のファイルがあります。
@@ -27,13 +27,13 @@
 
 ## Mac（試しの版）
 
-0.4.3 から、Mac 版（`nikque-gui-0.4.5-mac.zip`）があります。macOS 13 以上の Mac（Apple シリコン・Intel のどちらも）で動きます。まだ試しの版です。動きのおかしい所があれば知らせてください。
+0.4.3 から、Mac 版（`nikque-gui-0.4.6-mac.zip`）があります。macOS 13 以上の Mac（Apple シリコン・Intel のどちらも）で動きます。まだ試しの版です。動きのおかしい所があれば知らせてください。
 
 1. ZIP を好きな場所に展開します。
-2. 署名していないアプリなので、そのままでは macOS に止められます。初めに一度だけ、「ターミナル」で次のように打ちます（`~/Downloads/nikque-gui-0.4.5-mac` は展開したフォルダの場所に替えてください）。
+2. 署名していないアプリなので、そのままでは macOS に止められます。初めに一度だけ、「ターミナル」で次のように打ちます（`~/Downloads/nikque-gui-0.4.6-mac` は展開したフォルダの場所に替えてください）。
 
    ```
-   xattr -dr com.apple.quarantine ~/Downloads/nikque-gui-0.4.5-mac
+   xattr -dr com.apple.quarantine ~/Downloads/nikque-gui-0.4.6-mac
    ```
 
    フォルダの中のアプリとエンジンのすべてが開けるようになります。
@@ -42,7 +42,7 @@
 フォルダの中身は Windows 版と同じです。`nikque GUI.app` の隣に `config.ini`・`lang`・`engines` があります。
 
 - どちらのエンジンのフォルダにも、`mEdax-arm64`（Apple シリコン）・`mEdax-x64-modern`（Intel）・`data/eval.dat` があります。`exe=auto` なら Mac に合わせて選びます。
-- nikque 系のエンジンは v4.5.5-nikque.28 の Release の ZIP のものです。newedax 系のエンジンは、newedax.15 の Release に Mac 用が無いので、そのタグのソース（64 枠）からこの配布物のために作ったものです（`engines/newedax/SOURCE.txt`）。
+- nikque 系のエンジンは v4.5.5-nikque.29 の Release の ZIP のものです。Heath 系のエンジンは、heath.16 の Release に Mac 用が無いので、そのタグのソース（64 枠）からこの配布物のために作ったものです（`engines/newedax/SOURCE.txt`）。
 - `config.ini` などの名前は `/` で区切ります。`dir=` などに書く場所も Mac の書き方です（例：`/Users/名前/books/book.dat`）。
 - キー：Windows の Ctrl の代わりに Command（⌘）を使います（例：Command+C で棋譜をコピー）。右クリックは、トラックパッドの 2 本指のクリックか、control を押しながらのクリックです。
 - 空白を含む名前のファイルはエンジンに直接渡せないので、GUI が一時フォルダを通して渡します（ログにそう出ます）。
@@ -50,12 +50,12 @@
 
 ## Linux（試しの版）
 
-0.4.4 から、Linux 版（`nikque-gui-0.4.5-linux.tar.gz`）があります。x86-64 の Ubuntu 22.04 以上（同じころ以降のほかの配布でも動く見込みです）で、画面の部品は GTK 3 です。まだ試しの版です。動きのおかしい所があれば知らせてください。
+0.4.4 から、Linux 版（`nikque-gui-0.4.6-linux.tar.gz`）があります。x86-64 の Ubuntu 22.04 以上（同じころ以降のほかの配布でも動く見込みです）で、画面の部品は GTK 3 です。まだ試しの版です。動きのおかしい所があれば知らせてください。
 
 1. 好きな場所に展開します。
 
    ```
-   tar -xzf nikque-gui-0.4.5-linux.tar.gz
+   tar -xzf nikque-gui-0.4.6-linux.tar.gz
    ```
 
 2. 中の `nikque-gui` を起動します（ファイルの一覧から開くか、端末で `./nikque-gui`）。
@@ -65,14 +65,14 @@
 - GTK 3 は、ふつうのデスクトップの Ubuntu には初めから入っています。入っていないときは `sudo apt install libgtk-3-0` で入れます。
 - 日本語・中国語の字は、システムの字体（Noto Sans CJK など）で出します。字が四角になるときは `sudo apt install fonts-noto-cjk` で入れます。
 - どちらのエンジンのフォルダにも、`lEdax-x86-64-v4`（AVX-512）・`lEdax-x86-64-v3`（AVX2）・`lEdax-x86-64`（その他の x64）・`data/eval.dat` があります。`exe=auto` なら CPU に合わせて選びます。
-- エンジンは、この配布物のためにタグのソース（v4.5.5-nikque.28、newedax.15 の 64 枠）から作ったものです（`engines/*/SOURCE.txt`）。nikque.28 の Release の ZIP の Linux 用は Ubuntu 24.04 以上向けで、newedax.15 の Release には Linux 用がありません。
+- エンジンは、この配布物のためにタグのソース（v4.5.5-nikque.29、heath.16 の 64 枠）から作ったものです（`engines/*/SOURCE.txt`）。nikque.29 の Release の ZIP の Linux 用は Ubuntu 24.04 以上向けで、heath.16 の Release には Linux 用がありません。
 - `config.ini` などの名前は `/` で区切ります。`dir=` などに書く場所も Linux の書き方です（例：`/home/名前/books/book.dat`）。
 - 空白を含む名前のファイルはエンジンに直接渡せないので、GUI が一時フォルダを通して渡します（ログにそう出ます）。
 - フォルダを移すときは、`nikque-gui`・`config.ini`・`lang`・`engines` をいっしょに移してください。
 
 ## Android（試しの版）
 
-0.4.4 から、Android 版（`nikque-gui-0.4.5-android.apk`）があります。Android 10 以上の、arm64 の端末（今のほとんどの電話とタブレット）向けです。まだ試しの版で、エミュレーターで動きを確かめただけです（実機ではまだ確かめていません）。動きのおかしい所があれば知らせてください。
+0.4.4 から、Android 版（`nikque-gui-0.4.6-android.apk`）があります。Android 10 以上の、arm64 の端末（今のほとんどの電話とタブレット）向けです。まだ試しの版で、エミュレーターで動きを確かめただけです（実機ではまだ確かめていません）。動きのおかしい所があれば知らせてください。
 
 1. APK を端末にダウンロードして開き、インストールします。ストアの外のアプリなので、初めに「提供元不明のアプリ」を入れる許しを求められます。
 2. 「nikque GUI」を開きます。初めての起動と、版を上げた後の起動では、ファイルの準備に少し時間がかかります。
@@ -92,20 +92,20 @@
 
 そのほか：
 
-- エンジンは両方とも入っています（v4.5.5-nikque.28 と newedax.15 の Release の ZIP の `aEdax-arm64-v8a`）。エンジンは別のプログラムとして動きます。
-- newedax はエンジン 1 つで約 160〜275 MB のメモリを使います。メモリの少ない端末では、「エンジン」→「Edax nikque」に切り替えると軽くなります。
+- エンジンは両方とも入っています（v4.5.5-nikque.29 と heath.16 の Release の ZIP の `aEdax-arm64-v8a`）。エンジンは別のプログラムとして動きます。
+- Heath はエンジン 1 つで約 160〜275 MB のメモリを使います。メモリの少ない端末では、「エンジン」→「Edax nikque」に切り替えると軽くなります。
 - 別のアプリに切り替えている間も、エンジンは考え続けることがあります。使い終わったら「戻る」で終了してください。
 - APK は試し用の鍵で署名しています。次の版を上から入れられないとき（鍵が違うと言われるとき）は、一度アンインストールしてから入れてください（設定は初めに戻ります）。
 
 ## エンジンの系列を選ぶ
 
-「エンジン」→「nikque 系」・「newedax 系」で切り替えます。初めて起動したときは newedax 系です（0.4.0 までは nikque 系でした）。選んだ系列は `config.ini` に保存され、次の起動でも使われます。
+「エンジン」→「nikque 系」・「Heath 系（旧名 newedax）」で切り替えます。初めて起動したときは Heath 系です（0.4.0 までは nikque 系でした）。選んだ系列は `config.ini` に保存され、次の起動でも使われます。
 
 - どちらも同じ book の解析のコマンドを持ち、同じ結果を返します。
 - newedax.13 からは、新しく学習し直した評価関数（64 枠）を使います。`eval.dat` は約 108 MB で、nikque の `eval.dat` とは別のものです。
-- newedax の `eval.dat` は、エンジンと同じ版の配布物のものを使ってください。前の版の newedax・eval2・nikque の `eval.dat` を読ませると、エンジンは動きますが評価が正しくありません。そのときは GUI がメッセージで知らせます（[12. 困ったときは](12-troubleshooting.md)）。
-- 48 枠の版（newedax の Release の `edax-4.5.5-newedax.15-48.zip`）は付いていません。使うときは、その ZIP を別のフォルダに展開し、`config.ini` の `[newedax]` の `dir=` にその `bin` のフォルダを書きます。48 枠の exe には、同じ ZIP の 48 枠の `eval.dat` を使ってください（取り違えると、メッセージは出ずに評価が正しくなくなります）。
-- メモリの目安：newedax.15 はエンジン 1 つで約 160 MB（`wEdax-x86-64.exe`）〜約 275 MB（AVX-512 の `wEdax-x86-64-v4.exe`）を使います。GUI はエンジンを最大 5 つ（メイン・探索用・ツール用・対局用・比較用）起動するので、すべて newedax だと約 0.8〜1.4 GB になります。置換表の大きさやスレッドの数で増え、book の大きさは別に足されます。
+- Heath の `eval.dat` は、エンジンと同じ版の配布物のものを使ってください。前の版の Heath・eval2・nikque の `eval.dat` を読ませると、エンジンは動きますが評価が正しくありません。そのときは GUI がメッセージで知らせます（[12. 困ったときは](12-troubleshooting.md)）。
+- 48 枠の版（Heath の Release の `edax-4.5.5-heath.16-48.zip`）は付いていません。使うときは、その ZIP を別のフォルダに展開し、`config.ini` の `[newedax]`（Heath の設定）の `dir=` にその `bin` のフォルダを書きます。48 枠の exe には、同じ ZIP の 48 枠の `eval.dat` を使ってください（取り違えると、メッセージは出ずに評価が正しくなくなります）。
+- メモリの目安：heath.16 はエンジン 1 つで約 160 MB（`wEdax-x86-64.exe`）〜約 275 MB（AVX-512 の `wEdax-x86-64-v4.exe`）を使います。GUI はエンジンを最大 5 つ（メイン・探索用・ツール用・対局用・比較用）起動するので、すべて Heath だと約 0.8〜1.4 GB になります。置換表の大きさやスレッドの数で増え、book の大きさは別に足されます。
 - book の形式は変わらないので、前の版で使っていた book はそのまま読めます。ただし、前の版で学習した book の値は前の評価関数でつけたものです。
 
 ## book を置く
@@ -118,7 +118,7 @@ book は付いていません。次のどちらかの方法で使います。
 book が無いと、エンジンは `data\book.dat` に初期局面だけの小さな book を作ります。後でお持ちの book に置き換えてかまいません。
 
 - book のファイルはエンジンが読み書きします。学習や book を変えるコマンドの後は、エンジンを閉じるときに book のファイルが保存されることがあります。大事な book は先にコピーを取ってください。
-- nikque 系列は、newedax の book の形式 2（`NEDXBOOK`）を読めません。その book を開くと、メッセージが出ます。
+- nikque 系列は、Heath の book の形式 2（`NEDXBOOK`）を読めません。その book を開くと、メッセージが出ます。
 
 ## すでにあるエンジンを使う
 

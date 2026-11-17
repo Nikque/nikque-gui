@@ -46,7 +46,7 @@ menu.learn.stop=Stop learning…
 menu.learn.continue=Continue from the file saved on the way…
 menu.engine=&Engine
 menu.engine.nikque=nikque type
-menu.engine.newedax=newedax type
+menu.engine.newedax=Heath type (formerly newedax)
 menu.engine.restart=Restart
 menu.engine.version=Version to the log
 menu.io=&Input/Output
@@ -167,10 +167,10 @@ action.panel=Hide or show the right panel
 action.log=Open or close the log
 action.right_click=Right click: one move back
 help.keys_change=Keys can be changed in config.ini, [keys] (for example back=Left, Backspace).
-help.about=nikque GUI {0}\n\nMIT License\nThe engines (Edax nikque, newedax) are GPL and run as separate programs.
+help.about=nikque GUI {0}\n\nMIT License\nThe engines Edax nikque and Heath (formerly newedax) are GPL and run as separate programs.
 
 engine.nikque=nikque
-engine.newedax=newedax
+engine.newedax=Heath
 engine.main=Main engine
 engine.search=Search engine
 
@@ -195,7 +195,7 @@ save.busy=The main engine is saving its book. Wait until the save has ended.
 ask.cut_save=The main engine is saving its book ({0} min {1} s so far).\n\nCut the save and close? The book file then stays as it was last saved, and what was learned after that is lost.\n\nNo: the window closes when the save has ended.
 
 err.d2d=Could not start the drawing (Direct2D).
-err.book_form2=This book is form 2 of newedax (NEDXBOOK). The nikque engine (C version) cannot read it, so the main engine is not started.
+err.book_form2=This book is form 2 of Heath, formerly newedax (NEDXBOOK). The nikque engine (C version) cannot read it, so the main engine is not started.
 
 learn.busy=Learning is in progress. Wait for its end or stop it first.
 learn.no_engine=The main engine is not running.
@@ -607,7 +607,7 @@ menu.opening.wide=A book move drawn within a width
 menu.opening.settings=Width and moves…
 menu.play.clock=Time of a game…
 menu.play.ponder=Think on the person's turn too
-menu.play.keep_hash=Keep the hash table from move to move (newedax keep-hash)
+menu.play.keep_hash=Keep the hash table from move to move (Heath keep-hash)
 menu.play.end=At the end of a game…
 menu.analysis.compare=Compare mode (the values of the other engine in the table)
 play.free=Free play
@@ -665,7 +665,7 @@ reduce.at.here=the position shown
 reduce.counting=Counting the positions that book reduce keeps from {0} with deviate3 {1} {2}…
 reduce.ask=Only the positions that book deviate3 {1} {2} reaches from {0} are kept; the others are removed (book: {6}).\n\nKept: {3}\nRemoved: {4}\n(the whole book: {5} positions)\n\nGo on?
 reduce.done=The book is lighter: {0} positions kept, {1} removed (deviate3 {2} {3}). It is saved to the book file when the engine is closed
-reduce.unknown=This engine has no book reduce (Edax nikque v4.5.5-nikque.20 and newedax v4.5.5-newedax.5 or later have it). The book is not changed
+reduce.unknown=This engine has no book reduce (Edax nikque v4.5.5-nikque.20 and Heath v4.5.5-newedax.5 or later have it). The book is not changed
 reduce.notinbook=The position ({0}) is not in the book: the book is not changed
 reduce.deep=The position ({0}) is beyond the depth of the book: the book is not changed
 reduce.damaged=The book after {0} is damaged (a move to a square already taken, a move back to the same position…): it cannot be counted. The book is not changed

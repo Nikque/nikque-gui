@@ -46,7 +46,7 @@ menu.learn.stop=停止學習…
 menu.learn.continue=從中途儲存繼續…
 menu.engine=引擎(&E)
 menu.engine.nikque=nikque 系
-menu.engine.newedax=newedax 系
+menu.engine.newedax=Heath 系（舊名 newedax）
 menu.engine.restart=重新啟動
 menu.engine.version=將版本輸出到記錄
 menu.io=輸入輸出(&I)
@@ -167,10 +167,10 @@ action.panel=隱藏或顯示右側面板
 action.log=展開或收起記錄
 action.right_click=右鍵：後退一步
 help.keys_change=按鍵可在 config.ini 的 [keys] 中變更（例：back=Left, Backspace）。
-help.about=nikque GUI {0}\n\nMIT License\n引擎（Edax nikque、newedax）為 GPL，作為獨立程式執行。
+help.about=nikque GUI {0}\n\nMIT License\n引擎 Edax nikque 與 Heath（舊名 newedax）為 GPL，作為獨立程式執行。
 
 engine.nikque=nikque
-engine.newedax=newedax
+engine.newedax=Heath
 engine.main=主引擎
 engine.search=僅搜尋引擎
 
@@ -195,7 +195,7 @@ save.busy=主引擎正在儲存 book。請等待儲存結束。
 ask.cut_save=主引擎正在儲存 book（已過 {0} 分 {1} 秒）。\n\n要中斷儲存並關閉嗎？中斷後，book 檔案保持上次儲存時的狀態，此後學習的內容將遺失。\n\n選「否」則等待儲存結束後再關閉。
 
 err.d2d=無法開始畫面繪製（Direct2D）。
-err.book_form2=此 book 為 newedax 的形式 2（NEDXBOOK）。nikque 系（C 版）無法讀取，因此不啟動主引擎。
+err.book_form2=此 book 為 Heath（舊名 newedax）的形式 2（NEDXBOOK）。nikque 系（C 版）無法讀取，因此不啟動主引擎。
 
 learn.busy=正在學習。請等待結束或停止後再進行。
 learn.no_engine=主引擎未執行。
@@ -607,7 +607,7 @@ menu.opening.wide=在一定範圍內從 book 選擇
 menu.opening.settings=範圍與手數…
 menu.play.clock=持有時間…
 menu.play.ponder=在對方回合也思考
-menu.play.keep_hash=每步之間保留置換表（newedax 的 keep-hash）
+menu.play.keep_hash=每步之間保留置換表（Heath 的 keep-hash）
 menu.play.end=終局時的動作…
 menu.analysis.compare=比較模式（在表中並列另一個引擎的評價值）
 play.free=自由下棋
@@ -665,7 +665,7 @@ reduce.at.here=當前局面
 reduce.counting=執行 book reduce 之前，正在統計從{0}按 deviate3 {1} {2} 保留的局面…
 reduce.ask=只保留從{0}按 book deviate3 {1} {2} 能到達的局面，刪除其餘局面（book：{6}）。\n\n保留：{3}\n刪除：{4}\n（book 全部：{5} 個局面）\n\n確定嗎？
 reduce.done=已減小 book：保留 {0} 個局面，刪除 {1} 個局面（deviate3 {2} {3}）。關閉引擎時會儲存到 book 檔案
-reduce.unknown=此引擎沒有 book reduce 命令（Edax nikque v4.5.5-nikque.20、newedax v4.5.5-newedax.5 及以後才有）。book 未改變
+reduce.unknown=此引擎沒有 book reduce 命令（Edax nikque v4.5.5-nikque.20、Heath v4.5.5-newedax.5 及以後才有）。book 未改變
 reduce.notinbook={0}不在 book 中，book 未改變
 reduce.deep={0}超出了 book 的深度，book 未改變
 reduce.damaged={0}之後的 book 有損壞的連接（走到已有棋子的格子、回到同一局面等），無法計數。book 未改變

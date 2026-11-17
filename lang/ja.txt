@@ -46,7 +46,7 @@ menu.learn.stop=学習を中止…
 menu.learn.continue=途中保存から再開…
 menu.engine=エンジン(&E)
 menu.engine.nikque=nikque 系
-menu.engine.newedax=newedax 系
+menu.engine.newedax=Heath 系（旧名 newedax）
 menu.engine.restart=再起動
 menu.engine.version=バージョンをログに表示
 menu.io=入出力(&I)
@@ -167,10 +167,10 @@ action.panel=右のパネルを隠す・表示する
 action.log=ログ欄を広げる・戻す
 action.right_click=右クリック：1 手戻る
 help.keys_change=キーは config.ini の [keys] で変えられます（例：back=Left, Backspace）。
-help.about=nikque GUI {0}\n\nMIT License\nエンジン（Edax nikque・newedax）は GPL で、別のプログラムとして動きます。
+help.about=nikque GUI {0}\n\nMIT License\nエンジンの Edax nikque と Heath（旧名 newedax）は GPL で、別のプログラムとして動きます。
 
 engine.nikque=nikque
-engine.newedax=newedax
+engine.newedax=Heath
 engine.main=メインエンジン
 engine.search=探索用エンジン
 
@@ -195,7 +195,7 @@ save.busy=メインエンジンが book を保存しています。保存が終�
 ask.cut_save=メインエンジンが book を保存しています（{0} 分 {1} 秒たちました）。\n\n保存を打ち切って閉じますか。打ち切ると、book のファイルは前に保存したときのままになり、その後に学習した分は失われます。\n\n「いいえ」を選ぶと、保存が終わるのを待ってから閉じます。
 
 err.d2d=画面の描画（Direct2D）を始められませんでした。
-err.book_form2=この book は newedax の形式 2（NEDXBOOK）です。nikque 系（C 版）では読み込めないので、メインエンジンを起動しません。
+err.book_form2=この book は Heath（旧名 newedax）の形式 2（NEDXBOOK）です。nikque 系（C 版）では読み込めないので、メインエンジンを起動しません。
 
 learn.busy=学習中です。終わるのを待つか、中止してから行ってください。
 learn.no_engine=メインエンジンが動いていません。
@@ -607,7 +607,7 @@ menu.opening.wide=book から幅をもって選ぶ
 menu.opening.settings=幅と手数…
 menu.play.clock=持ち時間…
 menu.play.ponder=相手の番にも考える
-menu.play.keep_hash=置換表を手ごとに残す（newedax の keep-hash）
+menu.play.keep_hash=置換表を手ごとに残す（Heath の keep-hash）
 menu.play.end=終局したときの動作…
 menu.analysis.compare=比較モード（もう一方のエンジンの評価値を表に並べる）
 play.free=自由打ち
@@ -665,7 +665,7 @@ reduce.at.here=今の局面
 reduce.counting=book reduce の前に、{0}から deviate3 {1} {2} で残る局面を数えています…
 reduce.ask={0}から book deviate3 {1} {2} でたどれる局面だけを残し、ほかを消します（book：{6}）。\n\n残る局面：{3}\n消える局面：{4}\n（book 全体：{5} 局面）\n\nよろしいですか。
 reduce.done=book を軽くしました：{0} 局面を残し、{1} 局面を消しました（deviate3 {2} {3}）。エンジンを閉じると、book のファイルに保存されます
-reduce.unknown=このエンジンには book reduce のコマンドがありません（Edax nikque v4.5.5-nikque.20・newedax v4.5.5-newedax.5 から）。book は変えていません
+reduce.unknown=このエンジンには book reduce のコマンドがありません（Edax nikque v4.5.5-nikque.20・Heath v4.5.5-newedax.5 から）。book は変えていません
 reduce.notinbook={0}は book にないので、book は変えていません
 reduce.deep={0}は book の深さより先にあるので、book は変えていません
 reduce.damaged={0}から先の book に壊れたつながり（石のあるマスへの手、同じ局面に戻る手など）があるので、数えられませんでした。book は変えていません

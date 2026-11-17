@@ -42,15 +42,15 @@ jobs:
       - name: The source of newedax (the tag of its release)
         uses: actions/checkout@v4
         with:
-          repository: Nikque/newedax
-          ref: v4.5.5-newedax.15
+          repository: Nikque/Heath
+          ref: v4.5.5-heath.16
           path: ne
 
       - name: The source of Edax nikque (the tag of its release)
         uses: actions/checkout@v4
         with:
           repository: Nikque/edax-reversi-AVX
-          ref: v4.5.5-nikque.28
+          ref: v4.5.5-nikque.29
           path: nk
 
       - name: Boost 1.92 (headers, for newedax)
@@ -73,11 +73,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download v4.5.5-nikque.28 -R Nikque/edax-reversi-AVX -p 'edax-4.5.5-nikque.28.zip' -D dl
-          gh release download v4.5.5-newedax.15 -R Nikque/newedax -p 'edax-4.5.5-newedax.15-64.zip' -D dl
+          gh release download v4.5.5-nikque.29 -R Nikque/edax-reversi-AVX -p 'edax-4.5.5-nikque.29.zip' -D dl
+          gh release download v4.5.5-heath.16 -R Nikque/Heath -p 'edax-4.5.5-heath.16-64.zip' -D dl
 
       - name: The distribution
-        run: BOOST_DIR="$PWD/boost/boost_1_92_0" bash tools/make_dist_linux.sh build/nikque-gui dl/edax-4.5.5-nikque.28.zip dl/edax-4.5.5-newedax.15-64.zip ne nk
+        run: BOOST_DIR="$PWD/boost/boost_1_92_0" bash tools/make_dist_linux.sh build/nikque-gui dl/edax-4.5.5-nikque.29.zip dl/edax-4.5.5-heath.16-64.zip ne nk
 
       - name: Run the distribution with a script
         run: |

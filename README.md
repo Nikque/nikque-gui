@@ -6,7 +6,7 @@
 
 ## 日本語
 
-オセロのエンジン [Edax 4.5.5 nikque](https://github.com/Nikque/edax-reversi-AVX)（C 版）と [newedax](https://github.com/Nikque/newedax)（C++ 版）を画面から使うための、Windows 用のソフトです。試しの Mac 版（0.4.3 から）と、Linux 版・Android 版（0.4.4 から）もあります。
+オセロのエンジン [Edax 4.5.5 nikque](https://github.com/Nikque/edax-reversi-AVX)（C 版）と [Heath（旧名 newedax）](https://github.com/Nikque/Heath)（C++ 版）を画面から使うための、Windows 用のソフトです。試しの Mac 版（0.4.3 から）と、Linux 版・Android 版（0.4.4 から）もあります。
 
 ### できること
 
@@ -29,7 +29,7 @@ Linux 版（`nikque-gui-<版>-linux.tar.gz`、x86-64 の Ubuntu 22.04 以上、G
 
 Android 版（`nikque-gui-<版>-android.apk`、Android 10 以上の arm64 の端末）は、APK を入れて開きます。対局・解析・棋譜までの版です（[2 章](manual/ja/02-setup.md#android試しの版)）。
 
-エンジン 2 つ（Edax nikque と newedax）が同梱されています。**book は付いていません**。お持ちの `book.dat` を使う方法は、マニュアルの [2 章「置き方と起動」](manual/ja/02-setup.md#book-を置く) を見てください。
+エンジン 2 つ（Edax nikque と Heath）が同梱されています。**book は付いていません**。お持ちの `book.dat` を使う方法は、マニュアルの [2 章「置き方と起動」](manual/ja/02-setup.md#book-を置く) を見てください。
 
 **マニュアル**：[manual/ja](manual/ja/README.md)
 
@@ -50,7 +50,7 @@ nikque GUI は MIT License（[LICENSE.txt](LICENSE.txt)）です。同梱のエ�
 
 ## English
 
-A GUI for Windows (and trial versions for Mac from 0.4.3, and for Linux and Android from 0.4.4) for the Othello engines [Edax 4.5.5 nikque](https://github.com/Nikque/edax-reversi-AVX) (C) and [newedax](https://github.com/Nikque/newedax) (C++).
+A GUI for Windows (and trial versions for Mac from 0.4.3, and for Linux and Android from 0.4.4) for the Othello engines [Edax 4.5.5 nikque](https://github.com/Nikque/edax-reversi-AVX) (C) and [Heath (formerly newedax)](https://github.com/Nikque/Heath) (C++).
 
 ### Features
 
@@ -73,7 +73,7 @@ The Linux version (`nikque-gui-<version>-linux.tar.gz`, x86-64 Ubuntu 22.04 or l
 
 The Android version (`nikque-gui-<version>-android.apk`, arm64 devices with Android 10 or later): install the APK and open it. It plays, analyses and keeps the moves ([chapter 2](manual/en/02-setup.md#android-trial-version)).
 
-Two engines (Edax nikque and newedax) are included. **No book is included**; to use your own `book.dat`, see [chapter 2 of the manual](manual/en/02-setup.md).
+Two engines (Edax nikque and Heath) are included. **No book is included**; to use your own `book.dat`, see [chapter 2 of the manual](manual/en/02-setup.md).
 
 **Manual**: [manual/en](manual/en/README.md)
 

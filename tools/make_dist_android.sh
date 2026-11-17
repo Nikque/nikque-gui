@@ -16,15 +16,15 @@ NZIP=$(realpath "$1") EZIP=$(realpath "$2") NESRC=$(cd "$3" && pwd) NKSRC=$(cd "
 [ -d "${BOOST_DIR:-}/boost" ] || { echo "BOOST_DIR: the folder of Boost 1.92 (its headers) for newedax"; exit 1; }
 [ -x "${ANDROID_NDK:-}/ndk-build" ] || { echo "ANDROID_NDK: the folder of the NDK"; exit 1; }
 [ -f "${NG_KEYSTORE:-}" ] || { echo "NG_KEYSTORE: the keystore the release APK is signed with"; exit 1; }
-NIKQUE_TAG=v4.5.5-nikque.28
-NIKQUE_SHA=4205511cfdd70b5ff0468a854f40126068f7a3f281d095ca287836e925cd98f1
-NIKQUE_SIZE=17884170
-NIKQUE_COMMIT=6db395f80efb99a77df1652cf4cbf809502fb17e
+NIKQUE_TAG=v4.5.5-nikque.29
+NIKQUE_SHA=90df1f34283aa14774561d993f3edb94566520b85db75a076366b196f760377f
+NIKQUE_SIZE=17937197
+NIKQUE_COMMIT=16ae24d9a592295ad9839d0d34cd376d3805bc0d
 NIKQUE_EVAL=13952436
-NEWEDAX_TAG=v4.5.5-newedax.15
-NEWEDAX_SHA=bb298e251b92ef454d53e996eeb2149b926259c83e4abef8aa67deb33848fc0f
-NEWEDAX_SIZE=68095746
-NEWEDAX_COMMIT=f5d2355545402f4a7b47d79a14d454aef4570540
+NEWEDAX_TAG=v4.5.5-heath.16
+NEWEDAX_SHA=dae2bdc74a8954b283a87c4e386f473444146e4e37620897b9281b68a68f2673
+NEWEDAX_SIZE=68122372
+NEWEDAX_COMMIT=e71f123ecb771fa75fade501add3e75252453fb7
 NEWEDAX_EVAL=107612578
 
 VER=$(sed -n 's/^project(nikque_gui VERSION \([0-9.]*\) .*/\1/p' CMakeLists.txt)
@@ -103,7 +103,7 @@ source_txt "Edax (C version, nikque)" https://github.com/Nikque/edax-reversi-AVX
 	"The files of the release ZIP of the tag. / タグの Release の ZIP のファイルです。" > "$A/engines/nikque/SOURCE.txt"
 cp "$WORK/e/bin/data/eval.dat" "$A/engines/newedax/data/"
 cp "$WORK/e/LICENSE" "$A/engines/newedax/LICENSE.txt"
-source_txt "newedax (C++ version of Edax)" https://github.com/Nikque/newedax $NEWEDAX_TAG $NEWEDAX_COMMIT \
+source_txt "Heath (formerly newedax, C++ version of Edax)" https://github.com/Nikque/Heath $NEWEDAX_TAG $NEWEDAX_COMMIT \
 	"The files of the release ZIP of the tag (64 slots). / タグの Release の ZIP（64 枠）のファイルです。" > "$A/engines/newedax/SOURCE.txt"
 
 # the assets of the APK of the CI: the same, with the script run at the start (a lower level: the emulator is slow)

@@ -29,7 +29,7 @@ The top bar shows the kind of game and, with a time control, the time left.
   - 0 means no time control (the computer plays by its Lv).
   - The setting takes effect from the next new game.
 - Think on the person's turn too: the computer also thinks during the person's turn.
-- Keep the hash table from move to move (newedax keep-hash): the engine of the games keeps what it found from one move to the next (what it found on the person's turn helps its move). It needs newedax v4.5.5-newedax.14 or later (nikque Edax does not have it). Off by default.
+- Keep the hash table from move to move (Heath keep-hash): the engine of the games keeps what it found from one move to the next (what it found on the person's turn helps its move). It needs Heath (formerly newedax) v4.5.5-newedax.14 or later (nikque Edax does not have it). Off by default.
 - At the end of a game…: keep the game (bookmark it), add it to the game list.
 
 ## Opening moves

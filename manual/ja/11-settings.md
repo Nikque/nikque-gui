@@ -30,7 +30,7 @@ GUI を閉じるときにも書き直されます。手で編集するときは�
 
 | 節 | 主な項目 |
 |---|---|
-| `[engine]` | `kind=nikque\|newedax`（無いときは newedax）、`search=1`（探索用エンジンを使う） |
+| `[engine]` | `kind=nikque\|newedax`（Heath は旧名の `newedax` で指します。無いときは newedax）、`search=1`（探索用エンジンを使う） |
 | `[nikque]`・`[newedax]` | `dir`（エンジンのフォルダ）・`exe`（`auto` か exe の名前）・`eval`・`book` |
 | `[books]` | `recent1`〜`recent8`（「book」→「最近の book」の一覧） |
 | `[analysis]` | `level`（0〜60）・`threads`（0 は全部）・`hash`（ハッシュ表のビット数、0 はエンジンのまま）・`umi`・`x`・`y`・`base`・`stages`・`precision`（1 で精度を計算する）・`backward`・`forward`（棋譜の局面を裏で読む順）・`compare` |

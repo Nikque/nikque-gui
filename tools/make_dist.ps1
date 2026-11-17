@@ -5,15 +5,15 @@ param(
 	[Parameter(Mandatory)] [string]$NewedaxZip,   # edax-4.5.5-newedax.<n>-64.zip
 	# what the releases say (gh release view <tag> --json assets: the digest and the size; git ls-remote: the commit of the
 	# tag; the size of bin\data\eval.dat in the ZIP)
-	[string]$NikqueName = "v4.5.5-nikque.28",
-	[string]$NikqueSha = "4205511cfdd70b5ff0468a854f40126068f7a3f281d095ca287836e925cd98f1",
-	[long]$NikqueSize = 17884170,
-	[string]$NikqueCommit = "6db395f80efb99a77df1652cf4cbf809502fb17e",
+	[string]$NikqueName = "v4.5.5-nikque.29",
+	[string]$NikqueSha = "90df1f34283aa14774561d993f3edb94566520b85db75a076366b196f760377f",
+	[long]$NikqueSize = 17937197,
+	[string]$NikqueCommit = "16ae24d9a592295ad9839d0d34cd376d3805bc0d",
 	[long]$NikqueEvalSize = 13952436,
-	[string]$NewedaxName = "v4.5.5-newedax.15",
-	[string]$NewedaxSha = "bb298e251b92ef454d53e996eeb2149b926259c83e4abef8aa67deb33848fc0f",
-	[long]$NewedaxSize = 68095746,
-	[string]$NewedaxCommit = "f5d2355545402f4a7b47d79a14d454aef4570540",
+	[string]$NewedaxName = "v4.5.5-heath.16",
+	[string]$NewedaxSha = "dae2bdc74a8954b283a87c4e386f473444146e4e37620897b9281b68a68f2673",
+	[long]$NewedaxSize = 68122372,
+	[string]$NewedaxCommit = "e71f123ecb771fa75fade501add3e75252453fb7",
 	[long]$NewedaxEvalSize = 107612578,
 	[string]$Out = "D:\nikque-gui\dist",
 	[string]$Eng = ""   # the new empty folder the ZIPs are unpacked in (default: $Out\engines-<version>)
@@ -50,7 +50,7 @@ $Engines = [ordered]@{
 	nikque  = @{ Zip = $NikqueZip; Sha = $NikqueSha; Size = $NikqueSize; EvalSize = $NikqueEvalSize
 		Title = "Edax (C version, nikque)"; Repo = "https://github.com/Nikque/edax-reversi-AVX"; Tag = $NikqueName; Commit = $NikqueCommit }
 	newedax = @{ Zip = $NewedaxZip; Sha = $NewedaxSha; Size = $NewedaxSize; EvalSize = $NewedaxEvalSize
-		Title = "newedax (C++ version of Edax)"; Repo = "https://github.com/Nikque/newedax"; Tag = $NewedaxName; Commit = $NewedaxCommit }
+		Title = "Heath (formerly newedax, C++ version of Edax)"; Repo = "https://github.com/Nikque/Heath"; Tag = $NewedaxName; Commit = $NewedaxCommit }
 }
 
 # the ZIPs of the engines: SHA-256 and size, then unpacked
@@ -59,7 +59,7 @@ New-Item -ItemType Directory $Eng | Out-Null
 foreach ($k in $Engines.Keys) {
 	$en = $Engines[$k]
 	$z = Get-Item $en.Zip
-	# the ZIP is of the version named (edax-4.5.5-newedax.15-64.zip for v4.5.5-newedax.15): the values below are of that release
+	# the ZIP is of the version named (edax-4.5.5-heath.16-64.zip for v4.5.5-heath.16): the values below are of that release
 	$ver = $en.Tag -replace '^v', ''
 	if ($z.Name -notmatch ('^edax-' + [regex]::Escape($ver) + '(-\d+)?\.zip$')) { throw "$($z.Name) is not the ZIP of $($en.Tag) (give -${k}Name and the values of its release)" }
 	$h = (Get-FileHash -Algorithm SHA256 $z.FullName).Hash.ToLower()

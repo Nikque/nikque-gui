@@ -14,30 +14,30 @@ The Chinese texts here and on the screen are machine translations (not checked).
 
 1. nikque GUI とは
 ------------------
-Edax v4.5.5-nikque と newedax のための GUI です。盤の上に全部の合法手の評価値と
+Edax v4.5.5-nikque と Heath（旧名 newedax）のための GUI です。盤の上に全部の合法手の評価値と
 book の精度（段階 0〜7）を出し、book の解析（足りない leaf、うみがめ数、level ごとの数、
 最善の進行）と book の学習・整理を画面から行えます。
-GUI は MIT ライセンスです。エンジン（Edax nikque・newedax）は GPL で、別のプログラムとして
+GUI は MIT ライセンスです。エンジン（Edax nikque・Heath）は GPL で、別のプログラムとして
 動きます（GUI はエンジンを子のプロセスとして起動し、文字のコマンドでやりとりします）。
 
 2. 置き方
 ---------
 - 配布の ZIP を好きな場所に展開し、nikque-gui.exe を起動します（インストールは要りません）。
   nikque-gui.exe と同じフォルダに config.ini・lang フォルダ・readme.txt があります。
-- Mac 版（nikque-gui-0.4.5-mac.zip、試しの版、macOS 13 以上、Apple シリコンと Intel）もあります。
+- Mac 版（nikque-gui-0.4.6-mac.zip、試しの版、macOS 13 以上、Apple シリコンと Intel）もあります。
   署名していないので、展開した後に一度だけ「ターミナル」で xattr -dr com.apple.quarantine <展開したフォルダ>
   を打ってから nikque GUI.app を開きます。エンジンは mEdax-arm64・mEdax-x64-modern です（説明書の「2. 置き方と起動」）。
-- Linux 版（nikque-gui-0.4.5-linux.tar.gz、試しの版、x86-64 の Ubuntu 22.04 以上、GTK 3）もあります。
+- Linux 版（nikque-gui-0.4.6-linux.tar.gz、試しの版、x86-64 の Ubuntu 22.04 以上、GTK 3）もあります。
   展開して nikque-gui を起動します。エンジンは lEdax-x86-64-v4・-v3・lEdax-x86-64 です（説明書の「2. 置き方と起動」）。
-- Android 版（nikque-gui-0.4.5-android.apk、試しの版、Android 10 以上の arm64 の端末）もあります。
+- Android 版（nikque-gui-0.4.6-android.apk、試しの版、Android 10 以上の arm64 の端末）もあります。
   対局・解析・棋譜までで、book の学習・棋譜リスト・スクリプト・ファイルを選ぶ機能はありません（説明書の「2. 置き方と起動」）。
-- エンジンが付いています：engines\nikque に C 版の Edax v4.5.5-nikque.28、engines\newedax に
-  newedax.15 の 64 枠の版（どちらも wEdax-x86-64-v4.exe・-v3.exe・wEdax-x86-64.exe と data\eval.dat）。
+- エンジンが付いています：engines\nikque に C 版の Edax v4.5.5-nikque.29、engines\newedax に Heath の
+  heath.16 の 64 枠の版（どちらも wEdax-x86-64-v4.exe・-v3.exe・wEdax-x86-64.exe と data\eval.dat）。
   0.2.0 までの config.ini（系の名前 [nikque18]）も、そのまま読めます。
-- newedax.15 の eval.dat（約 108 MB）は、エンジンと同じ版の配布物のものを使います。前の版の newedax・eval2・
+- heath.16 の eval.dat（約 108 MB）は、エンジンと同じ版の配布物のものを使います。前の版の Heath・eval2・
   nikque の eval.dat を読ませると、エンジンは動きますが評価が正しくありません（GUI がメッセージで知らせます）。
-  newedax.15 はエンジン 1 つで約 160〜275 MB のメモリを使います（説明書の「2. 置き方と起動」）。
-- すでにあるエンジンのフォルダを使うときは、config.ini の [nikque]・[newedax] の dir= で指します。
+  heath.16 はエンジン 1 つで約 160〜275 MB のメモリを使います（説明書の「2. 置き方と起動」）。
+- すでにあるエンジンのフォルダを使うときは、config.ini の [nikque]・[newedax]（Heath の設定）の dir= で指します。
   GUI には book の解析のコマンド（book moveinfo など）が要るので、v4.5.5-nikque.19・newedax.4 以降を
   使います。古いバージョンでは上の帯に「book の解析なし（古いエンジン）」と出て、book の値・木・book タブは
   出ません。book を軽くする機能（book reduce）は v4.5.5-nikque.20・newedax.5 からです。
@@ -95,7 +95,7 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・newedax）は G
   check・negamax・fix・correct・leaf recalculate、中止、途中保存から再開、学習キュー、学習の設定。
   book を変えるコマンド（subtree・prune・reduce・import・new など）の後は、エンジンを閉じるときに
   book のファイルが上書きされることがあります。先にコピーを取ってください。
-- エンジン：nikque 系（C 版）・newedax 系（C++ 版）の切り替え、solve・bench・count・perft・estimate
+- エンジン：nikque 系（C 版）・Heath 系（C++ 版）の切り替え、solve・bench・count・perft・estimate
   （book を読まない「ツール用エンジン」を 1 回ごとに起動）、コマンドの入力（メインエンジンに送る）。
 - 入出力：棋譜のコピー・貼り付け・固定、局面の文字列とビットボード（10 進・16 進・Ntest の形式・obf）
   のコピーと取り込み、盤面配置、盤から手順の推定（20 手目まで。book にある手順を先に探し、
@@ -188,7 +188,7 @@ Ntest の形式は「空き 手番の側の石 手番」。
 
 8. config.ini の主な項目
 ------------------------
-[engine] kind=nikque|newedax（無いときは newedax）、search=1（探索用エンジンを使う）
+[engine] kind=nikque|newedax（newedax は Heath のこと。無いときは newedax）、search=1（探索用エンジンを使う）
 [nikque]・[newedax] dir・exe・eval・book
 [analysis] level（0〜60）・threads（0 は全部）・hash（ハッシュ表のビット数、0 はエンジンのまま）・umi・x・y・base・stages・
            precision（1 で精度を計算する）・backward・forward（棋譜の局面を裏で読む順）・compare
@@ -208,7 +208,7 @@ kept.txt（しおり）、screenshots\（スクリーンショット）は exe �
 
 10. ライセンス
 --------------
-nikque GUI：MIT License（LICENSE.txt）。エンジン（Edax nikque・newedax）：GNU GPL v3（別のプログラム）。
+nikque GUI：MIT License（LICENSE.txt）。エンジン（Edax nikque・Heath）：GNU GPL v3（別のプログラム）。
 付いているエンジンの GPL の文とソースの場所は、engines\nikque・engines\newedax の LICENSE.txt と
 SOURCE.txt にあります。
 
@@ -219,30 +219,30 @@ SOURCE.txt にあります。
 
 1. What it is
 -------------
-A GUI for Edax v4.5.5-nikque and newedax. The values of all the legal moves and the accuracy stage of the
+A GUI for Edax v4.5.5-nikque and Heath (formerly newedax).The values of all the legal moves and the accuracy stage of the
 book (0..7) are shown on the board; the book analyses (missing leaves, umigame numbers, positions by level,
 best lines), book learning and book maintenance are run from the menus.
-The GUI is under the MIT License. The engines (Edax nikque, newedax) are GPL and run as separate programs
+The GUI is under the MIT License. The engines (Edax nikque, Heath) are GPL and run as separate programs
 (the GUI starts an engine as a child process and talks to it with text commands).
 
 2. Setting up
 -------------
 - Unpack the ZIP anywhere and start nikque-gui.exe (no installation). config.ini, the lang folder and
   readme.txt are next to nikque-gui.exe.
-- There is also a Mac version (nikque-gui-0.4.5-mac.zip, a trial version, macOS 13 or later, Apple silicon and Intel).
+- There is also a Mac version (nikque-gui-0.4.6-mac.zip, a trial version, macOS 13 or later, Apple silicon and Intel).
   It is not signed: after unpacking, type xattr -dr com.apple.quarantine <the folder> once in Terminal, then open
   nikque GUI.app. Its engines are mEdax-arm64 and mEdax-x64-modern (manual, "2. Setting up").
-- There is also a Linux version (nikque-gui-0.4.5-linux.tar.gz, a trial version, x86-64 Ubuntu 22.04 or later, GTK 3).
+- There is also a Linux version (nikque-gui-0.4.6-linux.tar.gz, a trial version, x86-64 Ubuntu 22.04 or later, GTK 3).
   Unpack it and start nikque-gui. Its engines are lEdax-x86-64-v4, -v3 and lEdax-x86-64 (manual, "2. Setting up").
-- There is also an Android version (nikque-gui-0.4.5-android.apk, a trial version, arm64 devices with Android 10 or later).
+- There is also an Android version (nikque-gui-0.4.6-android.apk, a trial version, arm64 devices with Android 10 or later).
   It plays, analyses and keeps the moves; it has no book learning, game lists, scripts or file commands (manual, "2. Setting up").
-- The engines are included: engines\nikque holds Edax v4.5.5-nikque.28 (C version), engines\newedax holds
-  the 64-slot build of newedax.15 (each with wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe and data\eval.dat).
+- The engines are included: engines\nikque holds Edax v4.5.5-nikque.29 (C version), engines\newedax holds Heath,
+  the 64-slot build of heath.16 (each with wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe and data\eval.dat).
   A config.ini of 0.2.0 or before (section [nikque18]) is read as it is.
-- newedax.15 needs the eval.dat (about 108 MB) of the release of the same version. With the eval.dat of an earlier
-  newedax, of eval2 or of nikque, the engine runs but its evaluation is wrong (the GUI tells you so in a message).
-  One newedax.15 engine uses about 160 to 275 MB of memory (manual, "2. Setting up").
-- To use engine folders you already have, point to them with dir= in [nikque] and [newedax] of config.ini.
+- heath.16 needs the eval.dat (about 108 MB) of the release of the same version. With the eval.dat of an earlier
+  Heath, of eval2 or of nikque, the engine runs but its evaluation is wrong (the GUI tells you so in a message).
+  One heath.16 engine uses about 160 to 275 MB of memory (manual, "2. Setting up").
+- To use engine folders you already have, point to them with dir= in [nikque] and [newedax] (the Heath settings) of config.ini.
   The GUI needs the book analyses (book moveinfo and the others) of v4.5.5-nikque.19 or newedax.4 or later:
   with an older engine the top bar says "No book analyses (old engine)" and the book values, the tree and
   the Book tab stay empty. Making the book lighter (book reduce) needs v4.5.5-nikque.20 or newedax.5.
@@ -298,7 +298,7 @@ The GUI is under the MIT License. The engines (Edax nikque, newedax) are GPL and
   negamax, fix, correct, leaf recalculate; stop; continue from the file saved on the way; the learning queue;
   settings. After a command that changes the book (subtree, prune, reduce, import, new...), the book file may
   be overwritten when the engine is closed. Copy it first.
-- Engine: nikque (C version) or newedax (C++ version); solve, bench, count, perft, estimate (on a "tool engine"
+- Engine: nikque (C version) or Heath (C++ version); solve, bench, count, perft, estimate (on a "tool engine"
   started for each job, without the book); command box (to the main engine).
 - Input/Output: copy, paste and fix games; position text and bitboards (decimal, hexadecimal, Ntest form, obf);
   setting up a position; finding the moves of a position (up to move 20: the book first, else without it);
@@ -362,7 +362,7 @@ leading spaces only show the levels, lines starting with // are notes). It can b
 
 10. License
 -----------
-nikque GUI: MIT License (LICENSE.txt). Engines (Edax nikque, newedax): GNU GPL v3 (separate programs).
+nikque GUI: MIT License (LICENSE.txt). Engines (Edax nikque, Heath): GNU GPL v3 (separate programs).
 The GPL text and the place of the source of the included engines are in LICENSE.txt and SOURCE.txt of
 engines\nikque and engines\newedax.
 
@@ -373,24 +373,24 @@ engines\nikque and engines\newedax.
 
 1. 简介
 -------
-用于 Edax v4.5.5-nikque 与 newedax 的 GUI。在棋盘上显示所有合法着法的评价值与 book 的精度（阶段 0〜7），
+用于 Edax v4.5.5-nikque 与 Heath（旧名 newedax）的 GUI。在棋盘上显示所有合法着法的评价值与 book 的精度（阶段 0〜7），
 并可从菜单进行 book 分析（不足的 leaf、海龟数、各 level 的局面数、最佳进行）与 book 的学习和整理。
-GUI 为 MIT 许可。引擎（Edax nikque、newedax）为 GPL，作为独立程序运行。
+GUI 为 MIT 许可。引擎（Edax nikque、Heath）为 GPL，作为独立程序运行。
 
 2. 放置
 -------
 - 将 ZIP 解压到任意位置，启动 nikque-gui.exe（无需安装）。config.ini、lang 文件夹、readme.txt 在 nikque-gui.exe 旁。
-- 另有 Mac 版（nikque-gui-0.4.5-mac.zip，试用版，macOS 13 以上，Apple 芯片与 Intel）。因未签名，解压后请先在「终端」中
+- 另有 Mac 版（nikque-gui-0.4.6-mac.zip，试用版，macOS 13 以上，Apple 芯片与 Intel）。因未签名，解压后请先在「终端」中
   执行一次 xattr -dr com.apple.quarantine <解压的文件夹>，再打开 nikque GUI.app。引擎为 mEdax-arm64、mEdax-x64-modern（说明书「2.」）。
-- 另有 Linux 版（nikque-gui-0.4.5-linux.tar.gz，试用版，x86-64 的 Ubuntu 22.04 以上，GTK 3）。解压后启动 nikque-gui。
+- 另有 Linux 版（nikque-gui-0.4.6-linux.tar.gz，试用版，x86-64 的 Ubuntu 22.04 以上，GTK 3）。解压后启动 nikque-gui。
   引擎为 lEdax-x86-64-v4、-v3、lEdax-x86-64（说明书「2.」）。
-- 另有 Android 版（nikque-gui-0.4.5-android.apk，试用版，Android 10 以上的 arm64 设备）。可对局、分析、保存棋谱；
+- 另有 Android 版（nikque-gui-0.4.6-android.apk，试用版，Android 10 以上的 arm64 设备）。可对局、分析、保存棋谱；
   没有 book 学习、棋谱列表、脚本和选择文件的功能（说明书「2.」）。
-- 附带引擎：engines\nikque 为 C 版 Edax v4.5.5-nikque.28，engines\newedax 为 newedax.15 的 64 槽版
+- 附带引擎：engines\nikque 为 C 版 Edax v4.5.5-nikque.29，engines\newedax 为 Heath 的 heath.16 的 64 槽版
   （各含 wEdax-x86-64-v4.exe、-v3.exe、wEdax-x86-64.exe 与 data\eval.dat）。0.2.0 以前的 config.ini（[nikque18]）也可直接读取。
-- newedax.15 的 eval.dat（约 108 MB）须使用与引擎同一版本的发布包中的文件。读取旧版 newedax、eval2、nikque 的 eval.dat 时，
-  引擎仍会运行，但评估不正确（GUI 会以消息提示）。newedax.15 每个引擎约使用 160～275 MB 内存（说明书「2.」）。
-- 使用已有的引擎文件夹时，在 config.ini 的 [nikque]、[newedax] 的 dir= 指定。GUI 需要 v4.5.5-nikque.19、newedax.4 以后的
+- heath.16 的 eval.dat（约 108 MB）须使用与引擎同一版本的发布包中的文件。读取旧版 Heath、eval2、nikque 的 eval.dat 时，
+  引擎仍会运行，但评估不正确（GUI 会以消息提示）。heath.16 每个引擎约使用 160～275 MB 内存（说明书「2.」）。
+- 使用已有的引擎文件夹时，在 config.ini 的 [nikque]、[newedax]（Heath 的设置）的 dir= 指定。GUI 需要 v4.5.5-nikque.19、newedax.4 以后的
   book 分析命令（book moveinfo 等）；旧版本时上方栏显示「无 book 分析（旧引擎）」，不显示 book 值、树与 book 标签页。
   减小 book 的功能（book reduce）需要 v4.5.5-nikque.20、newedax.5 以后。导出 deviate 追踪的进行需要 v4.5.5-nikque.26、eval2.14、newedax.11 以后。
 - 不附带 book。请把您的 book.dat 放在引擎的 data\book.dat，或用 book= 指定。book 由引擎读取（引擎读取期间，GUI 只读取显示评价值所需的局面）。
@@ -417,7 +417,7 @@ book 的整理与导出（包括 book reduce：删除从指定局面按 book dev
 
 5. 许可
 -------
-nikque GUI：MIT License（LICENSE.txt）。引擎（Edax nikque、newedax）：GNU GPL v3（独立程序）。
+nikque GUI：MIT License（LICENSE.txt）。引擎（Edax nikque、Heath）：GNU GPL v3（独立程序）。
 附带引擎的 GPL 文本与源代码位置见 engines\nikque、engines\newedax 的 LICENSE.txt 与 SOURCE.txt。
 
 
@@ -427,24 +427,24 @@ nikque GUI：MIT License（LICENSE.txt）。引擎（Edax nikque、newedax）：
 
 1. 簡介
 -------
-用於 Edax v4.5.5-nikque 與 newedax 的 GUI。在棋盤上顯示所有合法著法的評價值與 book 的精度（階段 0〜7），
+用於 Edax v4.5.5-nikque 與 Heath（舊名 newedax）的 GUI。在棋盤上顯示所有合法著法的評價值與 book 的精度（階段 0〜7），
 並可從選單進行 book 分析（不足的 leaf、海龜數、各 level 的局面數、最佳進行）與 book 的學習和整理。
-GUI 為 MIT 授權。引擎（Edax nikque、newedax）為 GPL，作為獨立程式執行。
+GUI 為 MIT 授權。引擎（Edax nikque、Heath）為 GPL，作為獨立程式執行。
 
 2. 放置
 -------
 - 將 ZIP 解壓到任意位置，啟動 nikque-gui.exe（無需安裝）。config.ini、lang 資料夾、readme.txt 在 nikque-gui.exe 旁。
-- 另有 Mac 版（nikque-gui-0.4.5-mac.zip，試用版，macOS 13 以上，Apple 晶片與 Intel）。因未簽署，解壓後請先在「終端機」中
+- 另有 Mac 版（nikque-gui-0.4.6-mac.zip，試用版，macOS 13 以上，Apple 晶片與 Intel）。因未簽署，解壓後請先在「終端機」中
   執行一次 xattr -dr com.apple.quarantine <解壓的資料夾>，再開啟 nikque GUI.app。引擎為 mEdax-arm64、mEdax-x64-modern（說明書「2.」）。
-- 另有 Linux 版（nikque-gui-0.4.5-linux.tar.gz，試用版，x86-64 的 Ubuntu 22.04 以上，GTK 3）。解壓後啟動 nikque-gui。
+- 另有 Linux 版（nikque-gui-0.4.6-linux.tar.gz，試用版，x86-64 的 Ubuntu 22.04 以上，GTK 3）。解壓後啟動 nikque-gui。
   引擎為 lEdax-x86-64-v4、-v3、lEdax-x86-64（說明書「2.」）。
-- 另有 Android 版（nikque-gui-0.4.5-android.apk，試用版，Android 10 以上的 arm64 裝置）。可對局、分析、保存棋譜；
+- 另有 Android 版（nikque-gui-0.4.6-android.apk，試用版，Android 10 以上的 arm64 裝置）。可對局、分析、保存棋譜；
   沒有 book 學習、棋譜列表、腳本和選擇檔案的功能（說明書「2.」）。
-- 附帶引擎：engines\nikque 為 C 版 Edax v4.5.5-nikque.28，engines\newedax 為 newedax.15 的 64 槽版
+- 附帶引擎：engines\nikque 為 C 版 Edax v4.5.5-nikque.29，engines\newedax 為 Heath 的 heath.16 的 64 槽版
   （各含 wEdax-x86-64-v4.exe、-v3.exe、wEdax-x86-64.exe 與 data\eval.dat）。0.2.0 以前的 config.ini（[nikque18]）也可直接讀取。
-- newedax.15 的 eval.dat（約 108 MB）須使用與引擎同一版本的發佈套件中的檔案。讀取舊版 newedax、eval2、nikque 的 eval.dat 時，
-  引擎仍會執行，但評估不正確（GUI 會以訊息提示）。newedax.15 每個引擎約使用 160～275 MB 記憶體（說明書「2.」）。
-- 使用已有的引擎資料夾時，在 config.ini 的 [nikque]、[newedax] 的 dir= 指定。GUI 需要 v4.5.5-nikque.19、newedax.4 以後的
+- heath.16 的 eval.dat（約 108 MB）須使用與引擎同一版本的發佈套件中的檔案。讀取舊版 Heath、eval2、nikque 的 eval.dat 時，
+  引擎仍會執行，但評估不正確（GUI 會以訊息提示）。heath.16 每個引擎約使用 160～275 MB 記憶體（說明書「2.」）。
+- 使用已有的引擎資料夾時，在 config.ini 的 [nikque]、[newedax]（Heath 的設定）的 dir= 指定。GUI 需要 v4.5.5-nikque.19、newedax.4 以後的
   book 分析命令（book moveinfo 等）；舊版本時上方列顯示「無 book 分析（舊引擎）」，不顯示 book 值、樹與 book 分頁。
   減小 book 的功能（book reduce）需要 v4.5.5-nikque.20、newedax.5 以後。匯出 deviate 追蹤的進行需要 v4.5.5-nikque.26、eval2.14、newedax.11 以後。
 - 不附帶 book。請把您的 book.dat 放在引擎的 data\book.dat，或用 book= 指定。book 由引擎讀取（引擎讀取期間，GUI 只讀取顯示評價值所需的局面）。
@@ -471,5 +471,5 @@ book 的整理與匯出（包括 book reduce：刪除從指定局面按 book dev
 
 5. 授權
 -------
-nikque GUI：MIT License（LICENSE.txt）。引擎（Edax nikque、newedax）：GNU GPL v3（獨立程式）。
+nikque GUI：MIT License（LICENSE.txt）。引擎（Edax nikque、Heath）：GNU GPL v3（獨立程式）。
 附帶引擎的 GPL 文字與原始碼位置見 engines\nikque、engines\newedax 的 LICENSE.txt 與 SOURCE.txt。
