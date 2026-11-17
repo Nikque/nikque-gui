@@ -18,6 +18,8 @@ constexpr size_t kMaxHeader2 = 1 << 16;  // the largest header of form 2 (its si
 constexpr size_t kFixed2 = 23;       // of a position: the board, the number of moves, the level, the values, the leaf
 constexpr int kNoMoveInFile = 65;
 constexpr int kMaxMoves = 33;
+constexpr int kLevelBits = 0x3f;     // the level (0 to 60) in its byte; the two bits above: progress marks of book correct and
+                                     // book leaf recalculate, in a book saved before the command ended (Edax v4.5.5-nikque.29)
 constexpr size_t kSample = 1 << 20;  // the start of the file, to see the order of the positions
 constexpr size_t kBlock = 1 << 16;   // read to find a place in the file
 constexpr u64 kNear = 1 << 18;       // this close, the positions are read one after the other
@@ -82,7 +84,7 @@ bool parse_row2(const unsigned char *p, size_t n, Row *r) noexcept
 	if (r->player & r->opponent) return false;
 	const int links = p[16];
 	const int leaf = p[22];
-	if (links > kMaxMoves || p[17] > 60 || leaf > kNoMoveInFile || links + (leaf != kNoMoveInFile) > kMaxMoves) return false;
+	if (links > kMaxMoves || (p[17] & kLevelBits) > 60 || leaf > kNoMoveInFile || links + (leaf != kNoMoveInFile) > kMaxMoves) return false;
 	size_t at = kFixed2;
 	unsigned count = 0;
 	for (int k = 0; k < 4; ++k) {  // wins, draws, losses, lines
@@ -96,7 +98,7 @@ bool parse_row2(const unsigned char *p, size_t n, Row *r) noexcept
 		if (p[at + 2 * k + 1] > kPass) return false;
 	r->lines = count;
 	r->value = static_cast<signed char>(p[18]);
-	r->level = p[17];
+	r->level = p[17] & kLevelBits;
 	r->leaf = leaf;
 	r->leaf_value = static_cast<signed char>(p[21]);
 	return true;
@@ -112,14 +114,14 @@ bool parse_row(const unsigned char *p, size_t n, int form, Row *r) noexcept
 	if (r->player & r->opponent) return false;
 	const int links = p[38];
 	r->size = kFixed + 2 * (static_cast<size_t>(links) + 1);
-	if (links > kMaxMoves || p[39] > 60 || n < r->size) return false;
+	if (links > kMaxMoves || (p[39] & kLevelBits) > 60 || n < r->size) return false;
 	for (int k = 0; k < links; ++k)
 		if (p[kFixed + 2 * k + 1] > kPass) return false;
 	const unsigned char *leaf = p + kFixed + 2 * links;
 	if (leaf[1] > kNoMoveInFile || links + (leaf[1] != kNoMoveInFile) > kMaxMoves) return false;
 	r->lines = take<unsigned>(p + 28);
 	r->value = std::clamp<int>(take<short>(p + 32), -127, 127);
-	r->level = p[39];
+	r->level = p[39] & kLevelBits;
 	r->leaf = leaf[1];
 	r->leaf_value = static_cast<signed char>(leaf[0]);
 	return true;

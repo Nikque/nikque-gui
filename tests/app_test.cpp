@@ -1339,6 +1339,39 @@ static void test_values_while_reading()
 	DeleteFileW(path.c_str());
 }
 
+// A book saved before book correct or book leaf recalculate ended holds progress marks in the two upper bits of the
+// level of its positions (Edax v4.5.5-nikque.29): its values are read from the file as those of a book without marks,
+// in both forms.
+static void test_values_marked_book()
+{
+	for (int form : {1, 2}) {
+		auto a = make_app();
+		const std::wstring path = a->temp_dir_ + L"ng-book-peek-marks.dat";
+		const Position start = Position{}.play(parse_square("f5"));
+		const int d6 = parse_square("d6"), f6 = parse_square("f6");
+		write_book_file(path, {{start, 0, 18 | 0x80, f6, 2}, {start.play(d6), -3, 21 | 0x40}}, false, form);
+		start_engine(*a);
+		a->eng_[0].loaded = false;
+		a->show_eval_ = a->use_book_ = true;
+		a->count_ = false;
+		a->game_.play(parse_square("f5"));
+		a->book_peek_.start(path, a->hwnd_, WM_BOOK_PEEK, ++a->book_peek_generation_);
+		a->request_analysis();
+		const ULONGLONG end = GetTickCount64() + 10000;
+		while (GetTickCount64() < end && !a->cache_.get(start).book_peeked) {
+			pump_app(*a);
+			Sleep(1);
+		}
+		CHECK(a->cache_.get(start).book_peeked && a->cache_.get(start).in_book);
+		CellView v = a->cell_view(d6);
+		CHECK(v.has_value && v.value == 3);
+		v = a->cell_view(f6);
+		CHECK(v.has_value && v.value == 2);  // the leaf
+		a->book_peek_.stop();
+		DeleteFileW(path.c_str());
+	}
+}
+
 // What needs the values of the book does not wait for the rest of the analyses, and the values come while the engine
 // cannot answer: a long job goes first (it is not stopped by moving the position) or the book is learning.
 static void test_values_not_held_back()
@@ -3051,6 +3084,8 @@ int main(int argc, char **argv)
 	test_book_file();
 	std::printf("%s\n", "test_values_while_reading");
 	test_values_while_reading();
+	std::printf("%s\n", "test_values_marked_book");
+	test_values_marked_book();
 	std::printf("%s\n", "test_values_not_held_back");
 	test_values_not_held_back();
 	std::printf("%s\n", "test_book_peek_ended");

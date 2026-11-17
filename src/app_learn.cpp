@@ -26,10 +26,11 @@ int scan_text(const char *s, const char *format, Args... args)
 
 namespace {
 
-// the files a book command saves on the way, next to the book (".dev2" etc.)
+// the files a book command saves on the way, next to the book (".dev2" etc.; ".err": book correct, which goes on from it
+// since Edax v4.5.5-nikque.29)
 constexpr const wchar_t *kSaveSuffixes[] = {L".dev",   L".dev2",  L".dev3",  L".enh",   L".fill",  L".fill2",
                                             L".lexp",  L".play",  L".store", L".gam",   L".leaf",  L".leaf2",
-                                            L".leaf3", L".leaf4", L".mrg",   L".dep"};
+                                            L".leaf3", L".leaf4", L".mrg",   L".dep",   L".err"};
 
 struct SavedFile {
 	std::wstring path;
@@ -227,8 +228,12 @@ void App::learning_line(const std::string &line)
 	// added", warnings and errors; not "...402270 (0 error found)", which is progress) go to the log as well
 	if (line.starts_with("Book ") || line.find("...") != std::string::npos) {
 		learn_progress_ = engine_text(line);
+		// (and the lines of a command going on from a book saved before it ended: "Book leaf recalculate4: 12 leaves
+		// already searched again by a run that did not end...", "Book learn: the first 3 lines of games.txt ... were learned
+		// by a run that did not end...", "Book learn: games.txt is learned to its end: ... removed")
 		const bool result = line.find("finished") != std::string::npos || line.ends_with("done") ||
 		                    line.find("done (") != std::string::npos || line.find("added") != std::string::npos ||
+		                    line.find("did not end") != std::string::npos || line.find("learned to its end") != std::string::npos ||
 		                    line.starts_with("WARNING") || line.find("ERROR") != std::string::npos;
 		if (result) log(engine_text(line));
 		else invalidate();

@@ -37,6 +37,12 @@ Choose them from the Learning menu. X and Y are the range values in the right pa
   - If an intermediate save file is newer than the book, it is loaded.
   - The last learning command resumes from the same position.
   - The last command is stored in `[learn] last_command` of `config.ini`.
+- Whether a command that goes on searches again what was done (with the engines of GUI 0.4.6 and later):
+  - `deviate` and the like, `enhance`, `leaf expand`, `fill`, `play`, `add`: the moves expanded and the positions added are in the book, so what was done is not searched again.
+  - `correct`, `leaf recalculate`: each position searched again gets a mark in the book, and on going on, only the positions without a mark are searched. Their intermediate save files are `.err` for `correct`, `.leaf` and so on for `leaf recalculate`. The marks are removed when the command ends.
+  - `learn`: the lines learned are written to `<book>.learn` next to the book, and on going on, the lines of the file of games already learned are skipped. The file is removed when the whole file is learned.
+  - With the engines of GUI 0.4.5 and before, `correct`, `leaf recalculate` and `learn` started over from the beginning.
+  - An intermediate save file with marks cannot be read by the engines of GUI 0.4.5 and before (they see a damaged book).
 
 ## Learning queue
 
