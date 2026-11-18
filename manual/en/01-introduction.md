@@ -29,7 +29,11 @@
 
 ## How it works
 
-The GUI starts the engines as child processes and communicates with them through text commands. The engine reads the book file. The GUI reads only the positions it needs for the values while the engine is still reading the book.
+The GUI starts the engines as child processes and communicates with them through text commands. The engine reads the book file. The GUI reads the file itself only while the engine cannot answer about the book, and only the positions it needs for the values:
+
+- while the engine is loading the book;
+- while the main engine is busy with long work (learning, finding the moves to a position, loading games into the list, writing the best lines or the lines deviate walks, counting positions before making the book lighter).
+- It never reads the file while the book is saved or while a command that replaces the book file runs ([chapter 12](12-troubleshooting.md)).
 
 Separate engines are started for separate roles:
 
@@ -53,3 +57,11 @@ As a result, values keep appearing while the book is learning, and the board ana
 
 - 64-bit (x64) Windows. Tested on Windows 11.
 - The engine executable is chosen to match the CPU, from the AVX-512, AVX2 and generic x64 builds (`exe=auto`).
+
+Trial versions (details in [chapter 2](02-setup.md)):
+
+| Version | Requirements | Checked |
+|---|---|---|
+| Mac (since 0.4.3) | macOS 13 or later, Apple silicon or Intel | — |
+| Linux (since 0.4.4) | Ubuntu 22.04 or later on x86-64 (the GUI uses GTK 3) | — |
+| Android (since 0.4.4) | Android 10 or later, arm64 devices | Only on the emulator, not yet on a device |
