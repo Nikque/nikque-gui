@@ -37,12 +37,23 @@ Choose them from the Learning menu. X and Y are the range values in the right pa
   - If an intermediate save file is newer than the book, it is loaded.
   - The last learning command resumes from the same position.
   - The last command is stored in `[learn] last_command` of `config.ini`.
-- Whether a command that goes on searches again what was done (with the engines of GUI 0.4.6 and later):
-  - `deviate` and the like, `enhance`, `leaf expand`, `fill`, `play`, `add`: the moves expanded and the positions added are in the book, so what was done is not searched again.
-  - `correct`, `leaf recalculate`: each position searched again gets a mark in the book, and on going on, only the positions without a mark are searched. Their intermediate save files are `.err` for `correct`, `.leaf` and so on for `leaf recalculate`. The marks are removed when the command ends.
-  - `learn`: the lines learned are written to `<book>.learn` next to the book, and on going on, the lines of the file of games already learned are skipped. The file is removed when the whole file is learned.
-  - With the engines of GUI 0.4.5 and before, `correct`, `leaf recalculate` and `learn` started over from the beginning.
-  - An intermediate save file with marks cannot be read by the engines of GUI 0.4.5 and before (they see a damaged book).
+
+Whether the work already done is searched again when a command continues depends on the command. This is how the engines included with GUI 0.4.6 and later work:
+
+- `deviate` and the like, `enhance`, `leaf expand`, `fill`, `play`, `add`: the work already done is not searched again. The expanded moves and the added positions are already in the book.
+- `correct`, `leaf recalculate`:
+  - Each position searched again is marked in the book. When the command continues, only the positions without a mark are searched.
+  - The marks are removed when the command ends.
+  - Their intermediate save files are `.err` for `correct`, and `.leaf` and so on for `leaf recalculate`.
+- `learn`:
+  - The lines learned are recorded in `<book>.learn` next to the book.
+  - When the command continues, the lines of the game file that were already learned are skipped.
+  - This file is removed when the whole game file has been learned.
+
+With the engines included with GUI 0.4.5 and before:
+
+- `correct`, `leaf recalculate` and `learn` started over from the beginning when they continued.
+- An intermediate save file with marks cannot be read. These engines see it as a damaged book.
 
 ## Learning queue
 
@@ -58,9 +69,13 @@ Choose them from the Learning menu. X and Y are the range values in the right pa
 
 Learning → Learning settings…: settings sent to the main engine (`[learn_options]` of `config.ini`).
 
-- Settings changed during a learning are sent when that learning has ended (the learning in progress keeps the settings it started with).
+- Settings changed during learning are sent when that learning has ended. The learning in progress keeps the settings it started with.
 - When the main engine is not running, they are sent when it starts.
-- An emptied setting (the engine's own) cannot be sent to the engine, so a running main engine keeps the value sent before (the log says so). The engine's own setting comes back when the main engine starts again (Engine → Restart, opening or reading the book again, starting the GUI).
+- An empty box means the engine's own setting, but there is no way to send that to the engine. So a running main engine keeps the value sent before, and the log says so.
+- The engine's own setting comes back the next time the main engine starts. The main engine starts again with:
+  - Engine → Restart
+  - opening or reading the book again
+  - starting the GUI
 
 | Item | Meaning |
 |---|---|
@@ -73,17 +88,25 @@ Learning → Learning settings…: settings sent to the main engine (`[learn_opt
 ## Notes
 
 - After a command that changes the book, the book file may be saved when the engine is closed. Back up an important book before learning.
-- So after a command that changes the book, closing the main engine (closing the GUI, opening or reading the book again, switching or restarting the engines) waits, without a time limit, for the engine to save the book and end.
-  - The engine writes the book to another file beside it (`<book name>.tmp.<number>`), then puts it in its place, so the book file stays as it was while it is saved.
-- The window can be used meanwhile.
-  - The log says "Waiting for the main engine to save its book and end", and the row below shows "Saving the book" and the time so far. The log says the end too.
-  - When the engine could not save, an ERROR line of the main engine comes before it, and the book file stays as it was.
-  - What comes next (closing the GUI, starting the main engine with the new book, ...) is done when the save has ended.
-  - Meanwhile, what uses the main engine (learning, writing from the book, opening or reading the book again, switching or restarting the engines, ...) cannot be done. A message says to wait for the end of the save.
-  - A script goes on to its next line when the save has ended.
-- Closing again meanwhile asks whether to cut the save.
-  - Yes: the engine is ended at once and the GUI closes. The book file stays as it was last saved, and what was learned after that is lost. The files saved on the way stay; a half-written `.tmp.<number>` file left beside the book can be deleted.
-  - No: the GUI closes when the save has ended.
-  - Closed by `quit` of a script, it is not asked: the GUI closes when the save has ended.
-- Closed while it learns, the engine is ended without waiting (what it learned after its last save on the way is lost).
+- For this reason, after a command that changes the book, closing the main engine waits for the engine to save the book and end. There is no time limit. The main engine is closed when you:
+  - close the GUI
+  - open or read the book again
+  - switch or restart the engines
+- The engine writes the book to another file beside it (`<book name>.tmp.<number>`), then replaces the book with that file. So the book file stays unchanged while it is being saved.
+- You can use the window while the GUI waits.
+  - The log says "Waiting for the main engine to save its book and end".
+  - The row below shows "Saving the book" and the time so far.
+  - The log also says when the save has ended.
+  - If the engine could not save the book, an ERROR line of the main engine appears before that. The book file stays unchanged.
+  - The next step is done after the save has ended. For example: closing the GUI, or starting the main engine with the new book.
+  - While the GUI waits, nothing that uses the main engine can be done: learning, writing from the book, opening or reading the book again, switching or restarting the engines, and so on. A message asks you to wait until the save has ended.
+  - A script goes on to its next line after the save has ended.
+- If you close again while the GUI waits, it asks whether to cut the save.
+  - Yes: the engine is ended at once and the GUI closes.
+    - The book file stays as it was last saved. What was learned after that is lost.
+    - The intermediate save files remain.
+    - If a half-written `.tmp.<number>` file is left beside the book, you can delete it.
+  - No: the GUI closes after the save has ended.
+  - When `quit` in a script closes the GUI, it does not ask. The GUI closes after the save has ended.
+- If you close while learning is running, the engine is ended without waiting. What was learned after the last intermediate save is lost.
 - The speed and memory use of learning depend on the engine and the size of the book. Learning a large book takes a long time.

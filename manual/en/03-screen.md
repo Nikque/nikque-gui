@@ -40,18 +40,25 @@ The top bar also shows a message in these cases:
 
 A move that leads to a registered opening (`opening.ini`) has a mark at the upper right of its square.
 
-- A filled mark: this move makes an opening.
-- Only the outline: this move is on the way to an opening.
+- A filled mark: this move reaches the position of the opening.
+- An outline only: this move is part of a line that leads to an opening.
 
-The mark is a ribbon in the standard design and a heart in the paw design. It is the same in every orientation of the board, and when another order of the moves reaches the same position.
+The shape of the mark depends on the design:
 
-View → Mark the moves on the lines of the openings turns them on or off (on at first). They stay when H hides the values.
+- standard design: a ribbon
+- paw design: a heart
+
+The marks are the same in every orientation of the board. They are also the same when the moves are played in another order that reaches the same position.
+
+View → Mark the moves on the lines of the openings turns the marks on or off. They are on at first. They are still shown when H hides the values.
 
 ### Opening names
 
-When the position is a registered opening, its name is shown large under the board. Further on, the name of the last opening passed stays in dim letters. Going back shows the name for that position again.
+When the position is a registered opening, its name is shown in large letters under the board.
 
-A click on the name hides it and leaves a short "(opening)"; another click shows it again.
+- After you play further moves, the name of the last opening passed stays in dim letters.
+- When you go back, the name is shown again for that position.
+- Click the name to hide it. Only a short "(opening)" remains. Click it again to show the name.
 
 ### Expected line on the board
 
@@ -97,18 +104,33 @@ Pictures of the bookmarked positions appear just above the graph ([8. Games, lis
 
 ## Box of the moves
 
-The text box just above the graph shows the game up to the current position as coordinates. It follows the position.
+The text box just above the graph shows the game up to the current position as coordinates. It changes when the position changes.
 
-- Copy copies the game up to the current position (same as Copy the game in the menu). You can also select a part of the text and press Ctrl+C.
-- Paste reads the game on the clipboard at once. So does Ctrl+V in the box or pasting from the right-click menu of the box (once is enough).
-- With Input/Output → Write the game in capitals (F5D6…), the box and the copied game are in capitals. Games are read in either case.
-- Press Enter to read what you typed in the box.
-- When it cannot be read, the bottom row says so and the game stays. What you typed stays too, so you can correct it and press Enter.
-- Esc or a click outside the box takes back what you typed. Moving to another window keeps it: when you come back, you can go on typing.
-- After a click in the box, the arrow keys and other keys work in the box. Click outside the box (the board, for example) or press Esc to move the position with the keys again. The same comes after reading a game.
-- The forms read are the same as for Paste a game ([8. Games, lists and bookmarks](08-games.md)).
-- Nothing is read while a position is set up.
-- View → Show the box of the moves (above the graph) shows or hides the box.
+Copying the game:
+
+- Copy copies the game up to the current position. It does the same as Input/Output → Copy the game (up to this position).
+- You can also select part of the text and press Ctrl+C.
+- With Input/Output → Write the game in capitals (F5D6…) turned on, the game in the box and the copied game are in capitals.
+
+Reading a game:
+
+- Paste reads the game on the clipboard at once.
+- Ctrl+V in the box, or pasting from the right-click menu of the box, does the same. One press is enough.
+- To read a game you typed in the box, press Enter.
+- Games are read in capitals or in lower case.
+- The formats read are the same as for Paste a game ([8. Games, lists and bookmarks](08-games.md)).
+- Nothing is read while a position is being set up.
+- If the text cannot be read, the bottom row says so. The game does not change.
+- What you typed stays, so you can correct it and press Enter.
+
+Typed text and keys:
+
+- Esc or a click outside the box discards what you typed and restores the box.
+- If you move to another window, what you typed stays. When you come back, you can go on typing.
+- After you click in the box, the arrow keys and other keys work in the box.
+- To move through the game with the keys again, click outside the box (the board, for example) or press Esc. This also applies after a game is read.
+
+View → Show the box of the moves (above the graph) shows or hides the box.
 
 ## Graph
 
@@ -116,8 +138,11 @@ The graph at the lower right shows the value at each position of the game.
 
 - The vertical line marks the current position.
 - Click the graph to go to the nearest position of the game.
-- The purple bands and lines are the moves the current Lv searches to the end. A line is where the search changes, with its probability (87%, 98%...) or "to the end" on top; a darker band is a surer search. At Lv 21, for instance: 87% from move 30, 98% from move 33, to the end from move 36.
-- View > "Show the ranges searched to the end on the graph (the current Lv)" shows or hides them.
+- The purple bands and lines show the range of moves that the current Lv searches to the end.
+  - A line marks the move where the search changes. Above it is the probability (87%, 98%...) or "to the end".
+  - A darker band means a more certain search.
+  - Example: at Lv 21, 87% from move 30, 98% from move 33, and to the end from move 36.
+- View → Show the ranges searched to the end on the graph (the current Lv) shows or hides the bands and lines.
 
 ## Log
 

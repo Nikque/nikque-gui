@@ -57,7 +57,9 @@ For each move, the stage shows how complete the book is after that move. Hover o
 | 2 | yellow-green | the best line reaches the end, but leaves near the best remain |
 | 3 to 7 | 3 dark blue, 4 orange, 5 red, 6 gold, 7 black (white outline) | `book deviate x y` from the position after the move would add nothing (by default 3 is 1/1, 4 is 2/2 … 7 is 5/5) |
 
-Among the values of stage 0, a value searched to the end is a purple number marked "E". The light bands of the effect of stage 4 are orange, not white (to tell it from the other colors).
+At stage 0, a value searched to the end is shown as a purple number marked "E".
+
+The light bands of the stage 4 effect are orange, not white, so that they are easier to tell from the other colors.
 
 - Book → Accuracy based on selects the base command: deviate, deviate2 or deviate3.
 - The ranges (x/y) of stages 3 to 7 are set in Settings → Range….

@@ -33,13 +33,13 @@
 | `pv on\|off` | マウスを乗せた手の読み筋を盤に表示する・しない |
 | `openingmarks on\|off` | 定石の手順の手に印を付ける・付けない |
 | `recordbox on\|off` | 棋譜の欄を表示する・しない |
-| `recordtext <文字>` | 棋譜の欄に文字を入れて Enter を押すのと同じ（読み込めないときはエラー） |
+| `recordtext <文字>` | 棋譜の欄に文字を入力して Enter を押すのと同じ。読み込めないときはエラー |
 | `uppermoves on\|off` | 棋譜を大文字で出力する・しない |
 | `graphend on\|off` | グラフに読み切りの範囲（今の Lv）を表示する・しない |
 | `book reload` | book を読み込み直す（メインエンジンを再起動） |
-| `book deviate\|deviate2\|deviate3 <X> <Y> export <ファイル> [leaf\|ends\|all]` | 今の局面からたどる進行をファイルに書き出す（book は広げない。leaf：広げる leaf の局面、ends：進行の端、all：進行の局面すべて。省くと leaf。空白を含むファイル名は `"…"` で囲む） |
+| `book deviate\|deviate2\|deviate3 <X> <Y> export <ファイル> [leaf\|ends\|all]` | 今の局面からたどる進行を、ファイルに書き出す。book は広げない。最後の語で、書き出す局面を選ぶ：leaf は広げる leaf の局面、ends は進行の端、all は進行の局面すべて。省くと leaf。空白を含むファイル名は `"…"` で囲む |
 | `book reduce <X> <Y> [here]` | book を軽くする（初期局面から。`here` は今の局面から）。数えてから、確かめずに行う |
-| `engine nikque\|newedax` | エンジンの系列（Heath は旧名の `newedax` で指します） |
+| `engine nikque\|newedax` | エンジンの系列。Heath は旧名の `newedax` で指す |
 | `design standard\|paw\|toggle` / `effects on\|subdued\|off` | デザイン（`toggle` で切り替え）・効果 |
 | `tab moves\|book\|record\|list\|tree` | タブ |
 | `rotate <0-7>` / `cellinfo none\|positions\|level\|stage\|umi` | 盤の向き・マスの左下に表示する数 |

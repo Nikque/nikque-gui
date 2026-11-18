@@ -2,7 +2,7 @@
 
 [English](../en/README.md)
 
-nikque GUI は、オセロのエンジン Edax v4.5.5-nikque（C 版）と Heath（旧名 newedax、C++ 版）のための、Windows 用の GUI です。
+nikque GUI は、オセロのエンジン Edax v4.5.5-nikque（C 版）と Heath（旧名 newedax、C++ 版）のための、Windows 用の GUI です。Mac 版（0.4.3 から）と、Linux 版・Android 版（0.4.4 から）もあります（どれも試しの版。[2 章](02-setup.md)）。
 
 - 盤の上に、すべての合法手の評価値と book の精度を表示します。
 - book の解析・学習・整理、対局、棋譜の整理を画面から行えます。
@@ -28,4 +28,6 @@ nikque GUI は、オセロのエンジン Edax v4.5.5-nikque（C 版）と Heath
 
 - nikque GUI 0.4.6（Windows 版と、試しの Mac 版・Linux 版・Android 版）
 - エンジン v4.5.5-nikque.29・v4.5.5-heath.16（64 枠の版）
-- book を軽くする機能は v4.5.5-nikque.20・newedax.5 から、deviate がたどる進行の書き出しは v4.5.5-nikque.26・eval2.14・newedax.11 から使えます。ほかの機能は v4.5.5-nikque.19・newedax.4 でも使えます。
+- book を軽くする機能は、v4.5.5-nikque.20・newedax.5 から使えます。
+- deviate がたどる進行の書き出しは、v4.5.5-nikque.26・eval2.14・newedax.11 から使えます。
+- ほかの機能は、v4.5.5-nikque.19・newedax.4 でも使えます。

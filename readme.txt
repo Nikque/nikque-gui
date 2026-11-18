@@ -24,29 +24,37 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・Heath）は GPL
 ---------
 - 配布の ZIP を好きな場所に展開し、nikque-gui.exe を起動します（インストールは要りません）。
   nikque-gui.exe と同じフォルダに config.ini・lang フォルダ・readme.txt があります。
-- Mac 版（nikque-gui-0.4.6-mac.zip、試しの版、macOS 13 以上、Apple シリコンと Intel）もあります。
-  署名していないので、展開した後に一度だけ「ターミナル」で xattr -dr com.apple.quarantine <展開したフォルダ>
-  を打ってから nikque GUI.app を開きます。エンジンは mEdax-arm64・mEdax-x64-modern です（説明書の「2. 置き方と起動」）。
-- Linux 版（nikque-gui-0.4.6-linux.tar.gz、試しの版、x86-64 の Ubuntu 22.04 以上、GTK 3）もあります。
-  展開して nikque-gui を起動します。エンジンは lEdax-x86-64-v4・-v3・lEdax-x86-64 です（説明書の「2. 置き方と起動」）。
-- Android 版（nikque-gui-0.4.6-android.apk、試しの版、Android 10 以上の arm64 の端末）もあります。
-  対局・解析・棋譜までで、book の学習・棋譜リスト・スクリプト・ファイルを選ぶ機能はありません（説明書の「2. 置き方と起動」）。
-- エンジンが付いています：engines\nikque に C 版の Edax v4.5.5-nikque.29、engines\newedax に Heath の
-  heath.16 の 64 枠の版（どちらも wEdax-x86-64-v4.exe・-v3.exe・wEdax-x86-64.exe と data\eval.dat）。
+- Mac 版もあります（nikque-gui-0.4.6-mac.zip、試しの版）。macOS 13 以上の、Apple シリコンと Intel の
+  Mac で動きます。署名していないので、展開した後に一度だけ「ターミナル」で次のコマンドを実行してから、
+  nikque GUI.app を開きます。
+    xattr -dr com.apple.quarantine <展開したフォルダ>
+  エンジンは mEdax-arm64・mEdax-x64-modern です（説明書の「2. 置き方と起動」）。
+- Linux 版もあります（nikque-gui-0.4.6-linux.tar.gz、試しの版）。x86-64 の Ubuntu 22.04 以上で動き、
+  GTK 3 を使います。展開して nikque-gui を起動します。エンジンは lEdax-x86-64-v4・-v3・lEdax-x86-64
+  です（説明書の「2. 置き方と起動」）。
+- Android 版もあります（nikque-gui-0.4.6-android.apk、試しの版）。Android 10 以上の arm64 の端末向けです。
+  使えるのは対局・解析・棋譜までです。book の学習・棋譜リスト・スクリプト・ファイルを選ぶ機能はありません
+  （説明書の「2. 置き方と起動」）。
+- エンジンが付いています。
+    engines\nikque   C 版の Edax v4.5.5-nikque.29
+    engines\newedax  Heath の heath.16 の 64 枠の版
+  どちらにも wEdax-x86-64-v4.exe・-v3.exe・wEdax-x86-64.exe と data\eval.dat があります。
   0.2.0 までの config.ini（系の名前 [nikque18]）も、そのまま読めます。
-- heath.16 の eval.dat（約 108 MB）は、エンジンと同じ版の配布物のものを使います。前の版の Heath・eval2・
-  nikque の eval.dat を読ませると、エンジンは動きますが評価が正しくありません（GUI がメッセージで知らせます）。
-  heath.16 はエンジン 1 つで約 160〜275 MB のメモリを使います（説明書の「2. 置き方と起動」）。
-- すでにあるエンジンのフォルダを使うときは、config.ini の [nikque]・[newedax]（Heath の設定）の dir= で指します。
+- heath.16 の eval.dat（約 108 MB）は、エンジンと同じ版の配布の ZIP に入っているものを使います。
+  前の版の Heath・eval2・nikque の eval.dat を読ませると、エンジンは動きますが、評価が正しくありません。
+  そのときは、GUI がメッセージで知らせます。
+- heath.16 は、エンジン 1 つで約 160〜275 MB のメモリを使います（説明書の「2. 置き方と起動」）。
+- すでにあるエンジンのフォルダを使うときは、config.ini の [nikque]・[newedax] の dir= で指します。
+  [newedax] は Heath の設定です。
   GUI には book の解析のコマンド（book moveinfo など）が要るので、v4.5.5-nikque.19・newedax.4 以降を
   使います。古いバージョンでは上の帯に「book の解析なし（古いエンジン）」と出て、book の値・木・book タブは
   出ません。book を軽くする機能（book reduce）は v4.5.5-nikque.20・newedax.5 からです。
   deviate がたどる進行の書き出しは v4.5.5-nikque.26・eval2.14・newedax.11 からです。
   exe= を auto にすると、CPU に合わせて wEdax-x86-64-v4.exe・-v3.exe・wEdax-x86-64.exe から選びます。
 - book は付いていません。お持ちの book.dat をエンジンの data\book.dat に置くか、book= でファイルを
-  指します。book はエンジンが読みます（GUI が読むのは、読み込みの間に評価値に必要な局面の分だけです）。book が無いときは、
-  エンジンが data\book.dat に初期局面だけの小さな book を作ります（後でお持ちの book で置き換えて
-  かまいません）。
+  指します。book はエンジンが読みます。GUI が読むのは、エンジンが読み込んでいる間に、評価値に
+  必要な局面の分だけです。book が無いときは、エンジンが data\book.dat に初期局面だけの小さな
+  book を作ります（後でお持ちの book で置き換えてかまいません）。
 - 画面の言葉は「設定」→「言語」で選びます（日本語・English・简体中文・繁體中文）。
 - 詳しい説明は manual\ja\README.md（ユーザーマニュアル）にあります。
 
@@ -57,9 +65,11 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・Heath）は GPL
   読み筋を盤に表示する」を入れると、盤に半透明の石と番号でも出ます）。
 - 右のパネルのタブ：候補手（並べ替えのできる表）・book（level ごとの数、最善の進行、
   足りない進行）・棋譜・リスト（棋譜リストと検索の結果）・木（book の進行）。
-- その下に、しおりの列（しおりを挟んだ局面の盤の絵。押すとその局面へ、右クリックでメニュー）、
-  棋譜の欄（今の局面までの棋譜。「コピー」「貼り付け」のボタン。欄の中の Ctrl+V はすぐに読み込み、
-  手で打ったときは Enter で読み込み）、評価値のグラフがいつも出ます。
+- その下に、次のものがいつも出ます。
+  - しおりの列：しおりを挟んだ局面の盤の絵です。押すとその局面へ行き、右クリックでメニューが出ます。
+  - 棋譜の欄：今の局面までの棋譜です。「コピー」「貼り付け」のボタンがあります。欄の中の Ctrl+V は、
+    すぐに読み込みます。手で入力したときは、Enter で読み込みます。
+  - 評価値のグラフ
 - ログ：下の 1 行。押すと広がります。「表示」→「ログを保存」でファイルにできます。
 
 4. キー（既定。config.ini の [keys] で全部変えられます）
@@ -103,16 +113,16 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・Heath）は GPL
   裏の処理を止める（棋譜リストの処理・精度の計算・棋譜の裏読み。局面を動かすとまた始まる）、
   棋譜のファイル（base の convert・unique・compare・check・correct・complete・problem・tofen）、スクリプト。
 - 表示：デザインを切り替える（D）、デザイン（標準・肉球）、効果（入・控えめ・切、いちばん上の段（段階 7）の
-  強さ）、盤の向き、手の番号、読み筋を盤に表示する、定石の手順の手に印を付ける、マスの左下に表示する数（book の局面数・Lv・
-  精度の段階・うみがめ数）、タブ、しおり、パネル、ログ。
+  強さ）、盤の向き、手の番号、読み筋を盤に表示する、定石の手順の手に印を付ける、
+  マスの左下に表示する数（book の局面数・Lv・精度の段階・うみがめ数）、タブ、しおり、パネル、ログ。
 - しおり：M で今の局面にしおりを挟みます。新しい対局・棋譜の貼り付け・盤面配置・手順の推定のときも、
   それまでの棋譜に自動でしおりが挟まれます（数の制限なし、exe の隣の kept.txt）。グラフの上の
   しおりの列で絵を押すと、その局面へ行きます。右クリックで「選んだしおりの棋譜と比べる」「消す」など。
 - 対局：人どうし（自由打ち）・人が黒・人が白・コンピューターどうし（続けて打つ対局の数）。コンピューターは
   book を読まない「対局用エンジン」で考えるので、その間も盤の解析は続きます。待ったは人の番まで戻ります。
   コンピューターの Lv、持ち時間（分。時間があるときは残りの時間で 1 手の時間を決め、切れた側の負け）、
-  相手の番にも考える、置換表を手ごとに残す（newedax.14 から）、終局したときの動作（しおりを挟む・棋譜リストに追加）。上の帯に対局の種類と残りの時間。
-  評価値は H で隠せます。
+  相手の番にも考える、置換表を手ごとに残す（newedax.14 から）、終局したときの動作（しおりを挟む・
+  棋譜リストに追加）。上の帯に対局の種類と残りの時間。評価値は H で隠せます。
 - 序盤の打ち方：book を使わない・book の最善の手・book から幅をもって選ぶ（最善からの石損の幅と、
   book を使う手数）。book の手は Edax と同じく、局面のリンクと leaf から選びます。
 - 木の表示（「book」→「木を表示する」、または木タブ）：今の局面から先の book の手（リンク）を、開け閉めできる木で
@@ -138,8 +148,8 @@ Ntest の形式は「空き 手番の側の石 手番」。
 -------------
 テキストファイル（UTF-8）に 1 行 1 つのコマンドを書き、「入出力」→「スクリプトを実行」で順に実行します。
 起動のときに実行するスクリプトは config.ini の [script] startup= に書きます。# で始まる行は注です。
-処理を始めるコマンド（list load、search、learn start、edax、tool、estimate、wait、book reduce、book deviate ... export など）は、
-終わるまで次の行を待ちます。相対の名前はスクリプトのファイルのフォルダから。
+処理を始めるコマンド（list load、search、learn start、edax、tool、estimate、wait、book reduce、
+book deviate ... export など）は、終わるまで次の行を待ちます。相対の名前はスクリプトのファイルのフォルダから。
 
   moves <棋譜>             棋譜を読み込む（座標の列・盤面の文字列・ビットボード）
   board <盤面の文字列>     その局面から始める
@@ -152,12 +162,13 @@ Ntest の形式は「空き 手番の側の石 手番」。
   pv on|off                マウスを乗せた手の読み筋を盤に表示する・しない
   openingmarks on|off      定石の手順の手に印を付ける・付けない
   recordbox on|off         棋譜の欄を表示する・しない
-  recordtext <文字>        棋譜の欄に文字を入れて Enter を押すのと同じ
+  recordtext <文字>        棋譜の欄に文字を入力して Enter を押すのと同じ
   uppermoves on|off        棋譜を大文字で出力する・しない（欄とコピー）
   graphend on|off          グラフに読み切りの範囲（今の Lv）を表示する・しない
   book reload              book を読み込み直す（メインエンジンを再起動）
   book deviate|deviate2|deviate3 <X> <Y> export <ファイル> [leaf|ends|all]
-                           今の局面からたどる進行をファイルに書き出す（book は広げない。空白を含む名前は "…" で囲む）
+                           今の局面からたどる進行をファイルに書き出す（book は広げない）。
+                           空白を含む名前は "…" で囲む
   book reduce <X> <Y> [here]  book を軽くする（初期局面から。here は今の局面から）。数えてから、確かめずに行う
   engine nikque|newedax / design standard|paw|toggle / effects on|subdued|off
   tab moves|book|record|list|tree / rotate <0-7> / cellinfo none|positions|level|stage|umi
@@ -192,8 +203,12 @@ Ntest の形式は「空き 手番の側の石 手番」。
 [nikque]・[newedax] dir・exe・eval・book
 [analysis] level（0〜60）・threads（0 は全部）・hash（ハッシュ表のビット数、0 はエンジンのまま）・umi・x・y・base・stages・
            precision（1 で精度を計算する）・backward・forward（棋譜の局面を裏で読む順）・compare
-[play] level・opening（search|best|wide）・width・until・clock・ponder・keep_hash（1 で置換表を手ごとに残す、newedax.14 から）・end_keep・end_list
-[view] design・effects・language・numbers・opening_marks（0 で定石の手順の印を出さない）・record_box（0 で棋譜の欄を出さない）・upper_moves（1 で棋譜を大文字で出力）・graph_end（0 でグラフに読み切りの範囲を出さない）・pv（1 で読み筋を盤に表示）・cell_info・fps・font・opening_file・screenshot_dir
+[play] level・opening（search|best|wide）・width・until・clock・ponder・
+       keep_hash（1 で置換表を手ごとに残す。newedax.14 から）・end_keep・end_list
+[view] design・effects・language・numbers・opening_marks（0 で定石の手順のマークを出さない）・
+       record_box（0 で棋譜の欄を出さない）・upper_moves（1 で棋譜を大文字で出力）・
+       graph_end（0 でグラフに読み切りの範囲を出さない）・pv（1 で読み筋を盤に表示）・cell_info・fps・
+       font・opening_file・screenshot_dir
 [window] 大きさと場所、tab、panel_w、bookmarks（1 でしおりの列を表示）
 [list] start_ply（棋譜リストの棋譜を開く手数、-1 は最後）
 [learn_options] エンジンに送る学習の設定
@@ -219,9 +234,9 @@ SOURCE.txt にあります。
 
 1. What it is
 -------------
-A GUI for Edax v4.5.5-nikque and Heath (formerly newedax).The values of all the legal moves and the accuracy stage of the
-book (0..7) are shown on the board; the book analyses (missing leaves, umigame numbers, positions by level,
-best lines), book learning and book maintenance are run from the menus.
+A GUI for Edax v4.5.5-nikque and Heath (formerly newedax). The values of all the legal moves and the
+accuracy stage of the book (0..7) are shown on the board; the book analyses (missing leaves, umigame
+numbers, positions by level, best lines), book learning and book maintenance are run from the menus.
 The GUI is under the MIT License. The engines (Edax nikque, Heath) are GPL and run as separate programs
 (the GUI starts an engine as a child process and talks to it with text commands).
 
@@ -229,28 +244,37 @@ The GUI is under the MIT License. The engines (Edax nikque, Heath) are GPL and r
 -------------
 - Unpack the ZIP anywhere and start nikque-gui.exe (no installation). config.ini, the lang folder and
   readme.txt are next to nikque-gui.exe.
-- There is also a Mac version (nikque-gui-0.4.6-mac.zip, a trial version, macOS 13 or later, Apple silicon and Intel).
-  It is not signed: after unpacking, type xattr -dr com.apple.quarantine <the folder> once in Terminal, then open
-  nikque GUI.app. Its engines are mEdax-arm64 and mEdax-x64-modern (manual, "2. Setting up").
-- There is also a Linux version (nikque-gui-0.4.6-linux.tar.gz, a trial version, x86-64 Ubuntu 22.04 or later, GTK 3).
-  Unpack it and start nikque-gui. Its engines are lEdax-x86-64-v4, -v3 and lEdax-x86-64 (manual, "2. Setting up").
-- There is also an Android version (nikque-gui-0.4.6-android.apk, a trial version, arm64 devices with Android 10 or later).
-  It plays, analyses and keeps the moves; it has no book learning, game lists, scripts or file commands (manual, "2. Setting up").
-- The engines are included: engines\nikque holds Edax v4.5.5-nikque.29 (C version), engines\newedax holds Heath,
-  the 64-slot build of heath.16 (each with wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe and data\eval.dat).
+- There is also a Mac version (nikque-gui-0.4.6-mac.zip, a trial version). It runs on macOS 13 or later,
+  on Apple silicon and Intel Macs. It is not signed: after unpacking it, run this command once in Terminal,
+  then open nikque GUI.app.
+    xattr -dr com.apple.quarantine <the folder>
+  Its engines are mEdax-arm64 and mEdax-x64-modern (manual, "2. Setting up").
+- There is also a Linux version (nikque-gui-0.4.6-linux.tar.gz, a trial version). It runs on x86-64
+  Ubuntu 22.04 or later, with GTK 3. Unpack it and start nikque-gui. Its engines are lEdax-x86-64-v4, -v3
+  and lEdax-x86-64 (manual, "2. Setting up").
+- There is also an Android version (nikque-gui-0.4.6-android.apk, a trial version), for arm64 devices with
+  Android 10 or later. It covers games, analysis and game records only. It has no book learning, game lists,
+  scripts or file commands (manual, "2. Setting up").
+- The engines are included:
+    engines\nikque   Edax v4.5.5-nikque.29 (C version)
+    engines\newedax  Heath, the 64-slot build of heath.16
+  Each has wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe and data\eval.dat.
   A config.ini of 0.2.0 or before (section [nikque18]) is read as it is.
-- heath.16 needs the eval.dat (about 108 MB) of the release of the same version. With the eval.dat of an earlier
-  Heath, of eval2 or of nikque, the engine runs but its evaluation is wrong (the GUI tells you so in a message).
-  One heath.16 engine uses about 160 to 275 MB of memory (manual, "2. Setting up").
-- To use engine folders you already have, point to them with dir= in [nikque] and [newedax] (the Heath settings) of config.ini.
+- heath.16 needs the eval.dat (about 108 MB) from the release of the same version. With the eval.dat of an
+  earlier Heath, of eval2 or of nikque, the engine runs, but its evaluation is wrong. The GUI then shows
+  a message.
+- One heath.16 engine uses about 160 to 275 MB of memory (manual, "2. Setting up").
+- To use engine folders you already have, point to them with dir= in [nikque] and [newedax] of config.ini.
+  [newedax] holds the Heath settings.
   The GUI needs the book analyses (book moveinfo and the others) of v4.5.5-nikque.19 or newedax.4 or later:
   with an older engine the top bar says "No book analyses (old engine)" and the book values, the tree and
   the Book tab stay empty. Making the book lighter (book reduce) needs v4.5.5-nikque.20 or newedax.5.
   Writing the lines deviate walks needs v4.5.5-nikque.26, eval2.14 or newedax.11.
   With exe=auto the engine file is chosen for the CPU (wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe).
 - No book is included. Put your book.dat in data\book.dat of the engine, or point to it with book=.
-  The engine reads the book (the GUI only reads the positions it needs for the values while the engine loads it). Without a book the engine makes a small new book
-  (the initial position only) in data\book.dat; replace it with your book later.
+  The engine reads the book. The GUI only reads the positions it needs for the values while the engine
+  loads it. Without a book the engine makes a small new book (the initial position only) in data\book.dat;
+  replace it with your book later.
 - The language is chosen in Settings → Language.
 - The user manual is manual\en\README.md.
 
@@ -261,9 +285,12 @@ The GUI is under the MIT License. The engines (Edax nikque, Heath) are GPL and r
   bottom row (with View → Show on the board the expected line of the move under the mouse, on the board too).
 - Tabs of the right panel: Moves (a sortable table), Book (positions by level, best lines, missing lines),
   Record, List (the game list and search results), Tree (book lines).
-- Below them, always: the row of bookmarks (pictures of the bookmarked positions; click one to go there,
-  right click for its menu), the box of the moves (the game up to the position, with the buttons Copy and Paste;
-  Ctrl+V in the box reads at once, Enter reads what you typed) and the graph of values.
+- Below them, always:
+  - the row of bookmarks: pictures of the bookmarked positions. Click one to go there; right-click it for
+    its menu.
+  - the box of the moves: the game up to the position, with the buttons Copy and Paste. Ctrl+V in the box
+    reads the game at once. Enter reads what you typed.
+  - the graph of values
 - Log: the bottom row; click to open it. View → Save the log writes it to a file.
 
 4. Keys (default; all can be changed in [keys] of config.ini)
@@ -306,15 +333,17 @@ The GUI is under the MIT License. The engines (Edax nikque, Heath) are GPL and r
   the search of the game; it starts again when the position changes); files of games (base convert, unique,
   compare, check, correct, complete, problem, tofen); command scripts.
 - View: switch the design (D), design (standard, paw), effects (on, subdued, off; the strength of the top stage),
-  orientation, move numbers, the expected line on the board, the marks on the lines of the openings, number on the squares (book positions, Lv,
-  accuracy stage or umigame numbers at the lower left), tabs, bookmarks, panel, log.
+  orientation, move numbers, the expected line on the board, the marks on the lines of the openings,
+  number on the squares (book positions, Lv, accuracy stage or umigame numbers at the lower left), tabs,
+  bookmarks, panel, log.
 - Bookmarks: M bookmarks the position now. A new game, a pasted game, a position set up and a line found also
   bookmark the game before (no limit; kept.txt next to the exe). Click a picture in the row of bookmarks above
   the graph to go to its position; a right click opens a menu (compare with its game, delete...).
 - Games: two people (free), you as black, you as white, the computer on both sides (a number of games). The
   computer thinks on a "play engine" without the book, so the analysis of the board goes on. Take back goes to
   your turn. The computer's Lv, the time (minutes; the time of a move comes from the time left, and the side
-  whose time runs out loses), thinking on your turn, what to do at the end (bookmark the game, add it to the list).
+  whose time runs out loses), thinking on your turn, keeping the hash table from move to move (since newedax.14),
+  what to do at the end (bookmark the game, add it to the list).
   The top bar shows the kind of game and the time left. H hides the values.
 - Opening moves: no book, the best book move, a book move drawn within a width (the loss from the best, and
   up to which move). As Edax, the book moves are the links and the leaf of the position.
@@ -344,10 +373,11 @@ The search finds the games where this position appears (other orientations too);
 A UTF-8 text file with one command a line, run with Input/Output → Run a command script. The script run at
 the start is set in [script] startup= of config.ini. Lines starting with # are notes. A command that starts
 work waits for its end. Relative names are from the script's folder. The commands are listed in the
-Japanese part above (moves, board, play, new, goto, back, forward, book, book reload, book reduce, eval,
-numbers, level, umi, precision, analysis, stop, pv, openingmarks, recordbox, recordtext, uppermoves, graphend, engine, design, effects, tab, rotate, cellinfo, lang, wait,
-estimate, keep, bookmark, bookmarks, screenshot, savelog, list ..., search, learn, edax, tool, run, game,
-comlevel, clock, ponder, keep-hash, opening, go, takeback, waitgame, compare, tree, log, quit).
+Japanese part above (moves, board, play, new, goto, back, forward, book, book reload, book deviate ... export,
+book reduce, eval, numbers, level, umi, precision, analysis, stop, pv, openingmarks, recordbox, recordtext, uppermoves,
+graphend, engine, design, effects, tab, rotate, cellinfo, lang, wait, estimate, keep, bookmark, bookmarks,
+screenshot, savelog, list ..., search, learn, edax, tool, run, game, comlevel, clock, ponder, keep-hash,
+opening, go, takeback, waitgame, compare, tree, log, quit).
 A wait or waitgame that ends by its time says so in the log.
 
 8. config.ini

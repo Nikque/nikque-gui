@@ -33,13 +33,13 @@ Rules:
 | `pv on\|off` | the expected line of the move under the mouse on the board, or not |
 | `openingmarks on\|off` | the marks on the lines of the openings, or not |
 | `recordbox on\|off` | the box of the moves, or not |
-| `recordtext <text>` | as typing the text in the box of the moves and pressing Enter (an error when it cannot be read) |
+| `recordtext <text>` | the same as typing the text in the box of the moves and pressing Enter; an error if it cannot be read |
 | `uppermoves on\|off` | write the game in capitals, or not |
 | `graphend on\|off` | the ranges searched to the end (the current Lv) on the graph, or not |
 | `book reload` | reads the book again (restarts the main engine) |
-| `book deviate\|deviate2\|deviate3 <X> <Y> export <file> [leaf\|ends\|all]` | writes the lines walked from the position shown to a file, without expanding the book (leaf: positions with a leaf to expand, ends: the ends of the lines, all: all their positions; leaf when left out; a file name with spaces in `"…"`) |
+| `book deviate\|deviate2\|deviate3 <X> <Y> export <file> [leaf\|ends\|all]` | writes to a file the lines walked from the position shown. The book is not expanded. The last word chooses the positions written: leaf for the positions with a leaf to expand, ends for the ends of the lines, all for all their positions. Without it, leaf. Put a file name with spaces in `"…"` |
 | `book reduce <X> <Y> [here]` | makes the book lighter (from the initial position; `here`: from the position shown); counted, then done without asking |
-| `engine nikque\|newedax` | kind of engine (Heath is given by its former name `newedax`) |
+| `engine nikque\|newedax` | kind of engine; Heath is given by its former name `newedax` |
 | `design standard\|paw\|toggle` / `effects on\|subdued\|off` | design (`toggle` switches it), effects |
 | `tab moves\|book\|record\|list\|tree` | tab |
 | `rotate <0-7>` / `cellinfo none\|positions\|level\|stage\|umi` | board orientation, number on the squares |

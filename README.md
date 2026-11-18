@@ -6,7 +6,7 @@
 
 ## 日本語
 
-オセロのエンジン [Edax 4.5.5 nikque](https://github.com/Nikque/edax-reversi-AVX)（C 版）と [Heath（旧名 newedax）](https://github.com/Nikque/Heath)（C++ 版）を画面から使うための、Windows 用のソフトです。試しの Mac 版（0.4.3 から）と、Linux 版・Android 版（0.4.4 から）もあります。
+オセロのエンジン [Edax 4.5.5 nikque](https://github.com/Nikque/edax-reversi-AVX)（C 版）と [Heath（旧名 newedax）](https://github.com/Nikque/Heath)（C++ 版）を画面から使うための、Windows 用のソフトです。Mac 版（0.4.3 から）と、Linux 版・Android 版（0.4.4 から）もあります。どれもまだ試しの版です。
 
 ### できること
 
@@ -23,11 +23,14 @@
 1. [最新の Release](https://github.com/Nikque/nikque-gui/releases/latest) の zip をダウンロードし、好きな場所に展開します。インストールは要りません。
 2. `nikque-gui.exe` を起動します。
 
-Mac 版（`nikque-gui-<版>-mac.zip`、macOS 13 以上、Apple シリコンと Intel）は署名していないので、展開した後に一度だけ「ターミナル」で `xattr -dr com.apple.quarantine <展開したフォルダ>` を打ってから `nikque GUI.app` を開きます（[2 章](manual/ja/02-setup.md#mac試しの版)）。
+Mac 版・Linux 版・Android 版：
 
-Linux 版（`nikque-gui-<版>-linux.tar.gz`、x86-64 の Ubuntu 22.04 以上、GTK 3）は、展開して `nikque-gui` を起動します（[2 章](manual/ja/02-setup.md#linux試しの版)）。
-
-Android 版（`nikque-gui-<版>-android.apk`、Android 10 以上の arm64 の端末）は、APK を入れて開きます。対局・解析・棋譜までの版です（[2 章](manual/ja/02-setup.md#android試しの版)）。
+- Mac 版（`nikque-gui-<版>-mac.zip`）：macOS 13 以上の、Apple シリコンと Intel の Mac で動きます（[2 章](manual/ja/02-setup.md#mac試しの版)）。
+  1. ZIP を展開します。
+  2. 署名していないので、一度だけ「ターミナル」で `xattr -dr com.apple.quarantine <展開したフォルダ>` を実行します。
+  3. `nikque GUI.app` を開きます。
+- Linux 版（`nikque-gui-<版>-linux.tar.gz`）：x86-64 の Ubuntu 22.04 以上で動きます。GTK 3 を使います。展開して `nikque-gui` を起動します（[2 章](manual/ja/02-setup.md#linux試しの版)）。
+- Android 版（`nikque-gui-<版>-android.apk`）：Android 10 以上の arm64 の端末向けです。APK をインストールして開きます。使えるのは、対局・解析・棋譜までです（[2 章](manual/ja/02-setup.md#android試しの版)）。
 
 エンジン 2 つ（Edax nikque と Heath）が同梱されています。**book は付いていません**。お持ちの `book.dat` を使う方法は、マニュアルの [2 章「置き方と起動」](manual/ja/02-setup.md#book-を置く) を見てください。
 
@@ -40,9 +43,17 @@ Visual Studio 2022（C++、x64）と CMake を使います。
 - `build.cmd`：`build\Release` にビルドし、単体テスト 6 本を実行します。
 - `build.cmd measure`：計測用のビルド（`build-measure`）。
 - `tools\make_dist.ps1`：配布用の zip を作ります。
-- Mac 版：CMake と Xcode のコマンドラインツールで `cmake -S . -B build -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"`、`cmake --build build`。配布用の zip は `tools/make_dist_mac.sh`（GitHub Actions の `.github/workflows/mac.yml`）。
-- Linux 版：GTK 3 の開発用のパッケージ（Ubuntu では `libgtk-3-dev`）と CMake、g++ 12 以上で `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`、`cmake --build build`。配布用の tar.gz は `tools/make_dist_linux.sh`（`.github/workflows/linux.yml`）。
-- Android 版：`android/` が Gradle のプロジェクトです（Android SDK・NDK、JDK 17）。APK は `tools/make_dist_android.sh`（`.github/workflows/android.yml`）。
+- Mac 版：
+  - 使うもの：CMake と Xcode のコマンドラインツール。
+  - ビルド：`cmake -S . -B build -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"`、`cmake --build build`。
+  - 配布用の zip：`tools/make_dist_mac.sh`（GitHub Actions では `.github/workflows/mac.yml`）。
+- Linux 版：
+  - 使うもの：GTK 3 の開発用のパッケージ（Ubuntu では `libgtk-3-dev`）、CMake、g++ 12 以上。
+  - ビルド：`cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`、`cmake --build build`。
+  - 配布用の tar.gz：`tools/make_dist_linux.sh`（`.github/workflows/linux.yml`）。
+- Android 版：
+  - `android/` が Gradle のプロジェクトです。Android SDK・NDK と JDK 17 を使います。
+  - APK：`tools/make_dist_android.sh`（`.github/workflows/android.yml`）。
 
 ### ライセンス
 
@@ -50,7 +61,7 @@ nikque GUI は MIT License（[LICENSE.txt](LICENSE.txt)）です。同梱のエ�
 
 ## English
 
-A GUI for Windows (and trial versions for Mac from 0.4.3, and for Linux and Android from 0.4.4) for the Othello engines [Edax 4.5.5 nikque](https://github.com/Nikque/edax-reversi-AVX) (C) and [Heath (formerly newedax)](https://github.com/Nikque/Heath) (C++).
+A Windows GUI for the Othello engines [Edax 4.5.5 nikque](https://github.com/Nikque/edax-reversi-AVX) (C) and [Heath (formerly newedax)](https://github.com/Nikque/Heath) (C++). There are also versions for Mac (from 0.4.3) and for Linux and Android (from 0.4.4). They are all still trial versions.
 
 ### Features
 
@@ -67,11 +78,14 @@ A GUI for Windows (and trial versions for Mac from 0.4.3, and for Linux and Andr
 1. Download the zip from the [latest release](https://github.com/Nikque/nikque-gui/releases/latest) and unpack it anywhere. No installation is needed.
 2. Start `nikque-gui.exe`.
 
-The Mac version (`nikque-gui-<version>-mac.zip`, macOS 13 or later, Apple silicon and Intel) is not signed: after unpacking it, type `xattr -dr com.apple.quarantine <the folder>` once in Terminal, then open `nikque GUI.app` ([chapter 2](manual/en/02-setup.md#mac-trial-version)).
+Mac, Linux and Android:
 
-The Linux version (`nikque-gui-<version>-linux.tar.gz`, x86-64 Ubuntu 22.04 or later, GTK 3): unpack it and start `nikque-gui` ([chapter 2](manual/en/02-setup.md#linux-trial-version)).
-
-The Android version (`nikque-gui-<version>-android.apk`, arm64 devices with Android 10 or later): install the APK and open it. It plays, analyses and keeps the moves ([chapter 2](manual/en/02-setup.md#android-trial-version)).
+- Mac (`nikque-gui-<version>-mac.zip`): runs on macOS 13 or later, on Apple silicon and Intel Macs ([chapter 2](manual/en/02-setup.md#mac-trial-version)).
+  1. Unpack the ZIP.
+  2. The app is not signed, so run `xattr -dr com.apple.quarantine <the folder>` once in Terminal.
+  3. Open `nikque GUI.app`.
+- Linux (`nikque-gui-<version>-linux.tar.gz`): runs on x86-64 Ubuntu 22.04 or later, with GTK 3. Unpack it and start `nikque-gui` ([chapter 2](manual/en/02-setup.md#linux-trial-version)).
+- Android (`nikque-gui-<version>-android.apk`): for arm64 devices with Android 10 or later. Install the APK and open it. It covers games, analysis and game records only ([chapter 2](manual/en/02-setup.md#android-trial-version)).
 
 Two engines (Edax nikque and Heath) are included. **No book is included**; to use your own `book.dat`, see [chapter 2 of the manual](manual/en/02-setup.md).
 
@@ -84,9 +98,17 @@ Visual Studio 2022 (C++, x64) and CMake.
 - `build.cmd`: builds into `build\Release` and runs the 6 unit tests.
 - `build.cmd measure`: a build for measurements (`build-measure`).
 - `tools\make_dist.ps1`: makes the distribution zip.
-- Mac: CMake and the Xcode command line tools: `cmake -S . -B build -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"`, `cmake --build build`. The distribution zip: `tools/make_dist_mac.sh` (GitHub Actions, `.github/workflows/mac.yml`).
-- Linux: the development package of GTK 3 (`libgtk-3-dev` on Ubuntu), CMake and g++ 12 or later: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`, `cmake --build build`. The distribution tar.gz: `tools/make_dist_linux.sh` (`.github/workflows/linux.yml`).
-- Android: `android/` is a Gradle project (the Android SDK and NDK, JDK 17). The APKs: `tools/make_dist_android.sh` (`.github/workflows/android.yml`).
+- Mac:
+  - Requires CMake and the Xcode command line tools.
+  - Build: `cmake -S . -B build -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"`, `cmake --build build`.
+  - The distribution zip: `tools/make_dist_mac.sh` (on GitHub Actions, `.github/workflows/mac.yml`).
+- Linux:
+  - Requires the GTK 3 development package (`libgtk-3-dev` on Ubuntu), CMake and g++ 12 or later.
+  - Build: `cmake -S . -B build -DCMAKE_BUILD_TYPE=Release`, `cmake --build build`.
+  - The distribution tar.gz: `tools/make_dist_linux.sh` (`.github/workflows/linux.yml`).
+- Android:
+  - `android/` is a Gradle project. It requires the Android SDK and NDK, and JDK 17.
+  - The APKs: `tools/make_dist_android.sh` (`.github/workflows/android.yml`).
 
 ### License
 

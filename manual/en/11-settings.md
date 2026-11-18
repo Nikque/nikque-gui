@@ -14,7 +14,7 @@ The View menu:
 - Mark the moves on the lines of the openings (on by default).
 - Number on the squares ([4. Analysis](04-analysis.md)).
 - Tabs.
-- Show the box of the moves (on by default; [3. The screen](03-screen.md)).
+- Show the box of the moves (above the graph). On by default ([3. The screen](03-screen.md)).
 - Bookmarks (Show the row of bookmarks and others).
 - Hide the right panel (P), Open the log (L), Save the log….
 
@@ -24,11 +24,15 @@ Settings → Open config.ini opens it in Notepad.
 
 The GUI also writes the file when it closes. Close the GUI before editing the file by hand.
 
-When it cannot be written (a read-only folder, for example), the file stays as it was and the log says so. On closing, a message box says it (not when `quit` of a script closes the GUI).
+If the file cannot be written (in a read-only folder, for example):
+
+- The file keeps its previous contents.
+- The log shows a message.
+- When the GUI closes, a message box also appears. It does not appear when `quit` in a script closes the GUI.
 
 | Section | Main keys |
 |---|---|
-| `[engine]` | `kind=nikque\|newedax` (Heath is given by its former name `newedax`; newedax when missing), `search=1` (use the search engine) |
+| `[engine]` | `kind=nikque\|newedax` (Heath is given by its former name `newedax`; newedax when the key is missing), `search=1` (use the search engine) |
 | `[nikque]`, `[newedax]` | `dir` (engine folder), `exe` (`auto` or the file name), `eval`, `book` |
 | `[books]` | `recent1` to `recent8` (the list of Book → Recent books) |
 | `[analysis]` | `level`, `threads` (0: all), `hash` (bits of the hash table; 0: the engine's), `umi`, `x`, `y`, `base`, `stages`, `precision` (1: compute the book accuracy), `backward`, `forward` (the order of the search of the game), `compare` |
@@ -39,8 +43,8 @@ When it cannot be written (a read-only folder, for example), the file stays as i
 | `[learn]` | the last learning command and its position (for Continue from the file saved on the way) |
 | `[learn_options]` | learning settings sent to the engine ([6. Learning](06-learning.md)) |
 | `[tools]` | the values of the tool windows, the last command of the command box |
-| `[bestlines]` | the values last chosen in Book → Write the best lines…: `loss` (largest loss in one move, 0 to 129), `depth` (last move followed, 1 to 60), `solved` (`follow`: follow past positions solved to the end, `stop`: a position solved to the end is an end), `which` (`all`: all the ends, `incomplete`: only the ends not solved to the end). Without them, `0`, `60`, `stop` and `all` |
-| `[devexport]` | the values last chosen in Book → Write the lines deviate walks…: `base` (`deviate\|deviate2\|deviate3`), `x` (0 to 129), `y` (0 to 254), `which` (`leaf\|ends\|all`). Without them, the accuracy base and the loss (per move, total) of Range of the analyses, and `leaf` |
+| `[bestlines]` | the values last chosen in Book → Write the best lines…: `loss` (largest loss in one move, 0 to 129), `depth` (last move followed, 1 to 60), `solved` (`follow`: follow past positions solved to the end, `stop`: a position solved to the end is an end), `which` (`all`: all the ends, `incomplete`: only the ends not solved to the end). Without them: `0`, `60`, `stop` and `all` |
+| `[devexport]` | the values last chosen in Book → Write the lines deviate walks...: `base` (`deviate\|deviate2\|deviate3`), `x` (0 to 129), `y` (0 to 254), `which` (`leaf\|ends\|all`). Without them: the accuracy base and the losses (per move and total) of Range of the analyses, and `leaf` |
 | `[script]` | `startup` (the script run at the start) |
 | `[keys]` | the keys |
 

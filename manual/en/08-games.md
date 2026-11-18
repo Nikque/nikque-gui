@@ -6,7 +6,7 @@
 
 - Input/Output → Copy the game (up to this position), Paste a game.
 - The keys are Ctrl+C and Ctrl+V. Press Ctrl+V twice.
-- The box of the moves just above the graph can also copy and paste ([3. The screen](03-screen.md)).
+- You can also copy and paste with the box of the moves just above the graph ([3. The screen](03-screen.md)).
 - Formats that can be pasted:
   - coordinates (`f5d6c3…`)
   - board text (64 squares and the side to move)
@@ -107,7 +107,7 @@ A bookmark stores a game and a position in it. Pictures of the bookmarked positi
   - setting up a position
   - finding the moves of a position
 - There is no limit on the number of bookmarks. They are stored in `kept.txt` next to the exe.
-- When `kept.txt` cannot be written (a read-only folder, for example), the log says so and the file stays as it was.
+- If `kept.txt` cannot be written (in a read-only folder, for example), the log shows a message. The file keeps its previous contents.
 - When the same game comes again, its automatic bookmark moves to the last position and remains a single bookmark.
 - A bookmark made with M does not move. A different position of the same game becomes a new bookmark (since 0.2.1).
 - Bookmarks in a `kept.txt` from 0.2.0 or earlier are read as automatic bookmarks.
@@ -130,7 +130,7 @@ A bookmark stores a game and a position in it. Pictures of the bookmarked positi
 
 ## Opening names
 
-The opening name is shown under the board ([The screen](03-screen.md)), read from `opening.ini` next to the exe (included).
+The GUI reads `opening.ini` next to the exe (included) and shows the opening name under the board ([3. The screen](03-screen.md)).
 
 - It is a text file with one `name=moves` entry per line.
 - Moves are written from the start, with f5 as the first move.
