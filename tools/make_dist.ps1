@@ -5,15 +5,15 @@ param(
 	[Parameter(Mandatory)] [string]$NewedaxZip,   # edax-4.5.5-newedax.<n>-64.zip
 	# what the releases say (gh release view <tag> --json assets: the digest and the size; git ls-remote: the commit of the
 	# tag; the size of bin\data\eval.dat in the ZIP)
-	[string]$NikqueName = "v4.5.5-nikque.30",
-	[string]$NikqueSha = "dec0b41b191aa4a01e6cbb83df997aabe54b01f1b2f91d5d5f48c3ce6c04317c",
-	[long]$NikqueSize = 17924857,
-	[string]$NikqueCommit = "de85e0859bdd104de4621182306cd00950587157",
+	[string]$NikqueName = "v4.5.5-nikque.31",
+	[string]$NikqueSha = "e93c180cdbb639149da4908dafbecdf167bd3a9bb72465776b72c08c21bca8f1",
+	[long]$NikqueSize = 17924617,
+	[string]$NikqueCommit = "27bdd21863464119ec275c573c4e4c1b0f5ab1cc",
 	[long]$NikqueEvalSize = 13952436,
-	[string]$NewedaxName = "v4.5.5-heath.17",
-	[string]$NewedaxSha = "35d2512a7ff4ab863662e43163926048e2eb7c049b6e03b9324eaeb4f61fcd03",
-	[long]$NewedaxSize = 68121950,
-	[string]$NewedaxCommit = "a9b10155ce34bffeaf763c36dfe374aef49497eb",
+	[string]$NewedaxName = "v4.5.5-heath.18",
+	[string]$NewedaxSha = "58167dc8eef9d45f2ff08ec2b8057926337a62e15054191b6e4ae457e59e9e38",
+	[long]$NewedaxSize = 68117960,
+	[string]$NewedaxCommit = "d0215e7a28e46da3db9a17d9397426459f21b696",
 	[long]$NewedaxEvalSize = 107612578,
 	[string]$Out = "D:\nikque-gui\dist",
 	[string]$Eng = ""   # the new empty folder the ZIPs are unpacked in (default: $Out\engines-<version>)
@@ -23,14 +23,15 @@ param(
 #   engines\nikque and engines\newedax: wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe (exe=auto chooses among them),
 #   data\eval.dat, LICENSE.txt (GPL v3 of the engine) and SOURCE.txt (where the source is).
 # The engines come from the ZIPs of their releases: the SHA-256 and the size of each ZIP are checked against the values
-# of its release, it is unpacked in a new empty folder, and its bin\ exe files, bin\data\eval.dat (whose size is checked)
-# and LICENSE are copied (not its book.dat nor config.ini). The copies are checked to be the bytes of the ZIP.
+# of its release. The three x64 executables, bin\data\eval.dat and LICENSE are extracted to a new folder.
+# The eval.dat size and the SHA-256 of each copied file are checked.
 # The GUI is taken from build\Release (build.cmd): the measuring build (NG_MEASURE) is refused.
 #   opening.ini (res\opening.ini: the names of the openings, without note lines).
 # The texts of the GUI (.txt, .ini, .md outside engines\) are written with CRLF, as in the releases before.
 # No book, no test files. A list of the files with their SHA-256 is written next to the ZIP.
 # Nothing made before is overwritten: the script stops if the folder, the ZIP or $Eng is there.
 $ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 $root = Split-Path -Parent $PSScriptRoot
 $cml = Get-Content -Raw (Join-Path $root "CMakeLists.txt")
 if ($cml -notmatch "project\(nikque_gui VERSION ([0-9.]+)") { throw "no version in CMakeLists.txt" }
@@ -52,6 +53,13 @@ $Engines = [ordered]@{
 	newedax = @{ Zip = $NewedaxZip; Sha = $NewedaxSha; Size = $NewedaxSize; EvalSize = $NewedaxEvalSize
 		Title = "Heath (formerly newedax, C++ version of Edax)"; Repo = "https://github.com/Nikque/Heath"; Tag = $NewedaxName; Commit = $NewedaxCommit }
 }
+$engineFiles = @(
+	@("bin/wEdax-x86-64-v4.exe", "wEdax-x86-64-v4.exe"),
+	@("bin/wEdax-x86-64-v3.exe", "wEdax-x86-64-v3.exe"),
+	@("bin/wEdax-x86-64.exe", "wEdax-x86-64.exe"),
+	@("bin/data/eval.dat", "data\eval.dat"),
+	@("LICENSE", "LICENSE.txt")
+)
 
 # the ZIPs of the engines: SHA-256 and size, then unpacked
 New-Item -ItemType Directory -Force $Out | Out-Null
@@ -59,7 +67,7 @@ New-Item -ItemType Directory $Eng | Out-Null
 foreach ($k in $Engines.Keys) {
 	$en = $Engines[$k]
 	$z = Get-Item $en.Zip
-	# the ZIP is of the version named (edax-4.5.5-heath.17-64.zip for v4.5.5-heath.17): the values below are of that release
+	# the ZIP is of the version named (edax-4.5.5-heath.18-64.zip for v4.5.5-heath.18): the values below are of that release
 	$ver = $en.Tag -replace '^v', ''
 	if ($z.Name -notmatch ('^edax-' + [regex]::Escape($ver) + '(-\d+)?\.zip$')) { throw "$($z.Name) is not the ZIP of $($en.Tag) (give -${k}Name and the values of its release)" }
 	$h = (Get-FileHash -Algorithm SHA256 $z.FullName).Hash.ToLower()
@@ -67,7 +75,16 @@ foreach ($k in $Engines.Keys) {
 	"zip ok  $h  $($z.Length)  $($z.Name)"
 	$dir = Join-Path $Eng $k
 	New-Item -ItemType Directory $dir | Out-Null
-	Expand-Archive -Path $z.FullName -DestinationPath $dir
+	$archive = [IO.Compression.ZipFile]::OpenRead($z.FullName)
+	try {
+		foreach ($p in $engineFiles) {
+			$entry = $archive.GetEntry($p[0])
+			if (-not $entry) { throw "$($z.Name) is missing $($p[0])" }
+			$target = Join-Path $dir $p[0]
+			[IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target)) | Out-Null
+			[IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target)
+		}
+	} finally { $archive.Dispose() }
 	$ev = Get-Item (Join-Path $dir "bin\data\eval.dat")
 	if ($ev.Length -ne $en.EvalSize) { throw "$k\bin\data\eval.dat: $($ev.Length) bytes, not $($en.EvalSize) (not the eval file of this release)" }
 	$en.Tree = $dir
@@ -94,9 +111,7 @@ function Copy-Engine([string]$folder) {
 	$tree = $x.Tree
 	$edir = Join-Path $dst "engines\$folder"
 	New-Item -ItemType Directory -Force (Join-Path $edir "data") | Out-Null
-	$pairs = @(@("bin\wEdax-x86-64-v4.exe", "wEdax-x86-64-v4.exe"), @("bin\wEdax-x86-64-v3.exe", "wEdax-x86-64-v3.exe"),
-		@("bin\wEdax-x86-64.exe", "wEdax-x86-64.exe"), @("bin\data\eval.dat", "data\eval.dat"), @("LICENSE", "LICENSE.txt"))
-	foreach ($p in $pairs) { Copy-Item (Join-Path $tree $p[0]) (Join-Path $edir $p[1]) }
+	foreach ($p in $engineFiles) { Copy-Item (Join-Path $tree $p[0]) (Join-Path $edir $p[1]) }
 	$text = @(
 		"$($x.Title) $($x.Tag)"
 		""
@@ -112,7 +127,7 @@ function Copy-Engine([string]$folder) {
 	)
 	[System.IO.File]::WriteAllText((Join-Path $edir "SOURCE.txt"), ($text -join "`r`n") + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
 	# the copies are the bytes unpacked from the ZIP
-	foreach ($p in $pairs) {
+	foreach ($p in $engineFiles) {
 		$a = (Get-FileHash -Algorithm SHA256 (Join-Path $tree $p[0])).Hash
 		$b = (Get-FileHash -Algorithm SHA256 (Join-Path $edir $p[1])).Hash
 		if ($a -ne $b) { throw "$folder\$($p[1]) differs from the zip" }

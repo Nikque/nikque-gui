@@ -15,15 +15,15 @@ EXE=$1 NZIP=$2 EZIP=$3 NESRC=$(cd "$4" && pwd) NKSRC=$(cd "$5" && pwd)
 [ -d "${BOOST_DIR:-}/boost" ] || { echo "BOOST_DIR: the folder of Boost 1.92 (its headers) for newedax"; exit 1; }
 CXX=${CXX:-g++}
 CC=${CXX/g++/gcc}
-NIKQUE_TAG=v4.5.5-nikque.30
-NIKQUE_SHA=dec0b41b191aa4a01e6cbb83df997aabe54b01f1b2f91d5d5f48c3ce6c04317c
-NIKQUE_SIZE=17924857
-NIKQUE_COMMIT=de85e0859bdd104de4621182306cd00950587157
+NIKQUE_TAG=v4.5.5-nikque.31
+NIKQUE_SHA=e93c180cdbb639149da4908dafbecdf167bd3a9bb72465776b72c08c21bca8f1
+NIKQUE_SIZE=17924617
+NIKQUE_COMMIT=27bdd21863464119ec275c573c4e4c1b0f5ab1cc
 NIKQUE_EVAL=13952436
-NEWEDAX_TAG=v4.5.5-heath.17
-NEWEDAX_SHA=35d2512a7ff4ab863662e43163926048e2eb7c049b6e03b9324eaeb4f61fcd03
-NEWEDAX_SIZE=68121950
-NEWEDAX_COMMIT=a9b10155ce34bffeaf763c36dfe374aef49497eb
+NEWEDAX_TAG=v4.5.5-heath.18
+NEWEDAX_SHA=58167dc8eef9d45f2ff08ec2b8057926337a62e15054191b6e4ae457e59e9e38
+NEWEDAX_SIZE=68117960
+NEWEDAX_COMMIT=d0215e7a28e46da3db9a17d9397426459f21b696
 NEWEDAX_EVAL=107612578
 ARCHS="x86-64-v4 x86-64-v3 x86-64"
 
@@ -120,10 +120,11 @@ for e in nikque newedax; do
 			x86-64-v4) echo "$flags" | grep -qw avx512vl || { echo "$e lEdax-$a: not run (no AVX-512 on this computer)"; continue; } ;;
 			x86-64-v3) echo "$flags" | grep -qw avx2 || { echo "$e lEdax-$a: not run (no AVX2 on this computer)"; continue; } ;;
 		esac
-		(cd "$DST/engines/$e" && "./lEdax-$a" -n 1 -l 60 -solve "$NESRC/problem/fforum-1-19.obf" > "$WORK/solve-$e-$a.log" 2>&1) ||
+		(cd "$DST/engines/$e" && "./lEdax-$a" -n 1 -l 60 -book-usage off -solve "$NESRC/problem/fforum-1-19.obf" > "$WORK/solve-$e-$a.log" 2>&1) ||
 			{ cat "$WORK/solve-$e-$a.log"; exit 1; }
 		echo "$e lEdax-$a:"
 		tail -2 "$WORK/solve-$e-$a.log"
+		grep -Fq '19 positions; 0 erroneous move; 0 erroneous score;' "$WORK/solve-$e-$a.log"
 		rm -f "$DST/engines/$e/data/book.dat"  # (made by the engine when there is none)
 	done
 done
