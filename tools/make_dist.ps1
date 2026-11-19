@@ -5,15 +5,15 @@ param(
 	[Parameter(Mandatory)] [string]$NewedaxZip,   # edax-4.5.5-newedax.<n>-64.zip
 	# what the releases say (gh release view <tag> --json assets: the digest and the size; git ls-remote: the commit of the
 	# tag; the size of bin\data\eval.dat in the ZIP)
-	[string]$NikqueName = "v4.5.5-nikque.29",
-	[string]$NikqueSha = "90df1f34283aa14774561d993f3edb94566520b85db75a076366b196f760377f",
-	[long]$NikqueSize = 17937197,
-	[string]$NikqueCommit = "16ae24d9a592295ad9839d0d34cd376d3805bc0d",
+	[string]$NikqueName = "v4.5.5-nikque.30",
+	[string]$NikqueSha = "dec0b41b191aa4a01e6cbb83df997aabe54b01f1b2f91d5d5f48c3ce6c04317c",
+	[long]$NikqueSize = 17924857,
+	[string]$NikqueCommit = "de85e0859bdd104de4621182306cd00950587157",
 	[long]$NikqueEvalSize = 13952436,
-	[string]$NewedaxName = "v4.5.5-heath.16",
-	[string]$NewedaxSha = "dae2bdc74a8954b283a87c4e386f473444146e4e37620897b9281b68a68f2673",
-	[long]$NewedaxSize = 68122372,
-	[string]$NewedaxCommit = "e71f123ecb771fa75fade501add3e75252453fb7",
+	[string]$NewedaxName = "v4.5.5-heath.17",
+	[string]$NewedaxSha = "35d2512a7ff4ab863662e43163926048e2eb7c049b6e03b9324eaeb4f61fcd03",
+	[long]$NewedaxSize = 68121950,
+	[string]$NewedaxCommit = "a9b10155ce34bffeaf763c36dfe374aef49497eb",
 	[long]$NewedaxEvalSize = 107612578,
 	[string]$Out = "D:\nikque-gui\dist",
 	[string]$Eng = ""   # the new empty folder the ZIPs are unpacked in (default: $Out\engines-<version>)
@@ -59,7 +59,7 @@ New-Item -ItemType Directory $Eng | Out-Null
 foreach ($k in $Engines.Keys) {
 	$en = $Engines[$k]
 	$z = Get-Item $en.Zip
-	# the ZIP is of the version named (edax-4.5.5-heath.16-64.zip for v4.5.5-heath.16): the values below are of that release
+	# the ZIP is of the version named (edax-4.5.5-heath.17-64.zip for v4.5.5-heath.17): the values below are of that release
 	$ver = $en.Tag -replace '^v', ''
 	if ($z.Name -notmatch ('^edax-' + [regex]::Escape($ver) + '(-\d+)?\.zip$')) { throw "$($z.Name) is not the ZIP of $($en.Tag) (give -${k}Name and the values of its release)" }
 	$h = (Get-FileHash -Algorithm SHA256 $z.FullName).Hash.ToLower()

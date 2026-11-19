@@ -1,5 +1,9 @@
 # nikque GUI
 
+Windows 版 0.4.7 は、Edax v4.5.5-nikque.30 と Heath（旧名 newedax）v4.5.5-heath.17 を同梱しています。
+
+The Windows 0.4.7 distribution bundles Edax v4.5.5-nikque.30 and Heath v4.5.5-heath.17 (formerly newedax).
+
 [日本語](#日本語) · [English](#english)
 
 ![nikque GUI](manual/images/ja-01-moves.png)
