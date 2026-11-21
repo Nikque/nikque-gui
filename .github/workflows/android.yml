@@ -3,8 +3,9 @@
 # releases), made by tools/make_dist_android.sh, then a run of the second on an emulator with a script (pictures of
 # the screen, the log).
 # The APK for devices is signed with the key of the secrets NG_KEYSTORE_B64 (a keystore in base64),
-# NG_KEYSTORE_PASSWORD, NG_KEY_ALIAS and NG_KEY_PASSWORD; without them, with a key made for this run alone (an APK
-# signed with another key is not installed over this one).
+# NG_KEYSTORE_PASSWORD, NG_KEY_ALIAS and NG_KEY_PASSWORD. On master (the runs of the releases) the run stops without
+# them; on the other branches it signs with a key made for this run alone (an APK signed with another key is not
+# installed over this one).
 name: Android
 
 on:
@@ -85,6 +86,9 @@ jobs:
           if [ -n "$KEYSTORE_B64" ]; then
             echo "$KEYSTORE_B64" | base64 -d > "$ks"
             echo "the key of the secrets"
+          elif [ "$GITHUB_REF" = refs/heads/master ]; then
+            echo "::error::no key in the secrets NG_KEYSTORE_B64, NG_KEYSTORE_PASSWORD, NG_KEY_ALIAS, NG_KEY_PASSWORD; the APK of a release must be signed with the key of the secrets"
+            exit 1
           else
             KEYSTORE_PASSWORD=$(head -c 24 /dev/urandom | base64 | tr -dc 'A-Za-z0-9')
             KEY_PASSWORD=$KEYSTORE_PASSWORD
