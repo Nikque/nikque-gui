@@ -1,8 +1,8 @@
 # nikque GUI
 
-Windows 版 0.4.9 は、Edax v4.5.5-nikque.32 と Heath（旧名 newedax）v4.5.5-heath.19 を同梱しています。
+Windows 版 0.4.10 は、Edax v4.5.5-nikque.33 と Heath（旧名 newedax）v4.5.5-heath.20 を同梱しています。
 
-The Windows 0.4.9 distribution bundles Edax v4.5.5-nikque.32 and Heath v4.5.5-heath.19 (formerly newedax).
+The Windows 0.4.10 distribution bundles Edax v4.5.5-nikque.33 and Heath v4.5.5-heath.20 (formerly newedax).
 
 [日本語](#日本語) · [English](#english)
 

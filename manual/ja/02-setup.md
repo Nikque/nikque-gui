@@ -4,7 +4,7 @@
 
 ## 置き方
 
-1. 配布の ZIP（`nikque-gui-0.4.9.zip`）を好きな場所に展開します。インストールは要りません。
+1. 配布の ZIP（`nikque-gui-0.4.10.zip`）を好きな場所に展開します。インストールは要りません。
 2. `nikque-gui.exe` を起動します。
 
 フォルダの中身：
@@ -14,8 +14,8 @@
 | `nikque-gui.exe` | GUI |
 | `config.ini` | 設定（[11. 設定](11-settings.md)） |
 | `lang\*.txt` | 画面の言葉（日本語・English・简体中文・繁體中文） |
-| `engines\nikque` | C 版の Edax v4.5.5-nikque.32 |
-| `engines\newedax` | Heath（旧名 newedax）の heath.19（C++ 版、64 枠の版） |
+| `engines\nikque` | C 版の Edax v4.5.5-nikque.33 |
+| `engines\newedax` | Heath（旧名 newedax）の heath.20（C++ 版、64 枠の版） |
 | `readme.txt` | 短い説明 |
 
 - どちらのエンジンのフォルダにも、次のファイルがあります。
@@ -27,7 +27,7 @@
 
 ## Mac（試しの版）
 
-0.4.3 から、Mac 版（`nikque-gui-0.4.9-mac.zip`）があります。
+0.4.3 から、Mac 版（`nikque-gui-0.4.10-mac.zip`）があります。
 
 - macOS 13 以上の Mac で動きます。Apple シリコンと Intel のどちらでも動きます。
 - まだ試しの版です。動きのおかしい所があれば知らせてください。
@@ -36,10 +36,10 @@
 2. 初めに一度だけ、「ターミナル」で次のコマンドを実行します。署名していないアプリなので、そのままでは macOS に止められるためです。
 
    ```
-   xattr -dr com.apple.quarantine ~/Downloads/nikque-gui-0.4.9-mac
+   xattr -dr com.apple.quarantine ~/Downloads/nikque-gui-0.4.10-mac
    ```
 
-   `~/Downloads/nikque-gui-0.4.9-mac` は、展開したフォルダの場所に替えてください。
+   `~/Downloads/nikque-gui-0.4.10-mac` は、展開したフォルダの場所に替えてください。
 
    これで、フォルダの中のアプリとエンジンがすべて開けるようになります。
 3. `nikque GUI.app` を開きます。
@@ -50,8 +50,8 @@
   - `mEdax-arm64`（Apple シリコン）
   - `mEdax-x64-modern`（Intel）
   - `data/eval.dat`
-- nikque 系のエンジンは、v4.5.5-nikque.32 の Release の ZIP に入っているものです。
-- Heath 系のエンジンは、heath.19 のタグのソース（64 枠）から、この配布版のためにビルドしたものです（`engines/newedax/SOURCE.txt`）。heath.19 の Release に、Mac 用が無いためです。
+- nikque 系のエンジンは、v4.5.5-nikque.33 の Release の ZIP に入っているものです。
+- Heath 系のエンジンは、heath.20 のタグのソース（64 枠）から、この配布版のためにビルドしたものです（`engines/newedax/SOURCE.txt`）。heath.20 の Release に、Mac 用が無いためです。
 - ファイルの場所は `/` で区切ります。`config.ini` の `dir=` などに書く場所も、Mac の書き方で書きます（例：`/Users/名前/books/book.dat`）。
 - キー操作では、Windows の Ctrl の代わりに Command（⌘）を使います。例えば、Command+C で棋譜をコピーします。
 - 右クリックは、トラックパッドの 2 本指のクリックか、control を押しながらのクリックです。
@@ -60,7 +60,7 @@
 
 ## Linux（試しの版）
 
-0.4.4 から、Linux 版（`nikque-gui-0.4.9-linux.tar.gz`）があります。
+0.4.4 から、Linux 版（`nikque-gui-0.4.10-linux.tar.gz`）があります。
 
 - x86-64 の Ubuntu 22.04 以上で動きます。同じころ以降のほかのディストリビューションでも動く見込みです。
 - 画面の部品は GTK 3 です。
@@ -69,7 +69,7 @@
 1. 好きな場所に展開します。
 
    ```
-   tar -xzf nikque-gui-0.4.9-linux.tar.gz
+   tar -xzf nikque-gui-0.4.10-linux.tar.gz
    ```
 
 2. 中の `nikque-gui` を起動します。ファイルマネージャーから開くか、端末で `./nikque-gui` を実行します。
@@ -83,15 +83,15 @@
   - `lEdax-x86-64-v3`（AVX2）
   - `lEdax-x86-64`（その他の x64）
   - `data/eval.dat`
-- エンジンは、タグのソースから、この配布版のためにビルドしたものです（`engines/*/SOURCE.txt`）。使ったタグは、v4.5.5-nikque.32 と、heath.19 の 64 枠です。
-- nikque.32 の Release の ZIP にある Linux 用は、Ubuntu 24.04 以上向けです。heath.19 の Release には、Linux 用がありません。
+- エンジンは、タグのソースから、この配布版のためにビルドしたものです（`engines/*/SOURCE.txt`）。使ったタグは、v4.5.5-nikque.33 と、heath.20 の 64 枠です。
+- nikque.33 の Release の ZIP にある Linux 用は、Ubuntu 24.04 以上向けです。heath.20 の Release には、Linux 用がありません。
 - ファイルの場所は `/` で区切ります。`config.ini` の `dir=` などに書く場所も、Linux の書き方で書きます（例：`/home/名前/books/book.dat`）。
 - 空白を含む名前のファイルは、エンジンに直接渡せません。そのときは、GUI が一時フォルダを通して渡します。ログにもそう出ます。
 - フォルダを移すときは、`nikque-gui`・`config.ini`・`lang`・`engines` をいっしょに移してください。
 
 ## Android（試しの版）
 
-0.4.4 から、Android 版（`nikque-gui-0.4.9-android.apk`）があります。
+0.4.4 から、Android 版（`nikque-gui-0.4.10-android.apk`）があります。
 
 - Android 10 以上の、arm64 の端末向けです。今のほとんどの電話とタブレットが、arm64 の端末です。
 - まだ試しの版です。エミュレーターで動きを確かめただけで、実機ではまだ確かめていません。
@@ -125,7 +125,7 @@
 
 そのほか：
 
-- エンジンは両方とも入っています。v4.5.5-nikque.32 と heath.19 の Release の ZIP にある `aEdax-arm64-v8a` です。
+- エンジンは両方とも入っています。v4.5.5-nikque.33 と heath.20 の Release の ZIP にある `aEdax-arm64-v8a` です。
 - エンジンは別のプログラムとして動きます。
 - Heath は、エンジン 1 つで約 160〜275 MB のメモリを使います。メモリの少ない端末では、「エンジン」→「nikque 系」に切り替えると軽くなります。
 - 別のアプリに切り替えている間も、エンジンが考え続けることがあります。使い終わったら、「戻る」で終了してください。
@@ -141,15 +141,15 @@
 - どちらも同じ book の解析のコマンドを持ち、同じ結果を返します。
 - Heath は、newedax.13 から、新しく学習し直した評価関数（64 枠）を使います。その `eval.dat` は約 108 MB です。nikque の `eval.dat` とは別のものです。
 - Heath の `eval.dat` は、エンジンと同じ版の配布の ZIP に入っているものを使ってください。
-  - heath.17・heath.18 の64枠版は同じファイルを使います。eval2・nikque の `eval.dat` を読ませると、エンジンは動きますが、評価が正しくありません。
+  - heath.17〜heath.19 の64枠版は同じファイルを使います。eval2・nikque の `eval.dat` を読ませると、エンジンは動きますが、評価が正しくありません。
   - そのときは、GUI がメッセージで知らせます（[12. 困ったときは](12-troubleshooting.md)）。
-- 48 枠の版は付いていません。Heath の Release の `edax-4.5.5-heath.19-48.zip` です。使うときは、次のようにします。
+- 48 枠の版は付いていません。Heath の Release の `edax-4.5.5-heath.20-48.zip` です。使うときは、次のようにします。
   1. その ZIP を、別のフォルダに展開します。
   2. `config.ini` の `[newedax]` の `dir=` に、展開した `bin` のフォルダを書きます。`[newedax]` は Heath の設定です。
 
   48 枠の exe には、同じ ZIP の 48 枠の `eval.dat` を使ってください。取り違えると、メッセージは出ずに、評価が正しくなくなります。
 - メモリの目安：
-  - heath.19 は、エンジン 1 つで約 160 MB（`wEdax-x86-64.exe`）〜約 275 MB（AVX-512 の `wEdax-x86-64-v4.exe`）を使います。
+  - heath.20 は、エンジン 1 つで約 160 MB（`wEdax-x86-64.exe`）〜約 275 MB（AVX-512 の `wEdax-x86-64-v4.exe`）を使います。
   - GUI はエンジンを最大 5 つ起動します。メイン・探索用・ツール用・対局用・比較用です。すべて Heath だと、約 0.8〜1.4 GB になります。
   - 置換表を大きくしたり、スレッドを増やしたりすると、さらに増えます。book の大きさは、これとは別に足されます。
 - book の形式は変わっていません。前の版で使っていた book は、そのまま読めます。

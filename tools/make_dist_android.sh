@@ -16,15 +16,15 @@ NZIP=$(realpath "$1") EZIP=$(realpath "$2") NESRC=$(cd "$3" && pwd) NKSRC=$(cd "
 [ -d "${BOOST_DIR:-}/boost" ] || { echo "BOOST_DIR: the folder of Boost 1.92 (its headers) for newedax"; exit 1; }
 [ -x "${ANDROID_NDK:-}/ndk-build" ] || { echo "ANDROID_NDK: the folder of the NDK"; exit 1; }
 [ -f "${NG_KEYSTORE:-}" ] || { echo "NG_KEYSTORE: the keystore the release APK is signed with"; exit 1; }
-NIKQUE_TAG=v4.5.5-nikque.32
-NIKQUE_SHA=016a159b6476b1198cfd70599b127607c7a90aa8ea17c2554e7a78b5e24ec103
-NIKQUE_SIZE=17970851
-NIKQUE_COMMIT=44a851abe2975bd25114cfc1f36d7bfda2ec3937
+NIKQUE_TAG=v4.5.5-nikque.33
+NIKQUE_SHA=019e353a722910d0cbd89fc28aae93258d876f5cce3a90ec6984350caabe5275
+NIKQUE_SIZE=18782007
+NIKQUE_COMMIT=7a0b0752eb54347cdd5c84a57ee3d93cd31d0aa6
 NIKQUE_EVAL=13952436
-NEWEDAX_TAG=v4.5.5-heath.19
-NEWEDAX_SHA=a281313317b1db7c8e9ff10d5ff51666168f71cb0efeaed6018751b3ce628e61
-NEWEDAX_SIZE=68128318
-NEWEDAX_COMMIT=e909488c117a25e2c7ab1ff814bd3b2716375cd2
+NEWEDAX_TAG=v4.5.5-heath.20
+NEWEDAX_SHA=fecb77c61cdc91bce3868903d618754c9ec7ece5ac4101fe047e634649b30027
+NEWEDAX_SIZE=68518875
+NEWEDAX_COMMIT=1320a54729c3f2595a8efd933e1560ef0e1f6280
 NEWEDAX_EVAL=107612578
 
 VER=$(sed -n 's/^project(nikque_gui VERSION \([0-9.]*\) .*/\1/p' CMakeLists.txt)

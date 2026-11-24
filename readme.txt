@@ -24,26 +24,26 @@ GUI は MIT ライセンスです。エンジン（Edax nikque・Heath）は GPL
 ---------
 - 配布の ZIP を好きな場所に展開し、nikque-gui.exe を起動します（インストールは要りません）。
   nikque-gui.exe と同じフォルダに config.ini・lang フォルダ・readme.txt があります。
-- Mac 版もあります（nikque-gui-0.4.9-mac.zip、試しの版）。macOS 13 以上の、Apple シリコンと Intel の
+- Mac 版もあります（nikque-gui-0.4.10-mac.zip、試しの版）。macOS 13 以上の、Apple シリコンと Intel の
   Mac で動きます。署名していないので、展開した後に一度だけ「ターミナル」で次のコマンドを実行してから、
   nikque GUI.app を開きます。
     xattr -dr com.apple.quarantine <展開したフォルダ>
   エンジンは mEdax-arm64・mEdax-x64-modern です（説明書の「2. 置き方と起動」）。
-- Linux 版もあります（nikque-gui-0.4.9-linux.tar.gz、試しの版）。x86-64 の Ubuntu 22.04 以上で動き、
+- Linux 版もあります（nikque-gui-0.4.10-linux.tar.gz、試しの版）。x86-64 の Ubuntu 22.04 以上で動き、
   GTK 3 を使います。展開して nikque-gui を起動します。エンジンは lEdax-x86-64-v4・-v3・lEdax-x86-64
   です（説明書の「2. 置き方と起動」）。
-- Android 版もあります（nikque-gui-0.4.9-android.apk、試しの版）。Android 10 以上の arm64 の端末向けです。
+- Android 版もあります（nikque-gui-0.4.10-android.apk、試しの版）。Android 10 以上の arm64 の端末向けです。
   使えるのは対局・解析・棋譜までです。book の学習・棋譜リスト・スクリプト・ファイルを選ぶ機能はありません
   （説明書の「2. 置き方と起動」）。
 - エンジンが付いています。
-    engines\nikque   C 版の Edax v4.5.5-nikque.32
-    engines\newedax  Heath の heath.19 の 64 枠の版
+    engines\nikque   C 版の Edax v4.5.5-nikque.33
+    engines\newedax  Heath の heath.20 の 64 枠の版
   どちらにも wEdax-x86-64-v4.exe・-v3.exe・wEdax-x86-64.exe と data\eval.dat があります。
   0.2.0 までの config.ini（系の名前 [nikque18]）も、そのまま読めます。
-- heath.19 の eval.dat（約 108 MB）は、エンジンと同じ版の配布の ZIP に入っているものを使います。
-  heath.17・heath.18 の64枠版は同じ eval.dat を使います。eval2・nikque の eval.dat を読ませると、エンジンは動きますが、評価が正しくありません。
+- heath.20 の eval.dat（約 108 MB）は、エンジンと同じ版の配布の ZIP に入っているものを使います。
+  heath.17〜heath.19 の64枠版は同じ eval.dat を使います。eval2・nikque の eval.dat を読ませると、エンジンは動きますが、評価が正しくありません。
   そのときは、GUI がメッセージで知らせます。
-- heath.19 は、エンジン 1 つで約 160〜275 MB のメモリを使います（説明書の「2. 置き方と起動」）。
+- heath.20 は、エンジン 1 つで約 160〜275 MB のメモリを使います（説明書の「2. 置き方と起動」）。
 - すでにあるエンジンのフォルダを使うときは、config.ini の [nikque]・[newedax] の dir= で指します。
   [newedax] は Heath の設定です。
   GUI には book の解析のコマンド（book moveinfo など）が要るので、v4.5.5-nikque.19・newedax.4 以降を
@@ -245,26 +245,26 @@ The GUI is under the MIT License. The engines (Edax nikque, Heath) are GPL and r
 -------------
 - Unpack the ZIP anywhere and start nikque-gui.exe (no installation). config.ini, the lang folder and
   readme.txt are next to nikque-gui.exe.
-- There is also a Mac version (nikque-gui-0.4.9-mac.zip, a trial version). It runs on macOS 13 or later,
+- There is also a Mac version (nikque-gui-0.4.10-mac.zip, a trial version). It runs on macOS 13 or later,
   on Apple silicon and Intel Macs. It is not signed: after unpacking it, run this command once in Terminal,
   then open nikque GUI.app.
     xattr -dr com.apple.quarantine <the folder>
   Its engines are mEdax-arm64 and mEdax-x64-modern (manual, "2. Setting up").
-- There is also a Linux version (nikque-gui-0.4.9-linux.tar.gz, a trial version). It runs on x86-64
+- There is also a Linux version (nikque-gui-0.4.10-linux.tar.gz, a trial version). It runs on x86-64
   Ubuntu 22.04 or later, with GTK 3. Unpack it and start nikque-gui. Its engines are lEdax-x86-64-v4, -v3
   and lEdax-x86-64 (manual, "2. Setting up").
-- There is also an Android version (nikque-gui-0.4.9-android.apk, a trial version), for arm64 devices with
+- There is also an Android version (nikque-gui-0.4.10-android.apk, a trial version), for arm64 devices with
   Android 10 or later. It covers games, analysis and game records only. It has no book learning, game lists,
   scripts or file commands (manual, "2. Setting up").
 - The engines are included:
-    engines\nikque   Edax v4.5.5-nikque.32 (C version)
-    engines\newedax  Heath, the 64-slot build of heath.19
+    engines\nikque   Edax v4.5.5-nikque.33 (C version)
+    engines\newedax  Heath, the 64-slot build of heath.20
   Each has wEdax-x86-64-v4.exe, -v3.exe, wEdax-x86-64.exe and data\eval.dat.
   A config.ini of 0.2.0 or before (section [nikque18]) is read as it is.
-- heath.19 needs the eval.dat (about 108 MB) from the release of the same version. The 64-slot heath.17 and heath.18 builds use the same file.
+- heath.20 needs the eval.dat (about 108 MB) from the release of the same version. The 64-slot heath.17, heath.18 and heath.19 builds use the same file.
   With eval.dat from eval2 or nikque, the engine runs, but its evaluation is wrong. The GUI then shows
   a message.
-- One heath.19 engine uses about 160 to 275 MB of memory (manual, "2. Setting up").
+- One heath.20 engine uses about 160 to 275 MB of memory (manual, "2. Setting up").
 - To use engine folders you already have, point to them with dir= in [nikque] and [newedax] of config.ini.
   [newedax] holds the Heath settings.
   The GUI needs the book analyses (book moveinfo and the others) of v4.5.5-nikque.19 or newedax.4 or later:
@@ -412,16 +412,16 @@ GUI 为 MIT 许可。引擎（Edax nikque、Heath）为 GPL，作为独立程序
 2. 放置
 -------
 - 将 ZIP 解压到任意位置，启动 nikque-gui.exe（无需安装）。config.ini、lang 文件夹、readme.txt 在 nikque-gui.exe 旁。
-- 另有 Mac 版（nikque-gui-0.4.9-mac.zip，试用版，macOS 13 以上，Apple 芯片与 Intel）。因未签名，解压后请先在「终端」中
+- 另有 Mac 版（nikque-gui-0.4.10-mac.zip，试用版，macOS 13 以上，Apple 芯片与 Intel）。因未签名，解压后请先在「终端」中
   执行一次 xattr -dr com.apple.quarantine <解压的文件夹>，再打开 nikque GUI.app。引擎为 mEdax-arm64、mEdax-x64-modern（说明书「2.」）。
-- 另有 Linux 版（nikque-gui-0.4.9-linux.tar.gz，试用版，x86-64 的 Ubuntu 22.04 以上，GTK 3）。解压后启动 nikque-gui。
+- 另有 Linux 版（nikque-gui-0.4.10-linux.tar.gz，试用版，x86-64 的 Ubuntu 22.04 以上，GTK 3）。解压后启动 nikque-gui。
   引擎为 lEdax-x86-64-v4、-v3、lEdax-x86-64（说明书「2.」）。
-- 另有 Android 版（nikque-gui-0.4.9-android.apk，试用版，Android 10 以上的 arm64 设备）。可对局、分析、保存棋谱；
+- 另有 Android 版（nikque-gui-0.4.10-android.apk，试用版，Android 10 以上的 arm64 设备）。可对局、分析、保存棋谱；
   没有 book 学习、棋谱列表、脚本和选择文件的功能（说明书「2.」）。
-- 附带引擎：engines\nikque 为 C 版 Edax v4.5.5-nikque.32，engines\newedax 为 Heath 的 heath.19 的 64 槽版
+- 附带引擎：engines\nikque 为 C 版 Edax v4.5.5-nikque.33，engines\newedax 为 Heath 的 heath.20 的 64 槽版
   （各含 wEdax-x86-64-v4.exe、-v3.exe、wEdax-x86-64.exe 与 data\eval.dat）。0.2.0 以前的 config.ini（[nikque18]）也可直接读取。
-- heath.19 的 eval.dat（约 108 MB）须使用与引擎同一版本的发布包中的文件。heath.17、heath.18 的 64 槽版使用相同的文件。读取 eval2、nikque 的 eval.dat 时，
-  引擎仍会运行，但评估不正确（GUI 会以消息提示）。heath.19 每个引擎约使用 160～275 MB 内存（说明书「2.」）。
+- heath.20 的 eval.dat（约 108 MB）须使用与引擎同一版本的发布包中的文件。heath.17、heath.18、heath.19 的 64 槽版使用相同的文件。读取 eval2、nikque 的 eval.dat 时，
+  引擎仍会运行，但评估不正确（GUI 会以消息提示）。heath.20 每个引擎约使用 160～275 MB 内存（说明书「2.」）。
 - 使用已有的引擎文件夹时，在 config.ini 的 [nikque]、[newedax]（Heath 的设置）的 dir= 指定。GUI 需要 v4.5.5-nikque.19、newedax.4 以后的
   book 分析命令（book moveinfo 等）；旧版本时上方栏显示「无 book 分析（旧引擎）」，不显示 book 值、树与 book 标签页。
   减小 book 的功能（book reduce）需要 v4.5.5-nikque.20、newedax.5 以后。导出 deviate 追踪的进行需要 v4.5.5-nikque.26、eval2.14、newedax.11 以后。
@@ -466,16 +466,16 @@ GUI 為 MIT 授權。引擎（Edax nikque、Heath）為 GPL，作為獨立程式
 2. 放置
 -------
 - 將 ZIP 解壓到任意位置，啟動 nikque-gui.exe（無需安裝）。config.ini、lang 資料夾、readme.txt 在 nikque-gui.exe 旁。
-- 另有 Mac 版（nikque-gui-0.4.9-mac.zip，試用版，macOS 13 以上，Apple 晶片與 Intel）。因未簽署，解壓後請先在「終端機」中
+- 另有 Mac 版（nikque-gui-0.4.10-mac.zip，試用版，macOS 13 以上，Apple 晶片與 Intel）。因未簽署，解壓後請先在「終端機」中
   執行一次 xattr -dr com.apple.quarantine <解壓的資料夾>，再開啟 nikque GUI.app。引擎為 mEdax-arm64、mEdax-x64-modern（說明書「2.」）。
-- 另有 Linux 版（nikque-gui-0.4.9-linux.tar.gz，試用版，x86-64 的 Ubuntu 22.04 以上，GTK 3）。解壓後啟動 nikque-gui。
+- 另有 Linux 版（nikque-gui-0.4.10-linux.tar.gz，試用版，x86-64 的 Ubuntu 22.04 以上，GTK 3）。解壓後啟動 nikque-gui。
   引擎為 lEdax-x86-64-v4、-v3、lEdax-x86-64（說明書「2.」）。
-- 另有 Android 版（nikque-gui-0.4.9-android.apk，試用版，Android 10 以上的 arm64 裝置）。可對局、分析、保存棋譜；
+- 另有 Android 版（nikque-gui-0.4.10-android.apk，試用版，Android 10 以上的 arm64 裝置）。可對局、分析、保存棋譜；
   沒有 book 學習、棋譜列表、腳本和選擇檔案的功能（說明書「2.」）。
-- 附帶引擎：engines\nikque 為 C 版 Edax v4.5.5-nikque.32，engines\newedax 為 Heath 的 heath.19 的 64 槽版
+- 附帶引擎：engines\nikque 為 C 版 Edax v4.5.5-nikque.33，engines\newedax 為 Heath 的 heath.20 的 64 槽版
   （各含 wEdax-x86-64-v4.exe、-v3.exe、wEdax-x86-64.exe 與 data\eval.dat）。0.2.0 以前的 config.ini（[nikque18]）也可直接讀取。
-- heath.19 的 eval.dat（約 108 MB）須使用與引擎同一版本的發佈套件中的檔案。heath.17、heath.18 的 64 槽版使用相同的檔案。讀取 eval2、nikque 的 eval.dat 時，
-  引擎仍會執行，但評估不正確（GUI 會以訊息提示）。heath.19 每個引擎約使用 160～275 MB 記憶體（說明書「2.」）。
+- heath.20 的 eval.dat（約 108 MB）須使用與引擎同一版本的發佈套件中的檔案。heath.17、heath.18、heath.19 的 64 槽版使用相同的檔案。讀取 eval2、nikque 的 eval.dat 時，
+  引擎仍會執行，但評估不正確（GUI 會以訊息提示）。heath.20 每個引擎約使用 160～275 MB 記憶體（說明書「2.」）。
 - 使用已有的引擎資料夾時，在 config.ini 的 [nikque]、[newedax]（Heath 的設定）的 dir= 指定。GUI 需要 v4.5.5-nikque.19、newedax.4 以後的
   book 分析命令（book moveinfo 等）；舊版本時上方列顯示「無 book 分析（舊引擎）」，不顯示 book 值、樹與 book 分頁。
   減小 book 的功能（book reduce）需要 v4.5.5-nikque.20、newedax.5 以後。匯出 deviate 追蹤的進行需要 v4.5.5-nikque.26、eval2.14、newedax.11 以後。
