@@ -74,13 +74,18 @@ std::optional<Position> App::tree_next_wanted(bool values)
 	const std::string params = book_params();
 	// the answers of the open nodes are kept beside the positions of the game (the graph) and a few others: when more
 	// nodes are open than the cache holds, the oldest answers would go and be asked again, round and round
-	cache_.keep_at_least(tree_open_.size() + static_cast<size_t>(game_.size()) + 256);
+	// (the nodes seen only: one left open under a closed node is not drawn and not asked, and would raise the limit,
+	// which is never lowered, with each node closed so)
+	size_t seen = 0;
+	for (const auto &path : tree_open_) seen += tree_visible(path);
+	cache_.keep_at_least(seen + static_cast<size_t>(game_.size()) + 256);
 	for (const auto &path : tree_open_) {
 		if (!tree_visible(path)) continue;
 		const Position p = tree_position(path);
 		if (p.game_over()) continue;
 		PosInfo &info = cache_.get(p);
 		info.set_book_params(params);
+		if (info.book_failed) continue;  // (an analysis that ended with an error is not asked again by itself)
 		if (values ? !info.values_done : !info.book_done) return p;
 	}
 	return std::nullopt;
@@ -94,7 +99,7 @@ bool App::tree_waiting() const
 		const Position p = tree_position(path);
 		if (p.game_over()) continue;
 		const PosInfo *info = cache_.peek(p);
-		if (!info || !info->book_done) return true;
+		if (!info || (!info->book_done && !info->book_failed)) return true;
 	}
 	return false;
 }

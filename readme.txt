@@ -432,7 +432,8 @@ GUI 为 MIT 许可。引擎（Edax nikque、Heath）为 GPL，作为独立程序
 3. 按键
 -------
 ← →：后退/前进一步（右键也后退）；Ctrl+← →：10 手；R：棋盘方向；D：切换设计；M：为当前局面添加书签；E：摆放局面；
-Ctrl+C / Ctrl+V：复制/粘贴棋谱；Ctrl+P：截图；Ctrl+Shift+← →：棋谱列表的上/下一个棋谱。
+Ctrl+C / Ctrl+V：复制/粘贴棋谱（Ctrl+V 须按两次；在棋谱栏中按一次即读取。可读取坐标序列、棋盘字符串、位棋盘、博客 PARAM 格式）；
+Ctrl+P：截图；Ctrl+Shift+← →：棋谱列表的上/下一个棋谱。
 所有按键可在 config.ini 的 [keys] 中更改。
 
 4. 功能
@@ -486,7 +487,8 @@ GUI 為 MIT 授權。引擎（Edax nikque、Heath）為 GPL，作為獨立程式
 3. 按鍵
 -------
 ← →：後退/前進一步（右鍵也後退）；Ctrl+← →：10 手；R：棋盤方向；D：切換設計；M：為目前局面加入書籤；E：擺放局面；
-Ctrl+C / Ctrl+V：複製/貼上棋譜；Ctrl+P：螢幕截圖；Ctrl+Shift+← →：棋譜清單的上/下一個棋譜。
+Ctrl+C / Ctrl+V：複製/貼上棋譜（Ctrl+V 須按兩次；在棋譜欄中按一次即讀取。可讀取座標序列、棋盤字串、位元棋盤、部落格 PARAM 格式）；
+Ctrl+P：螢幕截圖；Ctrl+Shift+← →：棋譜清單的上/下一個棋譜。
 所有按鍵可在 config.ini 的 [keys] 中變更。
 
 4. 功能

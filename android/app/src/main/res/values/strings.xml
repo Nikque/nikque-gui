@@ -4,6 +4,7 @@
 	<string name="menu">Menu</string>
 	<string name="preparing">Preparing the files…</string>
 	<string name="prepare_failed">The files of the app could not be prepared.</string>
+	<string name="prepare_retry">Tap here to prepare them again.</string>
 	<string name="exit_ask">Quit nikque GUI?</string>
 	<string name="exit_yes">Quit</string>
 </resources>

@@ -85,6 +85,31 @@ CTLineRef make_line(std::wstring_view s, CTFontRef font, CGColorRef fg)
 }
 
 // fills (stroke_w 0) or strokes the path at the current transform of the canvas with the brush
+// The gradient of the stops of a brush, made once for the same stops (the same gradients are drawn in every frame) and
+// kept; when kKeptGradients are kept, they are all made again as they are drawn. The points are given when it is drawn.
+constexpr size_t kKeptGradients = 256;
+
+CGGradientRef gradient_of(const Gradient &gr)
+{
+	static std::map<std::vector<CGFloat>, CGGradientRef> kept;
+	static CGColorSpaceRef cs = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+	std::vector<CGFloat> key;
+	for (const auto &st : gr.stops()) key.insert(key.end(), {st.position, st.color.r, st.color.g, st.color.b, st.color.a});
+	if (const auto it = kept.find(key); it != kept.end()) return it->second;
+	if (kept.size() >= kKeptGradients) {
+		for (auto &[k, grad] : kept) CGGradientRelease(grad);
+		kept.clear();
+	}
+	std::vector<CGFloat> comps, locs;
+	for (const auto &st : gr.stops()) {
+		comps.insert(comps.end(), {st.color.r, st.color.g, st.color.b, st.color.a});
+		locs.push_back(st.position);
+	}
+	CGGradientRef grad = CGGradientCreateWithColorComponents(cs, comps.data(), locs.data(), locs.size());
+	kept.emplace(std::move(key), grad);
+	return grad;
+}
+
 void paint(const Canvas *cv, CGPathRef path, Brush *b, float stroke_w, bool round = false)
 {
 	if (!path || !b) return;
@@ -110,19 +135,9 @@ void paint(const Canvas *cv, CGPathRef path, Brush *b, float stroke_w, bool roun
 	} else if (auto *gr = dynamic_cast<Gradient *>(b)) {
 		if (stroke_w > 0) CGContextReplacePathWithStrokedPath(g);
 		CGContextClip(g);
-		const auto &stops = gr->stops();
-		std::vector<CGFloat> comps, locs;
-		for (const auto &st : stops) {
-			comps.insert(comps.end(), {st.color.r, st.color.g, st.color.b, st.color.a});
-			locs.push_back(st.position);
-		}
-		CGColorSpaceRef cs = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-		CGGradientRef grad = CGGradientCreateWithColorComponents(cs, comps.data(), locs.data(), locs.size());
 		CGContextSetAlpha(g, gr->opacity());
-		CGContextDrawLinearGradient(g, grad, CGPointMake(gr->start().x, gr->start().y), CGPointMake(gr->end().x, gr->end().y),
+		CGContextDrawLinearGradient(g, gradient_of(*gr), CGPointMake(gr->start().x, gr->start().y), CGPointMake(gr->end().x, gr->end().y),
 		                            kCGGradientDrawsBeforeStartLocation | kCGGradientDrawsAfterEndLocation);
-		CGGradientRelease(grad);
-		CGColorSpaceRelease(cs);
 	}
 	CGContextRestoreGState(g);
 }
@@ -596,6 +611,17 @@ std::wstring glow_key(std::wstring_view shape_key, const Color &c, float radius)
 	return std::wstring(shape_key) + b;
 }
 
+// Whether the glows kept, with one more of `pixels` pixels, are too many: more than 512, or more than kGlowPixels pixels
+// in all (a large window has large ones). They are then all made again as they are drawn.
+constexpr double kGlowPixels = 32.0 * 1024 * 1024;
+
+bool glows_too_many(const std::unordered_map<std::wstring, Glow> &glows, double pixels, double scale)
+{
+	if (glows.size() > 512) return true;
+	for (const auto &[k, g] : glows) pixels += g.size.width * g.size.height * scale * scale;
+	return pixels > kGlowPixels;
+}
+
 }  // namespace
 
 void Gfx::prepare_glow(std::wstring_view text, float em, const Color &c, float radius, Face face)
@@ -624,7 +650,7 @@ void Gfx::prepare_glow(std::wstring_view text, float em, const Color &c, float r
 	CGImageRef img = CGBitmapContextCreateImage(g);
 	CGContextRelease(g);
 	if (!img) return;
-	if (glows_.size() > 512) glows_.clear();
+	if (glows_too_many(glows_, static_cast<double>(CGImageGetWidth(img)) * CGImageGetHeight(img), scale)) glows_.clear();
 	Glow gl;
 	gl.image = std::shared_ptr<void>(img, [](void *p) { CGImageRelease(static_cast<CGImageRef>(p)); });
 	gl.offset = {-origin.x, -origin.y};

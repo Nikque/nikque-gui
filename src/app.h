@@ -62,6 +62,7 @@ inline constexpr UINT_PTR kTimerCom = 4;       // a book move after a short wait
 inline constexpr UINT_PTR kTimerClock = 5;     // the time of the game, every second
 inline constexpr UINT_PTR kTimerNextGame = 6;  // the next game of the computer against itself
 inline constexpr UINT_PTR kTimerSave = 7;      // the end of the main engine saving its book is looked for (watch_save)
+inline constexpr UINT_PTR kTimerLoadBox = 8;   // the box saying a file saved on the way was not loaded (after the lines are read)
 
 // menu commands
 namespace cmd {
@@ -468,6 +469,10 @@ public:
 	std::chrono::steady_clock::time_point save_t0_{};
 	long long save_shown_s_ = -1;       // the seconds of the save shown in the log row
 	std::function<void()> after_save_;
+	// what the main engine said of the save while it ended: an ERROR line, "@save ok=<0|1>" (-1: not said)
+	bool save_error_line_ = false;
+	int save_said_ = -1;
+	bool book_save_failed_ = false;     // the last save of the book as the main engine ended failed (or its end was not normal)
 	bool closing_ = false;              // the window closes (WM_CLOSE): after the save of the book when there is one
 	BookPeek book_peek_;           // the book file looked up while the main engine reads it
 	unsigned book_peek_generation_ = 0;  // answers of a lookup started before are not taken
@@ -496,6 +501,18 @@ public:
 	// book learning on the main engine
 	bool learning_ = false;
 	int learn_end_id_ = 0;
+	// "book load" of a file saved on the way, before the learning goes on from it (continue_learning): the learning
+	// starts when the engine has said the file was loaded ("@load ok=1", then the marker "echo M<load_end_id_>")
+	struct LoadWait {
+		int end_id = 0;          // 0: none
+		int said = -1;           // "@load ok=<0|1>" (-1: not said: an engine before it)
+		bool error = false;      // an ERROR line came meanwhile
+		std::wstring file;
+		std::string command;     // the learning to go on with (empty: the file is only loaded)
+		std::string started;     // last_started of the learning, kept as it was
+	} load_wait_;
+	void load_answered(bool ended);  // the marker after "book load" came (or the engine ended): the learning, or why not
+	std::wstring load_box_;          // the text of the box of kTimerLoadBox
 	bool learn_replaces_book_ = false;  // the command may replace the book file: the file is not looked up until it ends
 	bool learn_options_waiting_ = false;  // the learning settings changed while it learned: sent when it has ended
 	unsigned learn_options_sent_ = 0;     // those sent to the main engine since it started (a bit each, in the order of the window)
@@ -585,6 +602,19 @@ public:
 		bool can_open = false;
 	};
 	std::vector<TreeRow> tree_rows_;  // as drawn
+	// the lines of the tree, depth first, as made last (draw_tree_tab): kept while the root, the open nodes and the
+	// analyses (the cache's generation) are the same, so that a scroll or the mouse does not make them again
+	struct TreeLine {
+		int parent = -1;              // the line of the move before (-1: a move from the root)
+		int depth = 0;
+		int side = kBlack;            // the side that plays the move
+		const MoveEval *m = nullptr;  // nullptr: the book analysis of the position is awaited / not in the book
+		bool link = false, open = false, none = false;
+	};
+	std::vector<TreeLine> tree_lines_;
+	std::optional<PosKey> tree_lines_root_;  // none: to be made
+	std::set<std::vector<int>> tree_lines_open_;
+	std::uint64_t tree_lines_generation_ = 0;
 
 	// one background job at a time (work on the list, the search of a line); its end runs on the window's thread
 	ng::jthread task_;
@@ -843,12 +873,20 @@ public:
 	std::wstring pick_save(const wchar_t *filter, const wchar_t *ext, const std::wstring &name, const std::wstring &title = {});
 	// a name for the engine (role 0 main, 2 tools); a name the engine cannot take goes through the temporary
 	// folder: a file read is copied there, a file written is moved to its place when the job ends
-	enum class FileUse { Read, Write, Rewrite };
+	// (Replace: a file the job writes whole, always written in the temporary folder and put in the place of the file
+	// only when the job has ended well)
+	enum class FileUse { Read, Write, Rewrite, Replace };
 	std::optional<std::string> engine_path_or_say(const std::wstring &path, FileUse use, int role);
-	void finish_moves(int role);
+	std::optional<std::string> replace_path_or_say(const std::wstring &path, int role);
+	// `ended_well`: the job ended by its end (not stopped, the engine not lost)
+	void finish_moves(int role, bool ended_well = true);
+	void job_error(int role);  // the job said an error: the files it replaces stay as they are
 	struct PendingMove {
 		std::wstring from, to;
 		int role;
+		bool replace = false;  // FileUse::Replace
+		bool failed = false;   // the job said an error
+		std::wstring also_from, also_to;  // moved first, with it (the players of a WThor file)
 	};
 	std::vector<PendingMove> moves_after_job_;
 	int temp_files_ = 0;
@@ -903,6 +941,7 @@ public:
 	void save_kept();
 	void list_from_book();
 	void list_book_written(bool add, bool ok);
+	std::wstring book_lines_file(int id) const;  // the file of the book lines asked with request `id` (temporary folder)
 	bool ask_book_lines(int loss, int depth, int n, bool add);
 	void list_job_script(const std::wstring &label, std::function<void(GameList &)> work);
 
@@ -917,6 +956,10 @@ public:
 	void play_line(const std::string &line);
 	bool start_play_engine();
 	void clock_switch();
+	// the time of the side whose clock runs, now: true when it has run out (the game then stops: clock_out); asked
+	// before a move is taken, so that a move after the end of the time is not played
+	bool clock_ran_out();
+	void clock_out(int side);
 	void clock_tick();
 	void game_end_check();
 	void play_command(int id);

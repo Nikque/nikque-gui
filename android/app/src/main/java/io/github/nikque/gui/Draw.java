@@ -19,6 +19,8 @@ import android.util.SparseArray;
 import android.view.SurfaceHolder;
 
 import java.io.FileOutputStream;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Locale;
 
 final class Draw {
@@ -48,11 +50,19 @@ final class Draw {
 
 	// ---- the frame
 
-	static void resize(int w, int h) {
-		if (frame != null && frame.getWidth() == w && frame.getHeight() == h) return;
-		frame = Bitmap.createBitmap(Math.max(1, w), Math.max(1, h), Bitmap.Config.ARGB_8888);
+	// false: the picture of that size cannot be made (memory); the one before stays
+	static boolean resize(int w, int h) {
+		if (frame != null && frame.getWidth() == w && frame.getHeight() == h) return true;
+		final Bitmap made;
+		try {
+			made = Bitmap.createBitmap(Math.max(1, w), Math.max(1, h), Bitmap.Config.ARGB_8888);
+		} catch (OutOfMemoryError | IllegalArgumentException e) {
+			return false;
+		}
+		frame = made;
 		frameCanvas = new Canvas(frame);
 		canvas = frameCanvas;
+		return true;
 	}
 
 	static void beginFrame() {
@@ -82,8 +92,16 @@ final class Draw {
 	}
 
 	// a frame drawn into a picture of its own, for a file
+	// (without memory for it: drawn into the frame, which is drawn again before it is shown, and endImage says false)
 	static void beginImage() {
-		image = Bitmap.createBitmap(frame.getWidth(), frame.getHeight(), Bitmap.Config.ARGB_8888);
+		image = null;
+		canvas = frameCanvas;
+		if (frame == null) return;
+		try {
+			image = Bitmap.createBitmap(frame.getWidth(), frame.getHeight(), Bitmap.Config.ARGB_8888);
+		} catch (OutOfMemoryError | IllegalArgumentException e) {
+			return;
+		}
 		canvas = new Canvas(image);
 	}
 
@@ -107,8 +125,20 @@ final class Draw {
 		paint.setColor(argb);
 	}
 
+	// the shaders of the gradients, made once for the same points and stops (the same gradients are drawn in every frame);
+	// when KEPT_SHADERS are kept, they are all made again as they are drawn
+	private static final int KEPT_SHADERS = 256;
+	private static final HashMap<String, LinearGradient> shaders = new HashMap<>();
+
 	static void gradient(float x0, float y0, float x1, float y1, int[] colors, float[] positions, float opacity) {
-		paint.setShader(new LinearGradient(x0, y0, x1, y1, colors, positions, Shader.TileMode.CLAMP));
+		final String key = x0 + "," + y0 + "," + x1 + "," + y1 + "," + Arrays.toString(colors) + Arrays.toString(positions);
+		LinearGradient s = shaders.get(key);
+		if (s == null) {
+			if (shaders.size() >= KEPT_SHADERS) shaders.clear();
+			s = new LinearGradient(x0, y0, x1, y1, colors, positions, Shader.TileMode.CLAMP);
+			shaders.put(key, s);
+		}
+		paint.setShader(s);
 		paint.setColor(0xff000000);
 		paint.setAlpha(Math.round(opacity * 255));
 	}

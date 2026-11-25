@@ -318,7 +318,11 @@ void Gfx::resize()
 	const AndroidState &s = android_state();
 	const unsigned w = static_cast<unsigned>(std::max(1, s.width)), h = static_cast<unsigned>(std::max(1, s.height));
 	if (impl_->sized && w == width_ && h == height_) return;
-	call(DRAW("resize", "(II)V"), static_cast<jint>(w), static_cast<jint>(h));
+	// (false: no picture of that size, for want of memory: nothing is drawn until a later call makes one)
+	if (jni()->CallStaticBooleanMethod(draw_class(), DRAW("resize", "(II)Z"), static_cast<jint>(w), static_cast<jint>(h)) == JNI_FALSE) {
+		impl_->sized = false;
+		return;
+	}
 	impl_->sized = true;
 	width_ = w;
 	height_ = h;
@@ -457,6 +461,17 @@ std::wstring glow_key(std::wstring_view shape_key, const Color &c, float radius)
 	return std::wstring(shape_key) + b;
 }
 
+// Whether the glows kept, with one more of `pixels` pixels, are too many: more than 512, or more than kGlowPixels pixels
+// in all (a large window has large ones). They are then all made again as they are drawn.
+constexpr double kGlowPixels = 32.0 * 1024 * 1024;
+
+bool glows_too_many(const std::unordered_map<std::wstring, Glow> &glows, double pixels)
+{
+	if (glows.size() > 512) return true;
+	for (const auto &[k, g] : glows) pixels += g.size.width * g.size.height;
+	return pixels > kGlowPixels;
+}
+
 }  // namespace
 
 void Gfx::prepare_glow(std::wstring_view text, float em, const Color &c, float radius, Face face)
@@ -473,7 +488,7 @@ void Gfx::prepare_glow(std::wstring_view text, float em, const Color &c, float r
 	const int id = jni()->CallStaticIntMethod(draw_class(), DRAW("glow", "(IIIFFIF)I"), s.geom->id, static_cast<jint>(w), static_cast<jint>(h),
 	                                          origin.x, origin.y, argb(c), radius);
 	if (!id) return;
-	if (glows_.size() > 512) glows_.clear();
+	if (glows_too_many(glows_, static_cast<double>(w) * h)) glows_.clear();
 	Glow gl;
 	gl.image = std::shared_ptr<void>(new int(id), [](void *p) {
 		int *n = static_cast<int *>(p);

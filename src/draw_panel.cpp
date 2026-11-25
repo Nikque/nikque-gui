@@ -7,6 +7,7 @@
 #include <optional>
 #include <set>
 #include <span>
+#include <utility>
 
 #include "app.h"
 #include "lang.h"
@@ -80,7 +81,7 @@ std::optional<int> black_value(const App &app, int i)
 		const int e = 64 - b - w;
 		return b > w ? b - w + e : b < w ? b - w - e : 0;
 	}
-	const PosInfo *info = app.cache_.peek(p);
+	const PosInfo *info = std::as_const(app.cache_).peek(p);
 	if (!info) return std::nullopt;
 	int best = -999;
 	for (const auto &m : info->moves) {
@@ -95,7 +96,7 @@ std::optional<int> black_value(const App &app, int i)
 int move_stage(const App &app, int i)
 {
 	if (i < 0 || i >= app.game_.size()) return -1;
-	const PosInfo *info = app.cache_.peek(app.game_.at(i));
+	const PosInfo *info = std::as_const(app.cache_).peek(app.game_.at(i));
 	if (!info) return -1;
 	const MoveEval *m = info->find(app.game_.moves()[i]);
 	if (!m || !m->book_row) return -1;
@@ -238,7 +239,7 @@ void draw_moves_table(App &app, const Theme &th)
 
 	app.row_rects_.clear();
 	const Position &p = app.game_.now();
-	const PosInfo *info = app.cache_.peek(p);
+	const PosInfo *info = std::as_const(app.cache_).peek(p);
 	if (!info || info->moves.empty()) {
 		TextFormat *f = gx.text(L.font, false, Align::Center);
 		gx.draw_text(p.game_over() ? lang::t("table.game_over") : lang::t("table.wait"), f,
@@ -250,6 +251,10 @@ void draw_moves_table(App &app, const Theme &th)
 	app.table_scroll_ = std::clamp(app.table_scroll_, 0, std::max(0, static_cast<int>(rows.size()) - fit));
 	TextFormat *f = gx.text(L.font, false, Align::Center, Face::Number);
 	TextFormat *fs = gx.text(L.font_s, false, Align::Center);
+	// a value still to come: not after a hint that ended without the move, nor after a book analysis that ended with an
+	// error (as the board: App::cell_view)
+	const bool search_waits = app.eng_[1].alive && !(info->search_done && info->search_level == app.level_);
+	const bool book_waits = app.use_book_ && app.eng_[0].alive && !info->book_done && !info->book_failed;
 	float y = T.top + rh;
 	dc->push_clip(rect_f(T.left, T.top + rh, T.right, T.bottom));
 	for (int i = app.table_scroll_; i < static_cast<int>(rows.size()) && y < T.bottom; ++i, y += rh) {
@@ -277,9 +282,11 @@ void draw_moves_table(App &app, const Theme &th)
 			case Column::Value:
 				if (hv) {
 					std::wstring s = signed_value(v);
-					if (!(app.use_book_ && m.in_book) && m.searched && m.bound) s.insert(s.begin(), static_cast<wchar_t>(m.bound));
+					// the bound of the value shown ('<', '>'): of the value that came back when it did
+					const char bound = improved ? app.line_[cur].played_bound : shown_bound(m, app.use_book_);
+					if (bound) s.insert(s.begin(), static_cast<wchar_t>(bound));
 					gx.draw_text(s, f, r, th.text);
-				} else {
+				} else if (search_waits || book_waits) {
 					gx.draw_text(L"…", f, r, th.text_dim);
 				}
 				break;
@@ -302,7 +309,7 @@ void draw_moves_table(App &app, const Theme &th)
 					gx.draw_text(s, fs, rect_f(r.left + 2 * rr + 8 * L.scale, r.top, r.right, r.bottom), th.text);
 				} else if (!app.precision_ && app.use_book_ && m.in_book) {
 					gx.draw_text(L"\x2014", f, r, th.text_dim);  // (not computed: the setting)
-				} else if (app.use_book_ && app.eng_[0].alive && !info->book_done) {
+				} else if (book_waits) {
 					gx.draw_text(L"…", f, r, th.text_dim);
 				}
 				break;
@@ -340,7 +347,7 @@ void draw_book_tab(App &app, const Theme &th)
 	const RectF T = L.table;
 	TextFormat *f = gx.text(L.font, false);
 	TextFormat *fm = gx.text(L.font, false, Align::Leading, Face::Number);
-	const PosInfo *info = app.cache_.peek(app.game_.now());
+	const PosInfo *info = std::as_const(app.cache_).peek(app.game_.now());
 	float y = T.top;
 	const float rh = L.row;
 	app.missing_rects_.clear();
@@ -420,8 +427,12 @@ void draw_record_tab(App &app, const Theme &th)
 	app.record_rects_.clear();
 	const float cw = std::round(L.font * 4.2f), rh = L.row;
 	const int per_row = std::max(1, static_cast<int>((T.right - T.left) / cw));
+	// the rows from the one the wheel has scrolled to (the last row is not scrolled above the bottom)
+	const int rows = (app.game_.size() + per_row - 1) / per_row;
+	const int fit = std::max(1, static_cast<int>((T.bottom - T.top) / rh));
+	app.table_scroll_ = std::clamp(app.table_scroll_, 0, std::max(0, rows - fit));
 	int shown = 0;
-	for (int i = 0; i < app.game_.size(); ++i) {
+	for (int i = app.table_scroll_ * per_row; i < app.game_.size(); ++i) {
 		const int mv = app.game_.moves()[i];
 		const int col = shown % per_row, row = shown / per_row;
 		const RectF r{T.left + col * cw, T.top + row * rh, T.left + (col + 1) * cw, T.top + (row + 1) * rh};
@@ -638,22 +649,19 @@ void draw_tree_tab(App &app, const Theme &th)
 	}
 
 	// the lines of the tree, depth first; a line keeps the line of the move before it, not the moves from the root
-	// (those are made for the rows seen only: a deep tree has many thousand lines)
-	struct Line {
-		int parent = -1;              // the line of the move before (-1: a move from the root)
-		int depth = 0;
-		int side = kBlack;            // the side that plays the move
-		const MoveEval *m = nullptr;  // nullptr: the book analysis of the position is awaited / not in the book
-		bool link = false, open = false, none = false;
-	};
-	std::vector<Line> lines;
+	// (those are made for the rows seen only: a deep tree has many thousand lines). They are kept (App::tree_lines_)
+	// and made again only when the root, the open nodes or the cache changed: a line points into the cache, which
+	// changes its generation before anything in it may change
+	using Line = App::TreeLine;
+	std::vector<Line> &lines = app.tree_lines_;
+	const AnalysisCache &cache = app.cache_;  // (the peek that cannot change it: it keeps its generation)
 	constexpr size_t kMaxLines = 20000;
 	auto value_of = [](const MoveEval &m) { return m.in_book ? m.book_value : m.leaf_value; };
 	std::vector<int> path;             // the moves from the root to the position built
 	std::vector<const MoveEval *> ms;  // the moves of the positions on the way from the root, a part for each
 	auto build = [&](auto &&self, const Position &p, int parent, int depth) -> void {
 		if (lines.size() >= kMaxLines || p.game_over()) return;
-		const PosInfo *info = app.cache_.peek(p);
+		const PosInfo *info = cache.peek(p);
 		if (!info || !info->values_done) {
 			lines.push_back({parent, depth, p.side, nullptr});
 			return;
@@ -701,7 +709,16 @@ void draw_tree_tab(App &app, const Theme &th)
 	LARGE_INTEGER t_build;
 	QueryPerformanceCounter(&t_build);
 #endif
-	build(build, app.tree_base_.now(), -1, 0);
+	const PosKey root = key_of(app.tree_base_.now());
+	const bool same = app.tree_lines_root_ == root && app.tree_lines_generation_ == cache.generation() &&
+	                  app.tree_lines_open_ == app.tree_open_;
+	if (!same) {
+		lines.clear();
+		build(build, app.tree_base_.now(), -1, 0);
+		app.tree_lines_root_ = root;
+		app.tree_lines_open_ = app.tree_open_;
+		app.tree_lines_generation_ = cache.generation();
+	}
 #ifdef NG_MEASURE
 	measure::trace("TREE rows=" + std::to_string(lines.size()) + " open=" + std::to_string(app.tree_open_.size()) +
 	               " build_ms=" + std::to_string(measure::ms_since(t_build)));

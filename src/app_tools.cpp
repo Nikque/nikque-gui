@@ -56,6 +56,7 @@ constexpr const wchar_t *kBooks = L"*.dat;*.dev*;*.store;*.mrg;*.enh;*.fill*;*.l
 
 std::optional<std::string> App::engine_path_or_say(const std::wstring &path, FileUse use, int role)
 {
+	if (use == FileUse::Replace) return replace_path_or_say(path, role);
 	if (auto p = engine_path(path, use != FileUse::Write)) return p;
 	// a drive without short names: the file goes through the temporary folder (the extension is kept: it
 	// tells the engine the form of the file)
@@ -78,16 +79,81 @@ std::optional<std::string> App::engine_path_or_say(const std::wstring &path, Fil
 	return tp;
 }
 
-// after a job of the engine: the files it wrote in the temporary folder go to their places
-void App::finish_moves(int role)
+// A file the job writes whole: the engine writes it in a folder of its own in the temporary folder (a new file: the
+// engine adds to a file already there), and it takes the place of the file only when the job has ended well
+// (finish_moves); the file there stays as it was when the job is not started, is stopped or says an error. A WThor
+// file goes with the players of its folder (WTHOR.JOU), which the engine reads and adds to.
+std::optional<std::string> App::replace_path_or_say(const std::wstring &path, int role)
+{
+	const size_t slash = path.find_last_of(L"\\/"), dot = path.find_last_of(L'.');
+	std::wstring ext = dot != std::wstring::npos && (slash == std::wstring::npos || dot > slash) ? path.substr(dot) : L"";
+	const std::wstring dir = path_join(temp_dir_, L"r" + std::to_wstring(++temp_files_));
+	const std::wstring tmp = path_join(dir, L"out" + ext);
+	std::optional<std::string> tp;
+	if (make_dir(dir) || dir_exists(dir)) tp = engine_path(tmp, false);
+	if (!tp) {
+		message(lang::f("err.engine_path", {path}), MB_ICONWARNING);
+		return std::nullopt;
+	}
+	PendingMove m{tmp, path, role, true};
+	for (auto &c : ext) c = static_cast<wchar_t>(std::towlower(c));
+	if (ext == L".wtb") {
+		const std::wstring players = path_join(slash == std::wstring::npos ? std::wstring() : path.substr(0, slash), L"WTHOR.JOU");
+		if (file_exists(players)) {
+			const std::wstring here = path_join(dir, L"WTHOR.JOU");
+			if (!copy_file(players, here)) {
+				message(lang::f("err.engine_path", {path}), MB_ICONWARNING);
+				return std::nullopt;
+			}
+			m.also_from = here;
+			m.also_to = players;
+		}
+	}
+	moves_after_job_.push_back(std::move(m));
+	return tp;
+}
+
+void App::job_error(int role)
+{
+	for (auto &m : moves_after_job_)
+		if (m.role == role && m.replace) m.failed = true;
+}
+
+namespace {
+
+// `from` put in the place of `to`: renamed when both are on the same drive, else copied next to `to` and that copy
+// renamed over it (`to` is never left half written). Taken away from its place when it could be.
+bool put_in_place(const std::wstring &from, const std::wstring &to)
+{
+	if (move_file(from, to, false)) return true;
+	const std::wstring part = to + L".part" + std::to_wstring(process_id());
+	if (!copy_file(from, part) || !move_file(part, to, false)) {
+		delete_file(part);
+		return false;
+	}
+	delete_file(from);  // (one left in the temporary folder goes with it when the program ends)
+	return true;
+}
+
+}  // namespace
+
+// after a job of the engine: the files it wrote in the temporary folder go to their places (a file that replaces
+// another only when the job has ended well and said no error)
+void App::finish_moves(int role, bool ended_well)
 {
 	for (auto it = moves_after_job_.begin(); it != moves_after_job_.end();) {
 		if (it->role != role) {
 			++it;
 			continue;
 		}
-		if (path_exists(it->from)) {
-			const bool ok = move_file(it->from, it->to, true);
+		if (it->replace && (!ended_well || it->failed)) {
+			if (path_exists(it->from)) log(lang::f("log.file_not_replaced", {it->to}));
+			delete_file(it->from);
+			if (!it->also_from.empty()) delete_file(it->also_from);
+		} else if (path_exists(it->from)) {
+			// (the players first: their list only grows, so it also suits the games that are there)
+			bool ok = it->also_from.empty() || !path_exists(it->also_from) || put_in_place(it->also_from, it->also_to);
+			ok = ok && put_in_place(it->from, it->to);
 			log(lang::f(ok ? "log.file_moved" : "log.file_not_moved", {it->to, it->from}));
 		}
 		it = moves_after_job_.erase(it);
@@ -162,6 +228,7 @@ void App::tool_line(const std::string &line)
 		if (tool_busy_ && m == tool_end_id_) tool_ended(false);
 		return;
 	}
+	if (line.starts_with("ERROR")) job_error(2);
 	if (line.starts_with("New book")) return;  // the empty book the tool engine makes for itself
 	log(lang::t("engine.tool") + L": " + engine_text(line));
 }
@@ -174,7 +241,7 @@ void App::tool_ended(bool stopped)
 	log(lang::f(stopped ? "tool.stopped" : "tool.ended", {tool_label_, std::to_wstring(s / 60), std::to_wstring(s % 60)}));
 	eng_[2].proc.close(stopped ? 0 : 2000);
 	eng_[2].alive = false;
-	finish_moves(2);
+	finish_moves(2, !stopped);
 	delete_file(path_join(temp_dir_, L"nobook-tool.dat"));
 	update_menu();
 	invalidate();
@@ -261,7 +328,8 @@ void App::base_command(int id)
 		if (!p) return std::nullopt;
 		return std::pair{f, *p};
 	};
-	// the engine adds to a file already there: the file the dialog confirmed to replace is taken away first
+	// the engine adds to a file already there: it writes a new one, which takes the place of the file the dialog
+	// confirmed to replace when the job has ended well
 	auto out_file = [&](const std::wstring &title, const std::wstring &in, const wchar_t *pat, const char *fkey,
 	                    const wchar_t *ext) -> std::optional<std::string> {
 		const std::wstring flt = file_filter(fkey, pat);
@@ -271,11 +339,7 @@ void App::base_command(int id)
 			message(t("base.same_file"), MB_ICONWARNING);
 			return std::nullopt;
 		}
-		if (file_exists(f) && !delete_file(f)) {
-			message(lang::f("base.cannot_replace", {f}), MB_ICONWARNING);
-			return std::nullopt;
-		}
-		return engine_path_or_say(f, FileUse::Write, 2);
+		return engine_path_or_say(f, FileUse::Replace, 2);
 	};
 	auto empties = [&](const std::wstring &title) {
 		return ask_number(hwnd_, title, t("base.empties"), ini_.get_int("tools", "base_empties", 24, 0, 60), 0, 60, t("base.empties.note"));
@@ -377,12 +441,8 @@ bool App::book_job(int id, std::string *command, std::wstring *warning)
 		const std::wstring f = pick_save(flt.c_str(), L"txt", ex ? L"book-export.txt" : L"book-lines.txt",
 		                                 t(ex ? "menu.learn.export" : "menu.learn.extract"));
 		if (f.empty()) return false;
-		// the engine adds to a file already there (extract): the file confirmed to be replaced goes first
-		if (file_exists(f) && !delete_file(f)) {
-			message(lang::f("base.cannot_replace", {f}), MB_ICONWARNING);
-			return false;
-		}
-		auto p = engine_path_or_say(f, FileUse::Write, 0);
+		// (the file confirmed to be replaced stays until the job has ended well: the engine writes a new one)
+		auto p = engine_path_or_say(f, FileUse::Replace, 0);
 		if (!p) return false;
 		*command = std::string(ex ? "book export " : "book extract ") + *p;
 		return true;

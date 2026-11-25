@@ -15,8 +15,7 @@ bool EngineProcess::start(const std::wstring &exe, const std::wstring &args, con
 
 	SECURITY_ATTRIBUTES sa{sizeof sa, nullptr, TRUE};
 	HANDLE in_read = nullptr, out_write = nullptr;
-	// send() writes on the thread of the window and waits while the pipe is full: a megabyte for the commands (with
-	// the default, some 4 KB, an engine that stopped reading held the window after a few positions, and its close)
+	// (the commands are written by a thread of their own, which waits while the pipe is full: a megabyte for them)
 	if (!CreatePipe(&in_read, &in_write_, &sa, 1 << 20) || !CreatePipe(&out_read_, &out_write, &sa, 1 << 16)) {
 		if (error) *error = L"CreatePipe";
 		close();
@@ -74,18 +73,40 @@ bool EngineProcess::start(const std::wstring &exe, const std::wstring &args, con
 	process_ = pi.hProcess;
 	read_ended_ = false;
 	reader_ = std::thread([this] { read_loop(); });
+	writer_ = std::thread([this] { write_loop(); });
 	return true;
 }
 
-bool EngineProcess::send(std::string_view text)
+bool EngineProcess::write_all(std::string_view text)
 {
-	if (!in_write_) return false;
 	DWORD done = 0;
 	while (!text.empty()) {
 		if (!WriteFile(in_write_, text.data(), static_cast<DWORD>(text.size()), &done, nullptr)) return false;
 		text.remove_prefix(done);
 	}
 	return true;
+}
+
+void EngineProcess::close_input()
+{
+	if (in_write_) {
+		CloseHandle(in_write_);
+		in_write_ = nullptr;
+	}
+}
+
+void EngineProcess::stop_writer()
+{
+	if (writer_.joinable()) {
+		end_input();
+		// (the process has ended: a write the thread waits on fails; this stops one that would wait all the same)
+		CancelSynchronousIo(writer_.native_handle());
+		writer_.join();
+	}
+	close_input();  // (a start that failed before the thread)
+	std::lock_guard lock(write_mutex_);
+	to_write_.clear();
+	input_closing_ = write_failed_ = false;
 }
 
 void EngineProcess::take_lines(std::vector<std::string> &out)
@@ -112,12 +133,7 @@ void EngineProcess::read_loop()
 			if (buf[k] != '\n' && buf[k] != '\r') continue;
 			partial_.append(buf + i, k - i);
 			i = k + 1;
-			// the engine's prompt ">" may come before a line
-			size_t a = 0;
-			while (a < partial_.size() && (partial_[a] == '>' || partial_[a] == ' ')) ++a;
-			// ... and after one ("Sorting book...done>")
-			while (partial_.size() > a && partial_.back() == '>') partial_.pop_back();
-			if (a < partial_.size()) batch.emplace_back(partial_.substr(a));
+			add_line(batch, partial_);
 			partial_.clear();
 		}
 		partial_.append(buf + i, n - i);
@@ -132,17 +148,21 @@ void EngineProcess::read_loop()
 			if (was_empty && notify_) PostMessageW(notify_, msg_, tag_, 0);
 		}
 	}
+	// the last line, when the engine ended without ending it (its error, as Edax without its eval file)
+	add_line(batch, partial_);
+	partial_.clear();
+	if (!batch.empty()) {
+		std::lock_guard lock(mutex_);
+		for (auto &l : batch) lines_.push_back(std::move(l));
+	}
 	read_ended_ = true;
 	if (notify_) PostMessageW(notify_, msg_, tag_, 1);  // the output has ended
 }
 
 void EngineProcess::quit()
 {
-	if (process_ && in_write_ && WaitForSingleObject(process_, 0) == WAIT_TIMEOUT) send("quit\n");
-	if (in_write_) {
-		CloseHandle(in_write_);
-		in_write_ = nullptr;
-	}
+	if (process_ && WaitForSingleObject(process_, 0) == WAIT_TIMEOUT) send("quit\n");  // (once: the input then closes)
+	end_input();
 }
 
 bool EngineProcess::exited() const
@@ -152,6 +172,13 @@ bool EngineProcess::exited() const
 	return WaitForSingleObject(process_, 0) != WAIT_TIMEOUT && (read_ended_ || !reader_.joinable());
 }
 
+std::optional<int> EngineProcess::exit_code() const
+{
+	DWORD code = 0;
+	if (!process_ || WaitForSingleObject(process_, 0) != WAIT_OBJECT_0 || !GetExitCodeProcess(process_, &code)) return std::nullopt;
+	return static_cast<int>(code);
+}
+
 void EngineProcess::close(unsigned wait_ms)
 {
 	quit();
@@ -159,6 +186,7 @@ void EngineProcess::close(unsigned wait_ms)
 		TerminateProcess(process_, 1);
 		WaitForSingleObject(process_, 5000);
 	}
+	stop_writer();
 	if (reader_.joinable()) {
 		// the pipe closes when the process ends; the thread then stops
 		if (!process_) CancelSynchronousIo(reader_.native_handle());

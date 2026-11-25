@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <optional>
 #include <random>
+#include <utility>
 
 #include "app.h"
 #include "form.h"
@@ -122,7 +123,7 @@ void App::com_think()
 	const bool book_skipped = com_no_book_set_ && com_no_book_ == key;
 	if (opening_ != Opening::Search && use_book_ && p.ply() < opening_until_ && eng_[0].alive && !learning_ && !book_skipped) {
 		const PosInfo *info = cache_.peek(p);
-		if (!info || !info->values_done) {
+		if (!info || (!info->values_done && !info->book_failed)) {
 			com_waiting_book_ = true;  // com_think again when the answer has come (or the timer)
 			set_timer(kTimerCom, kBookWaitMs);
 			return;
@@ -195,6 +196,7 @@ void App::com_timer()
 void App::com_played(int sq)
 {
 	if (!game_.now().can_play(sq)) return;
+	if (clock_ran_out()) return;  // (a move after the end of the time is not played)
 	com_once_ = false;
 	game_.play(sq);
 	selected_sq_ = kNoMove;
@@ -260,9 +262,15 @@ void App::set_play_mode(PlayMode m, int games)
 void App::clock_switch()
 {
 	const auto now = std::chrono::steady_clock::now();
-	if (clock_side_ >= 0)
-		clock_left_ms_[clock_side_] -= std::chrono::duration_cast<std::chrono::milliseconds>(now - clock_t0_).count();
+	const int was = clock_side_;
+	if (was >= 0) clock_left_ms_[was] -= std::chrono::duration_cast<std::chrono::milliseconds>(now - clock_t0_).count();
 	clock_t0_ = now;
+	// the side whose clock ran has used its time (a move taken without clock_ran_out, after the last tick): that side
+	// has lost on time, not the other one
+	if (was >= 0 && clock_left_ms_[was] <= 0 && game_clock_ && play_mode_ != PlayMode::Free) {
+		clock_out(was);
+		return;
+	}
 	const Position &p = game_.now();
 	if (!game_clock_ || play_mode_ == PlayMode::Free || p.game_over()) {
 		clock_side_ = -1;
@@ -279,16 +287,31 @@ void App::clock_tick()
 		kill_timer(kTimerClock);
 		return;
 	}
+	if (clock_ran_out()) return;
+	paint_bar();
+}
+
+bool App::clock_ran_out()
+{
+	if (clock_side_ < 0) return false;
 	const long long left = clock_left_ms_[clock_side_] -
 	                       std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - clock_t0_).count();
-	if (left <= 0) {
-		log(lang::t(clock_side_ == kBlack ? "play.time_out_black" : "play.time_out_white"));
-		clock_switch();
-		clock_side_ = -1;
-		set_play_mode(PlayMode::Free);
-		return;
+	if (left > 0) return false;
+	clock_out(clock_side_);
+	return true;
+}
+
+void App::clock_out(int side)
+{
+	if (clock_side_ == side) {  // (its time is counted up to now)
+		const auto now = std::chrono::steady_clock::now();
+		clock_left_ms_[side] -= std::chrono::duration_cast<std::chrono::milliseconds>(now - clock_t0_).count();
+		clock_t0_ = now;
 	}
-	paint_bar();
+	clock_side_ = -1;
+	kill_timer(kTimerClock);
+	log(lang::t(side == kBlack ? "play.time_out_black" : "play.time_out_white"));
+	set_play_mode(PlayMode::Free);
 }
 
 void App::game_end_check()
@@ -508,6 +531,10 @@ bool play_timer(App &app, UINT_PTR id)
 	switch (id) {
 	case kTimerCom: app.com_timer(); return true;
 	case kTimerClock: app.clock_tick(); return true;
+	case kTimerLoadBox:  // (one time: a box is not shown while the lines of the engine are read)
+		app.kill_timer(kTimerLoadBox);
+		if (!app.load_box_.empty()) app.message(std::exchange(app.load_box_, std::wstring()), MB_ICONWARNING);
+		return true;
 	case kTimerNextGame:
 		app.kill_timer(kTimerNextGame);
 		if (app.play_mode_ == PlayMode::Engines && app.engine_games_left_ > 0) {

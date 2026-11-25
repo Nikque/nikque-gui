@@ -6,9 +6,13 @@
 
 #include "../app.h"
 
+#include <fnmatch.h>
+
 #include <cmath>
 #include <filesystem>
 #include <map>
+#include <string>
+#include <vector>
 
 #include "../lang.h"
 #include "mac_record.h"
@@ -428,6 +432,61 @@ int virtual_key(NSEvent *e)
 }
 @end
 
+// The kinds of files of an open panel, from the filter of the Windows version ("name\0*.txt;*.dev*\0...\0\0"): a list
+// under the panel chooses one, and only the files that match its patterns can be chosen ("*.*" and "*": all files).
+@interface NgFileKinds : NSObject <NSOpenSavePanelDelegate>
+@property(nonatomic, weak) NSOpenPanel *panel;
+@end
+
+@implementation NgFileKinds {
+	std::vector<std::vector<std::string>> _patterns;
+	NSInteger _chosen;
+}
+- (NSPopUpButton *)listFrom:(const wchar_t *)filter
+{
+	NSPopUpButton *list = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0, 0, 360, 26) pullsDown:NO];
+	for (const wchar_t *p = filter; p && *p;) {
+		const std::wstring name = p;
+		p += name.size() + 1;
+		if (!*p) break;
+		const std::wstring spec = p;
+		p += spec.size() + 1;
+		std::vector<std::string> pats;
+		for (size_t i = 0; i <= spec.size();) {
+			size_t e = spec.find(L';', i);
+			if (e == std::wstring::npos) e = spec.size();
+			if (e > i) pats.push_back(ng::narrow(spec.substr(i, e - i)));
+			i = e + 1;
+		}
+		_patterns.push_back(std::move(pats));
+		[list addItemWithTitle:ns(name)];
+	}
+	_chosen = 0;
+	list.target = self;
+	list.action = @selector(kindChosen:);
+	return list;
+}
+- (BOOL)empty
+{
+	return _patterns.empty();
+}
+- (void)kindChosen:(NSPopUpButton *)list
+{
+	_chosen = list.indexOfSelectedItem;
+	[self.panel validateVisibleColumns];
+}
+- (BOOL)panel:(id)sender shouldEnableURL:(NSURL *)url
+{
+	NSNumber *dir = nil;
+	[url getResourceValue:&dir forKey:NSURLIsDirectoryKey error:nil];
+	if (dir.boolValue || _chosen < 0 || _chosen >= static_cast<NSInteger>(_patterns.size())) return YES;
+	const char *name = url.lastPathComponent.UTF8String ?: "";
+	for (const std::string &p : _patterns[static_cast<size_t>(_chosen)])
+		if (p == "*" || p == "*.*" || fnmatch(p.c_str(), name, FNM_CASEFOLD) == 0) return YES;
+	return NO;
+}
+@end
+
 namespace ng {
 
 namespace {
@@ -513,13 +572,22 @@ void App::post(UINT msg) { post_message(hwnd_, msg); }
 
 bool App::window_enabled() const { return !ng_modal_open(); }
 
-std::wstring App::pick_open(const wchar_t *, const std::wstring &title)
+std::wstring App::pick_open(const wchar_t *filter, const std::wstring &title)
 {
 	NSOpenPanel *p = [NSOpenPanel openPanel];
 	p.canChooseFiles = YES;
 	p.canChooseDirectories = NO;
 	p.allowsMultipleSelection = NO;
 	if (!title.empty()) p.message = ns(title);
+	// (kept here until the panel has closed: the panel's delegate and the list's target are weak)
+	NgFileKinds *kinds __attribute__((objc_precise_lifetime)) = [[NgFileKinds alloc] init];
+	NSPopUpButton *list = [kinds listFrom:filter];
+	if (![kinds empty]) {
+		kinds.panel = p;
+		p.delegate = kinds;
+		p.accessoryView = list;
+		p.accessoryViewDisclosed = YES;
+	}
 	ng_modal_begin();
 	const NSModalResponse r = [p runModal];
 	ng_modal_end();
@@ -529,27 +597,32 @@ std::wstring App::pick_open(const wchar_t *, const std::wstring &title)
 
 std::wstring App::pick_save(const wchar_t *, const wchar_t *ext, const std::wstring &name, const std::wstring &title)
 {
-	NSSavePanel *p = [NSSavePanel savePanel];
-	const size_t slash = name.find_last_of(L"/");
-	if (slash != std::wstring::npos) {
-		p.directoryURL = [NSURL fileURLWithPath:ns(name.substr(0, slash)) isDirectory:YES];
-		p.nameFieldStringValue = ns(name.substr(slash + 1));
-	} else if (!name.empty()) {
-		p.nameFieldStringValue = ns(name);
-	}
-	if (!title.empty()) p.message = ns(title);
-	p.extensionHidden = NO;
-	ng_modal_begin();
-	const NSModalResponse r = [p runModal];
-	ng_modal_end();
-	if (r != NSModalResponseOK || !p.URL) return {};
-	std::wstring path = from_ns(p.URL.path);
-	// (a name without an extension gets the one of the kind of file)
-	if (ext && *ext) {
+	std::wstring at = name;
+	for (;;) {
+		NSSavePanel *p = [NSSavePanel savePanel];
+		const size_t slash = at.find_last_of(L"/");
+		if (slash != std::wstring::npos) {
+			p.directoryURL = [NSURL fileURLWithPath:ns(at.substr(0, slash)) isDirectory:YES];
+			p.nameFieldStringValue = ns(at.substr(slash + 1));
+		} else if (!at.empty()) {
+			p.nameFieldStringValue = ns(at);
+		}
+		if (!title.empty()) p.message = ns(title);
+		p.extensionHidden = NO;
+		ng_modal_begin();
+		const NSModalResponse r = [p runModal];
+		ng_modal_end();
+		if (r != NSModalResponseOK || !p.URL) return {};
+		std::wstring path = from_ns(p.URL.path);
+		if (!ext || !*ext) return path;
+		// (a name without an extension gets the one of the kind of file)
 		const size_t s = path.find_last_of(L"/"), dot = path.find_last_of(L'.');
-		if (dot == std::wstring::npos || (s != std::wstring::npos && dot < s)) path += L"." + std::wstring(ext);
+		if (!(dot == std::wstring::npos || (s != std::wstring::npos && dot < s))) return path;
+		path += L"." + std::wstring(ext);
+		// the panel asked about the name without the extension: a file of the name with it is asked about here
+		if (!ng::path_exists(path) || message(lang::f("file.replace_ask", {path}), MB_YESNO | MB_ICONWARNING) == IDYES) return path;
+		at = path;  // (no: the panel again, at that name)
 	}
-	return path;
 }
 
 }  // namespace ng

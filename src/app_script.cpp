@@ -137,7 +137,7 @@ bool App::script_condition() const
 		if (!show_eval_ || p.game_over()) return false;
 		const PosInfo *info = cache_.peek(p);
 		if (!info) return true;
-		const bool book = !use_book_ || !eng_[0].alive || learning_ || info->book_done;
+		const bool book = !use_book_ || !eng_[0].alive || learning_ || info->book_done || info->book_failed;
 		const bool search = !eng_[1].alive || (info->search_done && info->search_level == level_);
 		return !(book && search) || (tab_ == Tab::Tree && tree_waiting());
 	}

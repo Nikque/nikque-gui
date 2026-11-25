@@ -164,6 +164,9 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 		ReleaseCapture();
 		on_mouse_up(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
 		return 0;
+	case WM_CAPTURECHANGED:  // the mouse taken by another window (a box, Alt+Tab): no button-up comes, the drag ends here
+		if (reinterpret_cast<HWND>(lp) != hwnd) on_mouse_up(-1, -1);
+		return 0;
 	case WM_MOUSEMOVE:
 		on_mouse_move(GET_X_LPARAM(lp), GET_Y_LPARAM(lp));
 		return 0;

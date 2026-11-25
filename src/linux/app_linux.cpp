@@ -535,26 +535,31 @@ std::wstring App::pick_open(const wchar_t *filter, const std::wstring &title)
 
 std::wstring App::pick_save(const wchar_t *filter, const wchar_t *ext, const std::wstring &name, const std::wstring &title)
 {
-	GtkWidget *d = gtk_file_chooser_dialog_new(narrow(title.empty() ? lang::t("app.title") : title).c_str(), dialog_parent(),
-	                                           GTK_FILE_CHOOSER_ACTION_SAVE, g_dgettext("gtk30", "_Cancel"), GTK_RESPONSE_CANCEL,
-	                                           g_dgettext("gtk30", "_Save"), GTK_RESPONSE_ACCEPT, nullptr);
-	GtkFileChooser *fc = GTK_FILE_CHOOSER(d);
-	gtk_file_chooser_set_do_overwrite_confirmation(fc, TRUE);
-	add_filters(fc, filter);
-	const size_t slash = name.find_last_of(L'/');
-	if (slash != std::wstring::npos) {
-		gtk_file_chooser_set_current_folder(fc, narrow(name.substr(0, slash)).c_str());
-		gtk_file_chooser_set_current_name(fc, narrow(name.substr(slash + 1)).c_str());
-	} else if (!name.empty()) {
-		gtk_file_chooser_set_current_name(fc, narrow(name).c_str());
-	}
-	std::wstring path = run_chooser(d);
-	// (a name without an extension gets the one of the kind of file)
-	if (!path.empty() && ext && *ext) {
+	std::wstring at = name;
+	for (;;) {
+		GtkWidget *d = gtk_file_chooser_dialog_new(narrow(title.empty() ? lang::t("app.title") : title).c_str(), dialog_parent(),
+		                                           GTK_FILE_CHOOSER_ACTION_SAVE, g_dgettext("gtk30", "_Cancel"), GTK_RESPONSE_CANCEL,
+		                                           g_dgettext("gtk30", "_Save"), GTK_RESPONSE_ACCEPT, nullptr);
+		GtkFileChooser *fc = GTK_FILE_CHOOSER(d);
+		gtk_file_chooser_set_do_overwrite_confirmation(fc, TRUE);
+		add_filters(fc, filter);
+		const size_t slash = at.find_last_of(L'/');
+		if (slash != std::wstring::npos) {
+			gtk_file_chooser_set_current_folder(fc, narrow(at.substr(0, slash)).c_str());
+			gtk_file_chooser_set_current_name(fc, narrow(at.substr(slash + 1)).c_str());
+		} else if (!at.empty()) {
+			gtk_file_chooser_set_current_name(fc, narrow(at).c_str());
+		}
+		std::wstring path = run_chooser(d);
+		if (path.empty() || !ext || !*ext) return path;
+		// (a name without an extension gets the one of the kind of file)
 		const size_t s = path.find_last_of(L'/'), dot = path.find_last_of(L'.');
-		if (dot == std::wstring::npos || (s != std::wstring::npos && dot < s)) path += L"." + std::wstring(ext);
+		if (!(dot == std::wstring::npos || (s != std::wstring::npos && dot < s))) return path;
+		path += L"." + std::wstring(ext);
+		// the dialog asked about the name without the extension: a file of the name with it is asked about here
+		if (!path_exists(path) || message(lang::f("file.replace_ask", {path}), MB_YESNO | MB_ICONWARNING) == IDYES) return path;
+		at = path;  // (no: the dialog again, at that name)
 	}
-	return path;
 }
 
 }  // namespace ng

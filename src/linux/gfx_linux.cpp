@@ -50,6 +50,28 @@ namespace {
 
 cairo_t *C(const Canvas *c) { return static_cast<cairo_t *>(c->cg); }
 
+// The pattern of a gradient, made once for the same points and stops (the same gradients are drawn in every frame) and
+// kept; when kKeptPatterns are kept, they are all made again as they are drawn.
+constexpr size_t kKeptPatterns = 256;
+
+cairo_pattern_t *pattern_of(const Gradient &gr)
+{
+	static std::map<std::vector<double>, cairo_pattern_t *> kept;
+	std::vector<double> key{gr.start().x, gr.start().y, gr.end().x, gr.end().y};
+	for (const auto &st : gr.stops()) key.insert(key.end(), {st.position, st.color.r, st.color.g, st.color.b, st.color.a});
+	if (const auto it = kept.find(key); it != kept.end()) return it->second;
+	if (kept.size() >= kKeptPatterns) {
+		for (auto &[k, p] : kept) cairo_pattern_destroy(p);
+		kept.clear();
+	}
+	cairo_pattern_t *p = cairo_pattern_create_linear(gr.start().x, gr.start().y, gr.end().x, gr.end().y);
+	for (const auto &st : gr.stops())
+		cairo_pattern_add_color_stop_rgba(p, st.position, st.color.r, st.color.g, st.color.b, st.color.a);
+	cairo_pattern_set_extend(p, CAIRO_EXTEND_PAD);
+	kept.emplace(std::move(key), p);
+	return p;
+}
+
 void apply(cairo_t *g, const Matrix &m)
 {
 	cairo_matrix_t cm;
@@ -111,10 +133,7 @@ void paint(const Canvas *cv, Add add, Brush *b, float stroke_w, bool round = fal
 		if (stroke_w > 0) cairo_stroke(g);
 		else cairo_fill(g);
 	} else if (auto *gr = dynamic_cast<Gradient *>(b)) {
-		cairo_pattern_t *p = cairo_pattern_create_linear(gr->start().x, gr->start().y, gr->end().x, gr->end().y);
-		for (const auto &st : gr->stops())
-			cairo_pattern_add_color_stop_rgba(p, st.position, st.color.r, st.color.g, st.color.b, st.color.a);
-		cairo_pattern_set_extend(p, CAIRO_EXTEND_PAD);
+		cairo_pattern_t *p = pattern_of(*gr);
 		if (gr->opacity() < 1) {
 			cairo_push_group(g);
 			cairo_set_source(g, p);
@@ -127,7 +146,6 @@ void paint(const Canvas *cv, Add add, Brush *b, float stroke_w, bool round = fal
 			if (stroke_w > 0) cairo_stroke(g);
 			else cairo_fill(g);
 		}
-		cairo_pattern_destroy(p);
 	} else {
 		cairo_new_path(g);
 	}
@@ -659,6 +677,17 @@ std::wstring glow_key(std::wstring_view shape_key, const Color &c, float radius)
 	return std::wstring(shape_key) + b;
 }
 
+// Whether the glows kept, with one more of `pixels` pixels, are too many: more than 512, or more than kGlowPixels pixels
+// in all (a large window has large ones). They are then all made again as they are drawn.
+constexpr double kGlowPixels = 32.0 * 1024 * 1024;
+
+bool glows_too_many(const std::unordered_map<std::wstring, Glow> &glows, double pixels, double scale)
+{
+	if (glows.size() > 512) return true;
+	for (const auto &[k, g] : glows) pixels += g.size.width * g.size.height * scale * scale;
+	return pixels > kGlowPixels;
+}
+
 }  // namespace
 
 void Gfx::prepare_glow(std::wstring_view text, float em, const Color &c, float radius, Face face)
@@ -715,7 +744,7 @@ void Gfx::prepare_glow(std::wstring_view text, float em, const Color &c, float r
 		}
 		cairo_surface_mark_dirty(out);
 	}
-	if (glows_.size() > 512) glows_.clear();
+	if (glows_too_many(glows_, static_cast<double>(pw) * ph, scale)) glows_.clear();
 	Glow gl;
 	gl.image = std::shared_ptr<void>(out, [](void *p) { cairo_surface_destroy(static_cast<cairo_surface_t *>(p)); });
 	gl.offset = {-origin.x, -origin.y};

@@ -190,6 +190,8 @@ log.eval_mismatch={0}: the eval file (eval.dat) does not match the version of th
 log.engine_saving=Waiting for the main engine to save its book and end (minutes with a large book; what was asked is done after it)
 log.engine_saved=The main engine has ended (its book save waited for {0} min {1} s; when it could not save, an ERROR line of the main engine comes before this one)
 log.engine_save_cut=The save of the book was cut and the main engine ended (the book file is as it was last saved; a half-written file ".tmp.<number>" may be left beside it)
+log.engine_save_failed=The main engine could not save its book ({0}). The book file is as it was last saved (without what was learned since). The learning queue and the script do not go on
+log.engine_exit_code=exit code {0}
 save.bar=Saving the book: {0}
 save.busy=The main engine is saving its book. Wait until the save has ended.
 ask.cut_save=The main engine is saving its book ({0} min {1} s so far).\n\nCut the save and close? The book file then stays as it was last saved, and what was learned after that is lost.\n\nNo: the window closes when the save has ended.
@@ -208,6 +210,12 @@ learn.saved_at=Last saved at {0} ({1}). Stopping loses what came after
 learn.ask_stop=Stop learning. A book command cannot be stopped on the way, so the main engine is ended and started again.\n\n{0}.\n\nStop?
 learn.stopped=Learning stopped (the main engine was restarted)
 learn.nothing_newer=No file saved on the way is newer than the book.
+learn.other_book=The last learning was on another book ({0}). It cannot go on with the book now ({1}).
+learn.book_unknown=no record of its book
+learn.old_saved=The file saved on the way ({0}, {1}) is older than the start of the last learning ({2}). It is of another learning: it cannot go on from it.
+learn.loading=The main engine is loading the file saved on the way ({0}). The learning goes on when it is loaded
+learn.load_failed=The file saved on the way ({0}) could not be loaded ({1}). The learning does not go on (the book is as it was before)
+learn.load_ended=the main engine has ended
 learn.ask_continue=Read the file saved on the way {0} ({1}) and go on with the last command from the same position:\n\n{2}\n\nGo on?
 
 # Setting windows
@@ -588,6 +596,8 @@ task.took={0} ({1} s)
 log.file_via_temp=The engine cannot take this path, so a copy in the temporary folder was given: {0}
 log.file_moved=The file written in the temporary folder was put in its place: {0}
 log.file_not_moved=Could not put the file of the temporary folder in its place: {0} (left: {1})
+log.file_not_replaced=The job did not end well, so this file was left as it was: {0}
+file.replace_ask=This file is already there. Replace it?\n{0}
 script.bad_file=A file name cannot be given to the engine (a "..." not closed, or a path that cannot be given)
 
 # ---- C (2026-10-20)

@@ -66,11 +66,16 @@ bool move_file(const std::wstring &from, const std::wstring &to, bool copy_allow
 	const std::string a = u8(from), b = u8(to);
 	if (::rename(a.c_str(), b.c_str()) == 0) return true;
 	if (errno != EXDEV || !copy_allowed) return false;
+	// another file system: copied next to `to` first, and the copy renamed over it (`to` is never left half written).
+	// false when `from` cannot be taken away after: `to` then holds the copy, and `from` stays too.
+	const std::string part = b + ".part" + std::to_string(::getpid());
 	std::error_code ec;
-	std::filesystem::copy_file(a, b, std::filesystem::copy_options::overwrite_existing, ec);
-	if (ec) return false;
-	::unlink(a.c_str());
-	return true;
+	std::filesystem::copy_file(a, part, std::filesystem::copy_options::overwrite_existing, ec);
+	if (ec || ::rename(part.c_str(), b.c_str()) != 0) {
+		::unlink(part.c_str());
+		return false;
+	}
+	return ::unlink(a.c_str()) == 0;
 }
 
 bool copy_file(const std::wstring &from, const std::wstring &to)

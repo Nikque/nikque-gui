@@ -18,7 +18,35 @@ struct FormState {
 	std::vector<FormField> *fields;
 	const std::wstring *bad_number;
 	bool done = false, accepted = false;
+	int content_h = 0;  // the height of the fields and buttons when the form is lower than them (it scrolls), else 0
+	int pos = 0;        // how far it is scrolled down
+	int line = 1;       // a step of the scroll bar's arrows and of the wheel
 };
+
+// the form scrolled so that the part from `to` (of its content) is at its top
+void scroll_form(HWND hwnd, FormState &st, int to)
+{
+	RECT rc;
+	GetClientRect(hwnd, &rc);
+	to = std::clamp(to, 0, std::max(0, st.content_h - static_cast<int>(rc.bottom)));
+	if (to == st.pos) return;
+	ScrollWindowEx(hwnd, 0, st.pos - to, nullptr, nullptr, nullptr, nullptr, SW_SCROLLCHILDREN | SW_INVALIDATE | SW_ERASE);
+	st.pos = to;
+	SCROLLINFO si{sizeof si, SIF_POS};
+	si.nPos = to;
+	SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
+}
+
+// a control given the focus (Tab, a number refused) is scrolled into the form
+void show_control(HWND hwnd, FormState &st, HWND c)
+{
+	RECT r, rc;
+	GetWindowRect(c, &r);
+	MapWindowPoints(nullptr, hwnd, reinterpret_cast<POINT *>(&r), 2);
+	GetClientRect(hwnd, &rc);
+	if (r.top < 0) scroll_form(hwnd, st, st.pos + r.top - st.line / 2);
+	else if (r.bottom > rc.bottom) scroll_form(hwnd, st, st.pos + r.bottom - rc.bottom + st.line / 2);
+}
 
 bool read_fields(HWND hwnd, FormState &st)
 {
@@ -89,6 +117,34 @@ LRESULT CALLBACK form_proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	case WM_CLOSE:
 		if (st) st->done = true;
 		return 0;
+	case WM_VSCROLL: {  // the scroll bar of a form higher than the screen
+		if (!st || !st->content_h || lp) break;
+		RECT rc;
+		GetClientRect(hwnd, &rc);
+		int to = st->pos;
+		switch (LOWORD(wp)) {
+		case SB_LINEUP: to -= st->line; break;
+		case SB_LINEDOWN: to += st->line; break;
+		case SB_PAGEUP: to -= rc.bottom; break;
+		case SB_PAGEDOWN: to += rc.bottom; break;
+		case SB_TOP: to = 0; break;
+		case SB_BOTTOM: to = st->content_h; break;
+		case SB_THUMBTRACK:
+		case SB_THUMBPOSITION: {
+			SCROLLINFO si{sizeof si, SIF_TRACKPOS};
+			GetScrollInfo(hwnd, SB_VERT, &si);
+			to = si.nTrackPos;
+			break;
+		}
+		default: break;
+		}
+		scroll_form(hwnd, *st, to);
+		return 0;
+	}
+	case WM_MOUSEWHEEL:
+		if (!st || !st->content_h) break;
+		scroll_form(hwnd, *st, st->pos - GET_WHEEL_DELTA_WPARAM(wp) * 3 * st->line / WHEEL_DELTA);
+		return 0;
 	}
 	return DefWindowProcW(hwnd, msg, wp, lp);
 }
@@ -146,17 +202,47 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 	}
 	const int height = pad * 2 + rows_h + px(46);
 	RECT wr{0, 0, width, height};
-	const DWORD style = WS_POPUP | WS_CAPTION | WS_SYSMENU;
+	DWORD style = WS_POPUP | WS_CAPTION | WS_SYSMENU;
 	AdjustWindowRectExForDpi(&wr, style, FALSE, WS_EX_DLGMODALFRAME, dpi);
 	RECT orc;
 	GetWindowRect(owner, &orc);
-	const int ww = wr.right - wr.left, wh = wr.bottom - wr.top;
-	const int x = orc.left + ((orc.right - orc.left) - ww) / 2, y = orc.top + ((orc.bottom - orc.top) - wh) / 3;
+	int ww = wr.right - wr.left, wh = wr.bottom - wr.top;
+	// on the screen of the main window: a form higher than it is as high as the screen and scrolls (the fields and the
+	// buttons are reached with its scroll bar, the wheel and Tab)
+	MONITORINFO mi{sizeof mi};
+	const bool screen = GetMonitorInfoW(MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST), &mi) != 0;
+	const RECT work = mi.rcWork;
+	const bool scrolls = screen && wh > work.bottom - work.top;
+	if (scrolls) {
+		style |= WS_VSCROLL;
+		ww += GetSystemMetricsForDpi(SM_CXVSCROLL, dpi);
+		wh = work.bottom - work.top;
+	}
+	int x = orc.left + ((orc.right - orc.left) - ww) / 2, y = orc.top + ((orc.bottom - orc.top) - wh) / 3;
+	if (screen) {
+		x = std::max<int>(work.left, std::min<int>(x, work.right - ww));
+		y = std::max<int>(work.top, std::min<int>(y, work.bottom - wh));
+	}
 
 	FormState st{&fields, &bad_number};
 	HWND hwnd = CreateWindowExW(WS_EX_DLGMODALFRAME, L"NikqueGuiForm", title.c_str(), style, x, y, ww, wh, owner,
 	                            nullptr, inst, nullptr);
+	if (!hwnd) {  // (not made: the main window is left as it was, and the form is as cancelled)
+		DeleteObject(font);
+		DeleteObject(bold);
+		return false;
+	}
 	SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(&st));
+	if (scrolls) {
+		st.content_h = height;
+		st.line = row;
+		RECT rc;
+		GetClientRect(hwnd, &rc);
+		SCROLLINFO si{sizeof si, SIF_RANGE | SIF_PAGE | SIF_POS};
+		si.nMax = height - 1;
+		si.nPage = static_cast<UINT>(rc.bottom);
+		SetScrollInfo(hwnd, SB_VERT, &si, FALSE);
+	}
 	auto child = [&](const wchar_t *cls, const std::wstring &text, DWORD s, int cx, int cy, int w, int h, int id = 0) {
 		HWND c = CreateWindowExW(0, cls, text.c_str(), WS_CHILD | WS_VISIBLE | s, cx, cy, w, h, hwnd,
 		                         reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
@@ -224,6 +310,7 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 	// the end of the program asked while the form is open (the main window closed by "quit" of a script, which goes
 	// on in this loop): WM_QUIT is posted again after the form, for the loop under it
 	bool quit = false;
+	HWND focused = nullptr;
 	while (!st.done) {
 		const BOOL got = GetMessageW(&m, nullptr, 0, 0);
 		if (got <= 0) {
@@ -237,6 +324,13 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 		if (!IsDialogMessageW(hwnd, &m)) {
 			TranslateMessage(&m);
 			DispatchMessageW(&m);
+		}
+		if (st.content_h) {
+			HWND f = GetFocus();
+			if (f != focused) {
+				focused = f;
+				if (f && IsChild(hwnd, f)) show_control(hwnd, st, f);
+			}
 		}
 	}
 	EnableWindow(owner, TRUE);

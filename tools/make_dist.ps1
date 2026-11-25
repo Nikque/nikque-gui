@@ -41,6 +41,15 @@ if ($cache -notmatch "(?m)^NG_MEASURE:BOOL=OFF") { throw "build\ is not the defa
 $gui = Join-Path $root "build\Release\nikque-gui.exe"
 if (-not (Test-Path $gui)) { throw "build\Release\nikque-gui.exe is not built" }
 if ((Get-Item $gui).VersionInfo.ProductVersion -ne $ver) { throw "nikque-gui.exe is not $ver (build it again)" }
+# the version of the manifest is the one of the product (res\app.rc), with .0
+$man = Get-Content -Raw (Join-Path $root "res\app.manifest")
+if ($man -notmatch ('name="Nikque\.nikque-gui" version="' + [regex]::Escape("$ver.0") + '"')) { throw "res\app.manifest is not version $ver.0" }
+# the files of the GUI as committed (no changes not committed), and the program built after its last commit
+$dirty = & git -C $root status --porcelain --untracked-files=no
+if ($LASTEXITCODE -ne 0) { throw "git status failed in $root" }
+if ($dirty) { throw "the files of the GUI have changes not committed:`n$($dirty -join "`n")" }
+$committed = [DateTimeOffset]::FromUnixTimeSeconds([long](& git -C $root log -1 --format=%ct)).LocalDateTime
+if ((Get-Item $gui).LastWriteTime -lt $committed) { throw "nikque-gui.exe is older than the last commit (build it again)" }
 
 $name = "nikque-gui-$ver"
 $dst = Join-Path $Out $name

@@ -100,11 +100,16 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
 			waiting.setVisibility(View.GONE);
 			return;
 		}
+		start();
+	}
+
+	// The thread of the app: the files, then the C++ of the GUI until its window is closed. When the files cannot be
+	// prepared, the message says so, and a tap on it (or the screen made again) tries again.
+	private void start() {
 		started = true;
 		final float density = getResources().getDisplayMetrics().density;
 		final File app = new File(getFilesDir(), "app");
 		final File temp = getCacheDir();
-		// (the thread of the app: the files, then the C++ of the GUI until its window is closed)
 		new Thread(null, () -> {
 			String error = null;
 			try {
@@ -114,10 +119,20 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
 			}
 			final String failed = error;
 			handler.post(() -> {
+				if (failed != null) started = false;
 				final MainActivity a = Bridge.activity;
 				if (a == null) return;
-				if (failed != null) a.waiting.setText(getString(R.string.prepare_failed) + "\n" + failed);
-				else a.waiting.setVisibility(View.GONE);
+				if (failed == null) {
+					a.waiting.setVisibility(View.GONE);
+					return;
+				}
+				a.waiting.setText(a.getString(R.string.prepare_failed) + "\n" + failed + "\n\n" + a.getString(R.string.prepare_retry));
+				a.waiting.setOnClickListener(v -> {
+					if (started) return;
+					v.setOnClickListener(null);
+					a.waiting.setText(R.string.preparing);
+					a.start();
+				});
 			});
 			if (failed != null) return;
 			Bridge.run(new File(app, "nikque-gui").getAbsolutePath(), temp.getAbsolutePath() + "/", density);

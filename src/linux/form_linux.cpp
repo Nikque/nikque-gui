@@ -4,6 +4,7 @@
 
 #include "../form.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cwchar>
 #include <string>
@@ -56,6 +57,23 @@ GtkWidget *label(const std::wstring &text, bool dim = false, bool bold = false)
 	return l;
 }
 
+// the highest the fields are before they scroll: the work area of the screen of the main window, less the title bar
+// and the row of the buttons
+int fields_height_max()
+{
+	GdkDisplay *dsp = gdk_display_get_default();
+	if (!dsp) return 100000;
+	GdkMonitor *m = nullptr;
+	if (GtkWindow *p = dialog_parent(); p && gtk_widget_get_window(GTK_WIDGET(p)))
+		m = gdk_display_get_monitor_at_window(dsp, gtk_widget_get_window(GTK_WIDGET(p)));
+	if (!m) m = gdk_display_get_primary_monitor(dsp);
+	if (!m) m = gdk_display_get_monitor(dsp, 0);
+	if (!m) return 100000;
+	GdkRectangle r{};
+	gdk_monitor_get_workarea(m, &r);
+	return std::max(120, r.height - 160);
+}
+
 }  // namespace
 
 bool run_form(NativeWindow, const std::wstring &title, std::vector<FormField> &fields)
@@ -71,7 +89,15 @@ bool run_form(NativeWindow, const std::wstring &title, std::vector<FormField> &f
 		gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
 		gtk_grid_set_column_spacing(GTK_GRID(grid), 10);
 		gtk_container_set_border_width(GTK_CONTAINER(grid), 14);
-		gtk_container_add(GTK_CONTAINER(gtk_dialog_get_content_area(GTK_DIALOG(d))), grid);
+		// fields higher than the screen scroll (the one with the focus is scrolled into view), with OK and Cancel under them
+		GtkWidget *scroll = gtk_scrolled_window_new(nullptr, nullptr);
+		gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+		gtk_scrolled_window_set_propagate_natural_width(GTK_SCROLLED_WINDOW(scroll), TRUE);
+		gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scroll), TRUE);
+		gtk_scrolled_window_set_max_content_height(GTK_SCROLLED_WINDOW(scroll), fields_height_max());
+		gtk_container_add(GTK_CONTAINER(scroll), grid);
+		gtk_container_set_focus_vadjustment(GTK_CONTAINER(grid), gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(scroll)));
+		gtk_box_pack_start(GTK_BOX(gtk_dialog_get_content_area(GTK_DIALOG(d))), scroll, TRUE, TRUE, 0);
 
 		std::vector<GtkWidget *> controls(fields.size(), nullptr);
 		std::vector<Sync> syncs(fields.size());  // (kept while the window is open)

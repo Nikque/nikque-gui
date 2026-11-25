@@ -190,6 +190,8 @@ log.eval_mismatch={0}：評估函數檔案（eval.dat）與此引擎的版本不
 log.engine_saving=正在等待主引擎儲存 book 並結束（book 較大時需要幾分鐘；結束後再繼續）
 log.engine_saved=主引擎已結束（等待儲存 book {0} 分 {1} 秒；未能儲存時，此前會出現主引擎的 ERROR 行）
 log.engine_save_cut=已中斷 book 的儲存並結束主引擎（book 檔案保持上次儲存時的狀態；旁邊可能留下寫到一半的檔案「.tmp.編號」）
+log.engine_save_failed=主引擎未能儲存 book（{0}）。book 檔案保持上次儲存時的狀態（不含此後學習的內容）。學習佇列和命令序列不再繼續
+log.engine_exit_code=結束代碼 {0}
 save.bar=正在儲存 book：{0}
 save.busy=主引擎正在儲存 book。請等待儲存結束。
 ask.cut_save=主引擎正在儲存 book（已過 {0} 分 {1} 秒）。\n\n要中斷儲存並關閉嗎？中斷後，book 檔案保持上次儲存時的狀態，此後學習的內容將遺失。\n\n選「否」則等待儲存結束後再關閉。
@@ -208,6 +210,12 @@ learn.saved_at=最後儲存於 {0}（{1}）。停止後之後的內容會遺失
 learn.ask_stop=停止學習。book 命令無法中途停止，因此會停止並重新啟動主引擎。\n\n{0}。\n\n要停止嗎？
 learn.stopped=已停止學習（已重新啟動主引擎）
 learn.nothing_newer=沒有比 book 更新的中途儲存檔案。
+learn.other_book=上次學習是在另一個 book 上進行的（{0}）。目前的 book（{1}）不能繼續該學習。
+learn.book_unknown=沒有記錄是哪個 book
+learn.old_saved=中途儲存檔案（{0}，{1}）早於上次學習開始的時間（{2}）。它屬於另一次學習，不能從它繼續。
+learn.loading=正在讓主引擎讀取中途儲存檔案（{0}）。讀取成功後繼續學習
+learn.load_failed=未能讀取中途儲存檔案（{0}）（{1}）。學習未繼續（book 保持讀取前的狀態）
+learn.load_ended=主引擎已結束
 learn.ask_continue=讀取中途儲存檔案 {0}（{1}），並從同一局面繼續最後的命令：\n\n{2}\n\n確定嗎？
 
 # 設定視窗
@@ -588,6 +596,8 @@ task.took={0}（{1} 秒）
 log.file_via_temp=引擎無法接受此位置，因此複製到暫存資料夾後傳入：{0}
 log.file_moved=已把寫在暫存資料夾中的檔案放到目標位置：{0}
 log.file_not_moved=無法把暫存資料夾中的檔案放到目標位置：{0}（保留：{1}）
+log.file_not_replaced=作業未正常結束，此檔案保持原樣：{0}
+file.replace_ask=此檔案已存在。要取代嗎？\n{0}
 script.bad_file=無法把檔名傳給引擎（"…" 未閉合，或無法傳入的位置）
 
 # ---- C (2026-10-20)

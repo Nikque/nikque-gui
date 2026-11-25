@@ -11,6 +11,9 @@ endif()
 
 # Timings of the frames and the start written to a file: never in the default build (Windows only).
 option(NG_MEASURE "build the measuring version (not for release)" OFF)
+if(NG_MEASURE AND NOT WIN32)
+	message(FATAL_ERROR "NG_MEASURE=ON is for Windows only: the measuring code (src/measure.h) uses the Windows API")
+endif()
 
 # The shared code (src) and the system's own parts: src/win (Win32, Direct2D), src/mac (Cocoa, Core Graphics) or
 # src/linux (GTK 3, Cairo, Pango) with src/posix (files, the engines as child processes).
@@ -187,15 +190,21 @@ elseif(APPLE)
 endif()
 
 enable_testing()
-# (the games of the tests are in _test, which is not in the published sources: those tests only where it is)
-set(NG_GAMES ${CMAKE_SOURCE_DIR}/_test/books/book1.games ${CMAKE_SOURCE_DIR}/_test/books/book2.games
-	${CMAKE_SOURCE_DIR}/_test/books/book3.games)
+# The games of the tests and a folder on another drive are in _test, which is not in the published sources: without
+# it the tests run on their own (rules and list: their own games; path: the temporary folder only).
+set(NG_GAMES)
+set(NG_TEST_DIR)
+if(EXISTS ${CMAKE_SOURCE_DIR}/_test/books/book1.games)
+	set(NG_GAMES ${CMAKE_SOURCE_DIR}/_test/books/book1.games ${CMAKE_SOURCE_DIR}/_test/books/book2.games
+		${CMAKE_SOURCE_DIR}/_test/books/book3.games)
+endif()
+if(IS_DIRECTORY ${CMAKE_SOURCE_DIR}/_test)
+	set(NG_TEST_DIR ${CMAKE_SOURCE_DIR}/_test)
+endif()
 add_executable(rules_test tests/rules_test.cpp ${NG_CORE})
 target_link_libraries(rules_test PRIVATE ${NG_CORE_LIBS})
 target_include_directories(rules_test PRIVATE src)
-if(EXISTS ${CMAKE_SOURCE_DIR}/_test/books/book1.games)
-	add_test(NAME rules COMMAND rules_test ${NG_GAMES})
-endif()
+add_test(NAME rules COMMAND rules_test ${NG_GAMES})
 add_executable(parse_test tests/parse_test.cpp src/analysis.cpp ${NG_CORE})
 target_link_libraries(parse_test PRIVATE ${NG_CORE_LIBS})
 target_include_directories(parse_test PRIVATE src)
@@ -203,16 +212,14 @@ add_test(NAME parse COMMAND parse_test)
 if(WIN32)
 	add_executable(path_test tests/path_test.cpp src/win/paths_win.cpp res/app.manifest)  # the manifest of the GUI: its code page is UTF-8
 	target_include_directories(path_test PRIVATE src)
-	add_test(NAME path COMMAND path_test ${CMAKE_SOURCE_DIR}/_test)
+	add_test(NAME path COMMAND path_test ${NG_TEST_DIR})
 endif()
 add_executable(lang_test tests/lang_test.cpp)
 add_test(NAME lang COMMAND lang_test ${CMAKE_SOURCE_DIR}/lang)
 add_executable(list_test tests/list_test.cpp ${NG_CORE})
 target_link_libraries(list_test PRIVATE ${NG_CORE_LIBS})
 target_include_directories(list_test PRIVATE src)
-if(EXISTS ${CMAKE_SOURCE_DIR}/_test/books/book1.games)
-	add_test(NAME list COMMAND list_test ${NG_GAMES})
-endif()
+add_test(NAME list COMMAND list_test ${NG_GAMES})
 if(WIN32)
 	add_executable(app_test tests/app_test.cpp)
 	target_link_libraries(app_test PRIVATE ng_app)

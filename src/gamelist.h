@@ -32,7 +32,9 @@ public:
 	// a place).
 	bool set_moves(size_t i, std::span<const std::uint8_t> moves) noexcept;
 	void erase(size_t i);
-	void clear();
+	// the games of `other` after these, in their order (`other` is left empty, its memory given back)
+	void append(GameList &&other);
+	void clear();  // (the memory of the games given back too)
 	// room for more games and moves (a file read at once does not grow the buffers again and again)
 	void reserve(size_t games, size_t moves);
 	// keeps the games of `order` (indices into this list), in that order
@@ -65,6 +67,7 @@ private:
 struct ListReadStats {
 	bool opened = false;
 	bool cancelled = false;  // a stop was seen (asked before or while reading): the games read are not all of them
+	bool failed = false;     // the file could not be read to its end: the games read are not all of them
 	size_t lines = 0;   // lines with a game
 	size_t games = 0;   // games added
 	size_t cut = 0;     // games read up to a move that cannot be played
@@ -79,6 +82,8 @@ std::string list_line(const Position &start, std::span<const std::uint8_t> moves
 // `usual`: the start of the lines of moves only
 ListReadStats read_list_text(std::string_view text, GameList &list, ng::stop_token stop = {}, const Position &usual = Position{});
 ListReadStats read_list(const std::wstring &path, GameList &list, ng::stop_token stop = {}, const Position &usual = Position{});
+// written whole to another file next to it first, which then takes the place of the file (a file there stays as it was
+// when the games cannot all be written)
 bool write_list(const std::wstring &path, const GameList &list);
 
 // shorter games first, then by the moves (as their names: a1 a2 .. b1 ..)

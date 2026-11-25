@@ -75,9 +75,16 @@ jobs:
           sed -i '' -e 's/^startup=.*/startup=smoke.txt/' -e 's/^level=21/level=10/' run/config.ini
           grep -n "startup\|^level\|^kind" run/config.ini
           cd run
-          ( sleep 900; pkill -f "nikque GUI.app" ) &
-          "./nikque GUI.app/Contents/MacOS/nikque GUI" || echo "exit $?"
+          # (failed: an exit code other than 0, the end by the time limit, or a file of the script missing)
+          ( sleep 900; touch timed-out; pkill -f "nikque GUI.app" ) &
+          watch=$!
+          rc=0
+          "./nikque GUI.app/Contents/MacOS/nikque GUI" || rc=$?
+          kill $watch 2>/dev/null || true
           ls -la
+          if [ -e timed-out ]; then echo "timeout: the script did not end"; exit 1; fi
+          if [ "$rc" != 0 ]; then echo "exit $rc"; exit 1; fi
+          bash ../.github/ci/check_smoke.sh smoke.txt .
 
       - name: Keep the pictures and the log
         if: always()

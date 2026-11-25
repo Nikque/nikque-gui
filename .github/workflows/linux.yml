@@ -93,9 +93,14 @@ jobs:
           # (the whole screen once, with the menu bar and the text box of the moves, which the app's own pictures do not hold)
           ( sleep 40; xwininfo -display :99 -root -tree > x-windows.txt 2>&1; import -display :99 -window root linux-screen.png;
             xwd -display :99 -root -silent | convert xwd:- linux-screen-xwd.png ) &
-          DISPLAY=:99 timeout 900 ./nikque-gui > run-out.txt 2>&1 || echo "exit $?"
+          # (failed: an exit code other than 0, 124 from timeout, or a file of the script missing)
+          rc=0
+          DISPLAY=:99 timeout 900 ./nikque-gui > run-out.txt 2>&1 || rc=$?
           tail -30 run-out.txt
           ls -la
+          if [ "$rc" = 124 ]; then echo "timeout: the script did not end"; exit 1; fi
+          if [ "$rc" != 0 ]; then echo "exit $rc"; exit 1; fi
+          bash ../.github/ci/check_smoke.sh smoke.txt .
 
       - name: Keep the pictures and the log
         if: always()

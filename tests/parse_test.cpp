@@ -80,6 +80,51 @@ static void test_backward()
 	CHECK(line[pass_at - 1].played_improved && line[pass_at - 1].played == 7);
 }
 
+// A value of the search with '<' or '>' is a bound, also at the depth of the end and 100 %: not exact, and the bound goes
+// back with the value (from the other side: '<' and '>' change places). A value without a bound there is exact.
+static void test_bounds()
+{
+	const char *moves = "f5 f4 d3 f6 g6 c4 f7 d2 f3 g7 d6 f8 g8 f2 g3 h7 c3 b4 d1 e2 c2 h3 e8 c7 h6 e1 g4 c5 b5 b3 e6 c1 a3 "
+	                    "g5 a4 h8 b6 e7 g2 g1 b1 f1 e3 b2 h2 a7 h5 a2 d7 a6 h4 a5 b7 a1 pa b8";
+	Game h;
+	replay(h, Position{}, parse_moves(moves).moves);
+	const int i = 40;
+	const Position &p = h.at(i), &q = h.at(i + 1);
+	CHECK(!p.must_pass() && !q.must_pass() && q.side != p.side);
+	AnalysisCache c;
+	// the next position: every move searched to the end, the best a lower bound
+	searched(c, q, [](int) { return -9; }, q.empties());
+	for (auto &m : c.get(q).moves) m.bound = '>';
+	c.get(q).moves[0].score = -5;
+	const MoveEval &e = c.get(q).moves[0];
+	CHECK(e.depth >= q.empties() - 1 && e.selectivity == 100 && !move_exact(e, q) && shown_bound(e, true) == '>');
+	// this position: shallow values, the move played is improved by the next position
+	searched(c, p, [](int) { return 0; }, 2);
+	auto line = backward_line(h, c, true, true);
+	CHECK(line[i + 1].known && line[i + 1].best == -5 && line[i + 1].bound == '>' && !line[i + 1].exact);
+	CHECK(line[i].played_improved && line[i].played == 5 && line[i].played_bound == '<' && !line[i].played_exact);
+	CHECK(line[i].best == 5 && line[i].bound == '<' && !line[i].exact);
+	// without the bounds: exact, and nothing to mark
+	for (auto &m : c.get(q).moves) m.bound = 0;
+	CHECK(move_exact(c.get(q).moves[0], q) && shown_bound(c.get(q).moves[0], true) == 0);
+	line = backward_line(h, c, true, true);
+	CHECK(line[i + 1].exact && line[i + 1].bound == 0 && line[i].played_exact && line[i].played_bound == 0);
+	// a book value has no bound
+	MoveEval &b = c.get(q).moves[0];
+	b.bound = '<';
+	b.in_book = b.book_row = true;
+	CHECK(shown_bound(b, true) == 0 && shown_bound(b, false) == '<');
+	// the same best value with and without a bound: the value without it
+	searched(c, p, [](int) { return 3; }, p.empties());
+	c.get(p).moves[0].bound = '<';
+	line = backward_line(h, c, true, false);
+	CHECK(line[i].best == 3 && line[i].bound == 0 && line[i].exact);
+	// ... and a lower bound of it is above it
+	c.get(p).moves[0].bound = '>';
+	line = backward_line(h, c, true, false);
+	CHECK(line[i].best == 3 && line[i].bound == '>' && !line[i].exact);
+}
+
 // the book answers cleared (another range, the book changed): the values of the search and of the other engine stay
 static void test_reset_book()
 {
@@ -255,6 +300,7 @@ int main()
 		CHECK(cache.size() == 3 && cache.peek(p.play(parse_square("d3"))) != nullptr);
 	}
 	test_backward();
+	test_bounds();
 	test_missing();
 	test_reset_book();
 	test_request_ids();

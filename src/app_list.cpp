@@ -3,6 +3,7 @@
 // list, the kept lines, and the background jobs that do the heavy work.
 #include "platform.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <ctime>
 #include <memory>
@@ -128,8 +129,12 @@ void App::list_load(const std::wstring &file, bool add)
 				log(lang::t("task.cancelled"));
 				return;
 			}
+			if (r.failed) {  // (the file was not read to its end: the list stays as it was)
+				log(lang::f("list.cannot_open", {file}));
+				return;
+			}
 			if (add) {
-				for (size_t i = 0; i < nl->size(); ++i) list_.add(nl->start(i), nl->moves(i));
+				list_.append(std::move(*nl));
 			} else {
 				list_ = std::move(*nl);
 				list_index_ = -1;
@@ -146,8 +151,11 @@ void App::list_load(const std::wstring &file, bool add)
 	});
 }
 
-// the list moves to a job and comes back after it (the window shows it as busy meanwhile)
-static void list_job(App &app, const std::wstring &label, std::function<std::wstring(GameList &, ng::stop_token)> work)
+// The list moves to a job and comes back after it (the window shows it as busy meanwhile). The job gives back the
+// words of the log as a function called on the thread of the window when it comes back: they are made in the language
+// of the window then (the job does not read the words of the languages, which may change meanwhile).
+using ListDone = std::function<std::wstring()>;
+static void list_job(App &app, const std::wstring &label, std::function<ListDone(GameList &, ng::stop_token)> work)
 {
 	if (app.task_busy_) {  // the list stays where it is
 		app.set_status(lang::t("task.busy"));
@@ -159,27 +167,28 @@ static void list_job(App &app, const std::wstring &label, std::function<std::wst
 	app.clear_hits();
 	app.run_task(label, [&app, l, work](ng::stop_token st) -> std::function<void()> {
 		const auto t0 = std::chrono::steady_clock::now();
-		const std::wstring msg = work(*l, st);
+		const ListDone msg = work(*l, st);
 		const double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
 		return [&app, l, msg, s] {
 			app.list_ = std::move(*l);
 			app.list_scroll_ = 0;
-			app.log(took(msg, s));
+			app.log(took(msg(), s));
 		};
 	});
 }
 
 void App::list_job_script(const std::wstring &label, std::function<void(GameList &)> work)
 {
-	list_job(*this, label, [work](GameList &l, ng::stop_token) {
+	list_job(*this, label, [work](GameList &l, ng::stop_token) -> ListDone {
 		work(l);
-		return lang::f("list.done", {std::to_wstring(l.size())});
+		const size_t n = l.size();
+		return [n] { return lang::f("list.done", {std::to_wstring(n)}); };
 	});
 }
 
 void App::clear_hits()
 {
-	hits_.clear();
+	std::vector<ListHit>().swap(hits_);  // (the memory given back too)
 	hits_shown_ = false;
 }
 
@@ -287,15 +296,16 @@ void App::list_command(int id)
 		break;
 	}
 	case cmd::ListSort:
-		list_job(*this, t("menu.list.sort"), [](GameList &l, ng::stop_token) {
+		list_job(*this, t("menu.list.sort"), [](GameList &l, ng::stop_token) -> ListDone {
 			sort_list(l);
-			return lang::f("list.sorted", {std::to_wstring(l.size())});
+			const size_t n = l.size();
+			return [n] { return lang::f("list.sorted", {std::to_wstring(n)}); };
 		});
 		break;
 	case cmd::ListUnique:
-		list_job(*this, t("menu.list.unique"), [](GameList &l, ng::stop_token) {
-			const size_t n = unique_list(l);
-			return lang::f("list.uniqued", {std::to_wstring(n), std::to_wstring(l.size())});
+		list_job(*this, t("menu.list.unique"), [](GameList &l, ng::stop_token) -> ListDone {
+			const size_t n = unique_list(l), left = l.size();
+			return [n, left] { return lang::f("list.uniqued", {std::to_wstring(n), std::to_wstring(left)}); };
 		});
 		break;
 	case cmd::ListTruncate: {
@@ -303,9 +313,9 @@ void App::list_command(int id)
 		if (!n) break;
 		ini_.set_int("list", "truncate", *n);
 		const int k = *n;
-		list_job(*this, t("menu.list.truncate"), [k](GameList &l, ng::stop_token) {
+		list_job(*this, t("menu.list.truncate"), [k](GameList &l, ng::stop_token) -> ListDone {
 			truncate_list(l, k);
-			return lang::f("list.truncated", {std::to_wstring(k)});
+			return [k] { return lang::f("list.truncated", {std::to_wstring(k)}); };
 		});
 		break;
 	}
@@ -313,16 +323,17 @@ void App::list_command(int id)
 		const auto n = ask_number(hwnd_, t("menu.list.shuffle"), t("list.seed"), 0, 0, 2000000000, t("list.seed.note"));
 		if (!n) break;
 		const std::uint64_t seed = seed_or_clock(*n);
-		list_job(*this, t("menu.list.shuffle"), [seed](GameList &l, ng::stop_token) {
+		list_job(*this, t("menu.list.shuffle"), [seed](GameList &l, ng::stop_token) -> ListDone {
 			shuffle_list(l, seed);
-			return lang::f("list.shuffled", {std::to_wstring(seed)});
+			return [seed] { return lang::f("list.shuffled", {std::to_wstring(seed)}); };
 		});
 		break;
 	}
 	case cmd::ListNormalize:
-		list_job(*this, t("menu.list.normalize"), [](GameList &l, ng::stop_token st) {
+		list_job(*this, t("menu.list.normalize"), [](GameList &l, ng::stop_token st) -> ListDone {
 			normalize_list(l, st);
-			return st.stop_requested() ? lang::t("task.cancelled") : lang::t("list.normalized");
+			const bool stopped = st.stop_requested();
+			return [stopped] { return stopped ? lang::t("task.cancelled") : lang::t("list.normalized"); };
 		});
 		break;
 	case cmd::ListScatter: {
@@ -335,9 +346,10 @@ void App::list_command(int id)
 		if (!run_form(hwnd_, t("menu.list.scatter"), f)) break;
 		const int sides = f[0].choice + 1;
 		const std::uint64_t seed = seed_or_clock(std::stoi(f[1].text));
-		list_job(*this, t("menu.list.scatter"), [sides, seed](GameList &l, ng::stop_token st) {
+		list_job(*this, t("menu.list.scatter"), [sides, seed](GameList &l, ng::stop_token st) -> ListDone {
 			scatter_list(l, seed, sides, st);
-			return st.stop_requested() ? lang::t("task.cancelled") : lang::f("list.scattered", {std::to_wstring(seed)});
+			const bool stopped = st.stop_requested();
+			return [stopped, seed] { return stopped ? lang::t("task.cancelled") : lang::f("list.scattered", {std::to_wstring(seed)}); };
 		});
 		break;
 	}
@@ -367,10 +379,12 @@ void App::list_command(int id)
 	case cmd::ListPrev:
 	case cmd::ListNext:
 		if (hits_shown_ && !hits_.empty()) {
-			// through the games found
+			// through the games found (in the order of the list, one a game: the game shown is looked up by halves)
 			int h = 0;
-			for (int k = 0; k < static_cast<int>(hits_.size()); ++k)
-				if (static_cast<int>(hits_[k].game) == list_index_) h = k + (id == cmd::ListNext ? 1 : -1);
+			const auto at = std::lower_bound(hits_.begin(), hits_.end(), list_index_,
+			                                 [](const ListHit &x, int g) { return static_cast<int>(x.game) < g; });
+			if (at != hits_.end() && static_cast<int>(at->game) == list_index_)
+				h = static_cast<int>(at - hits_.begin()) + (id == cmd::ListNext ? 1 : -1);
 			h = std::clamp(h, 0, static_cast<int>(hits_.size()) - 1);
 			list_select(static_cast<int>(hits_[h].game), true, h);
 		} else if (!list_.empty()) {
@@ -398,6 +412,10 @@ void App::list_from_book()
 		set_status(t("learn.no_engine"));
 		return;
 	}
+	if (list_book_id_) {  // (asked before, its answer has not come)
+		set_status(t("list.book.asked"));
+		return;
+	}
 	std::vector<FormField> f(3);
 	f[0] = number_field(t("best.loss"), ini_.get_int("list", "book_loss", 0, 0, 129), 0, 129, t("best.loss.note"));
 	f[1] = number_field(t("best.depth"), ini_.get_int("list", "book_depth", 60, 1, 60), 1, 60, t("best.depth.note"));
@@ -417,8 +435,10 @@ void App::list_from_book()
 
 bool App::ask_book_lines(int loss, int depth, int n, bool add)
 {
-	if (!eng_[0].alive || learning_) return false;
-	const std::wstring file = path_join(temp_dir_, L"book-lines.txt");
+	// (one at a time: the answer of one asked before has not come)
+	if (!eng_[0].alive || learning_ || list_book_id_) return false;
+	const int id = new_id();
+	const std::wstring file = book_lines_file(id);  // a file of its own (an answer never reads the file of another)
 	delete_file(file);
 	const auto path = engine_path(file, false);  // the temporary folder
 	if (!path) {
@@ -427,7 +447,6 @@ bool App::ask_book_lines(int loss, int depth, int n, bool add)
 	}
 	std::string out = line_commands(game_.start(), moves_to_cursor());
 	eng_[0].board = key_of(game_.now());
-	const int id = new_id();
 	out += "book bestlines id=" + std::to_string(id) + " loss=" + std::to_string(std::clamp(loss, 0, 129)) +
 	       " depth=" + std::to_string(std::clamp(depth, 1, 60)) + " solved=stop which=all file=\"" + *path + "\"\n";
 	requests_[id] = {add ? Request::ListBookAdd : Request::ListBook, key_of(game_.now())};
@@ -436,14 +455,21 @@ bool App::ask_book_lines(int loss, int depth, int n, bool add)
 	list_book_id_ = id;
 	send(0, out);
 	set_status(lang::t("list.book.asked"));
+	update_menu();  // (not asked again before its answer)
 	return true;
+}
+
+std::wstring App::book_lines_file(int id) const
+{
+	return path_join(temp_dir_, L"book-lines-" + std::to_wstring(id) + L".txt");
 }
 
 void App::list_book_written(bool add, bool ok)
 {
+	const std::wstring file = book_lines_file(list_book_id_);
 	list_book_id_ = 0;
-	const std::wstring file = path_join(temp_dir_, L"book-lines.txt");
 	if (!ok) {
+		delete_file(file);
 		log(lang::f("best.export_failed", {file}));
 		return;
 	}
@@ -451,11 +477,16 @@ void App::list_book_written(bool add, bool ok)
 	const int limit = list_book_limit_;
 	const Position start = list_book_start_;
 	run_task(lang::t("menu.list.book"), [this, nl, file, add, limit, start](ng::stop_token st) -> std::function<void()> {
-		const bool cancelled = read_list(file, *nl, st, start).cancelled;
+		const ListReadStats r = read_list(file, *nl, st, start);
 		delete_file(file);
-		return [this, nl, add, limit, cancelled] {
+		const bool cancelled = r.cancelled, failed = r.failed;
+		return [this, nl, file, add, limit, cancelled, failed] {
 			if (cancelled) {  // (the parts read in on threads stop half way each: nothing is added)
 				log(lang::t("task.cancelled"));
+				return;
+			}
+			if (failed) {  // (the file was not read to its end: the list stays as it was)
+				log(lang::f("best.export_failed", {file}));
 				return;
 			}
 			const size_t n = std::min<size_t>(nl->size(), static_cast<size_t>(limit));

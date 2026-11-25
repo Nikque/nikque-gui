@@ -44,8 +44,19 @@ check_zip "$NZIP" $NIKQUE_SHA $NIKQUE_SIZE
 check_zip "$EZIP" $NEWEDAX_SHA $NEWEDAX_SIZE
 [ "$(git -C "$NESRC" rev-parse HEAD)" = $NEWEDAX_COMMIT ] || { echo "$NESRC is not $NEWEDAX_TAG ($NEWEDAX_COMMIT)"; exit 1; }
 [ "$(git -C "$NKSRC" rev-parse HEAD)" = $NIKQUE_COMMIT ] || { echo "$NKSRC is not $NIKQUE_TAG ($NIKQUE_COMMIT)"; exit 1; }
+# the sources of the engines as committed (changes not committed and files of an earlier build are not taken)
+export_source() {  # <git folder> <commit> <folder>
+	mkdir -p "$3"
+	git -C "$1" archive --format=tar "$2" | tar -x -C "$3"
+}
+# the files of the GUI as committed (no changes not committed, no files not committed among those copied), and the
+# program built after its last commit
+dirty=$({ git status --porcelain --untracked-files=no; git status --porcelain -- readme.txt LICENSE.txt res lang manual; } | sort -u)
+[ -z "$dirty" ] || { echo "$dirty"; echo "the files of the GUI are not those of the commit"; exit 1; }
+[ "$(stat -c %Y "$EXE")" -ge "$(git log -1 --format=%ct)" ] || { echo "$EXE is older than the last commit"; exit 1; }
 
 WORK=$(mktemp -d)
+git -C "$NESRC" archive --format=tar $NEWEDAX_COMMIT problem/fforum-1-19.obf | tar -x -C "$WORK"
 unzip -q "$NZIP" -d "$WORK/n"
 unzip -q "$EZIP" -d "$WORK/e"
 [ "$(stat -c %s "$WORK/n/bin/data/eval.dat")" = $NIKQUE_EVAL ] || { echo "nikque eval.dat is not of $NIKQUE_TAG"; exit 1; }
@@ -57,14 +68,14 @@ unzip -q "$EZIP" -d "$WORK/e"
 "$CXX" --version | head -1
 for a in $ARCHS; do
 	rm -rf "$WORK/nk-$a"
-	cp -R "$NKSRC" "$WORK/nk-$a"
+	export_source "$NKSRC" $NIKQUE_COMMIT "$WORK/nk-$a"
 	mkdir -p "$WORK/nk-$a/bin"
 	make -s -C "$WORK/nk-$a/src" build ARCH=$a COMP=gcc OS=linux CC="$CC -static-libgcc" 		> "$WORK/nk-$a.log" 2>&1 || { tail -40 "$WORK/nk-$a.log"; exit 1; }
 	[ -x "$WORK/nk-$a/bin/lEdax-$a" ] || { echo "no lEdax-$a (nikque)"; tail -40 "$WORK/nk-$a.log"; exit 1; }
 done
 for a in $ARCHS; do
 	rm -rf "$WORK/ne-$a"
-	cp -R "$NESRC" "$WORK/ne-$a"
+	export_source "$NESRC" $NEWEDAX_COMMIT "$WORK/ne-$a"
 	mkdir -p "$WORK/ne-$a/bin"
 	make -s -C "$WORK/ne-$a/src" build ARCH=$a COMP=gcc OS=linux CC="$CXX -static-libstdc++ -static-libgcc" BOOST_DIR="$BOOST_DIR" \
 		> "$WORK/ne-$a.log" 2>&1 || { tail -40 "$WORK/ne-$a.log"; exit 1; }
@@ -120,7 +131,7 @@ for e in nikque newedax; do
 			x86-64-v4) echo "$flags" | grep -qw avx512vl || { echo "$e lEdax-$a: not run (no AVX-512 on this computer)"; continue; } ;;
 			x86-64-v3) echo "$flags" | grep -qw avx2 || { echo "$e lEdax-$a: not run (no AVX2 on this computer)"; continue; } ;;
 		esac
-		(cd "$DST/engines/$e" && "./lEdax-$a" -n 1 -l 60 -book-usage off -solve "$NESRC/problem/fforum-1-19.obf" > "$WORK/solve-$e-$a.log" 2>&1) ||
+		(cd "$DST/engines/$e" && "./lEdax-$a" -n 1 -l 60 -book-usage off -solve "$WORK/problem/fforum-1-19.obf" > "$WORK/solve-$e-$a.log" 2>&1) ||
 			{ cat "$WORK/solve-$e-$a.log"; exit 1; }
 		echo "$e lEdax-$a:"
 		tail -2 "$WORK/solve-$e-$a.log"

@@ -214,7 +214,7 @@ void App::load_config()
 	lang::load(exe_dir_, lang_);
 	// opening names: a file next to the exe unless set
 	const std::string of = ini_.get("view", "opening_file");
-	openings_.load(of.empty() ? exe_dir_ + L"\\opening.ini" : from_exe_dir(of));
+	openings_.load(of.empty() ? path_join(exe_dir_, L"opening.ini") : from_exe_dir(of));
 	show_opening_ = ini_.get_bool("view", "opening", true);
 }
 
@@ -612,7 +612,7 @@ void App::update_menu()
 	// a small menu as a whole
 	auto enable_popup = [&](MenuRef parent, MenuRef child, bool on) { menu_enable_sub(parent, child, on); };
 	// the book commands of the main engine: not while it learns, nor while it saves its book as it ends
-	const bool book_free = !learning_ && !book_saving_;
+	const bool book_free = !learning_ && !book_saving_ && !load_wait_.end_id;  // (nor while a file saved on the way loads)
 	enable_popup(book_menu_, keep_menu_, book_free);
 	enable_popup(learn_menu_, leaf_menu_, book_free);
 	check(cmd::ShowEval, show_eval_);
@@ -625,7 +625,7 @@ void App::update_menu()
 	check(cmd::GraphEndShow, graph_end_);
 	check(cmd::UpperMoves, upper_moves_);
 	check(cmd::FixRecord, fixed_on_);
-	enable(cmd::LearnStop, learning_);
+	enable(cmd::LearnStop, learning_ || load_wait_.end_id);
 	for (int id = cmd::LearnDeviate; id <= cmd::LearnJobLast; ++id) enable(id, book_free);
 	enable(cmd::LearnReduce, book_free && reduce_.state == ReduceJob::None);
 	// these close the main engine (a learning command takes no input to stop)
@@ -633,7 +633,7 @@ void App::update_menu()
 	enable(cmd::LearnContinue, book_free);
 	enable(cmd::ExportBest, book_free);
 	enable(cmd::ExportDeviate, book_free);
-	enable(cmd::ListFromBook, book_free && !task_busy_);
+	enable(cmd::ListFromBook, book_free && !task_busy_ && !list_book_id_);  // (not again before its answer)
 	enable(cmd::QueueStart, book_free && !learn_queue_.empty());
 	enable(cmd::QueueClear, !learn_queue_.empty());
 	for (int id = cmd::ToolSolve; id < cmd::ToolStop; ++id) enable(id, !tool_busy_);
@@ -951,7 +951,10 @@ CellView App::cell_view(int sq) const
 			v.exact = le->played_exact;
 		}
 	}
-	v.pending = !v.has_value && (eng_[1].alive || (use_book_ && eng_[0].alive && !info->book_done));
+	// waits for a value still to come: not after a hint that ended without this move, nor after a book analysis that
+	// ended with an error (Recompute asks again)
+	const bool search_waits = eng_[1].alive && !(info->search_done && info->search_level == level_);
+	v.pending = !v.has_value && (search_waits || (use_book_ && eng_[0].alive && !info->book_done && !info->book_failed));
 	if (cell_info_ != CellInfo::None && v.has_value) v.info = cell_info_text(*m, cell_info_, use_book_);
 	int best = -999;
 	for (const auto &o : info->moves) {

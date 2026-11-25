@@ -16,6 +16,9 @@ NSString *ns(const std::wstring &w) { return [NSString stringWithUTF8String:ng::
 
 std::wstring from_ns(NSString *s) { return s ? ng::widen(std::string_view(s.UTF8String ?: "")) : std::wstring(); }
 
+// the height of the alert besides its fields (its icon, title and buttons), with a margin
+constexpr CGFloat kAlertRoom = 240;
+
 }  // namespace
 
 // a slider and the number beside it follow each other
@@ -115,7 +118,21 @@ bool run_form(NativeWindow, const std::wstring &title, std::vector<FormField> &f
 		grid.columnSpacing = 10;
 		[grid columnAtIndex:0].xPlacement = NSGridCellPlacementTrailing;
 		grid.frame = NSMakeRect(0, 0, grid.fittingSize.width, grid.fittingSize.height);
-		a.accessoryView = grid;
+		// fields higher than the screen scroll (from their top), with OK and Cancel under them
+		NSView *fields_view = grid;
+		NSScreen *screen = NSApp.mainWindow.screen ?: NSScreen.mainScreen;
+		const CGFloat room = screen ? screen.visibleFrame.size.height - kAlertRoom : 0;
+		if (room > 120 && grid.frame.size.height > room) {
+			NSScrollView *sv = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, grid.frame.size.width + 20, room)];
+			sv.hasVerticalScroller = YES;
+			sv.drawsBackground = NO;
+			sv.borderType = NSNoBorder;
+			sv.documentView = grid;
+			[sv.contentView scrollToPoint:NSMakePoint(0, grid.frame.size.height - room)];
+			[sv reflectScrolledClipView:sv.contentView];
+			fields_view = sv;
+		}
+		a.accessoryView = fields_view;
 
 		ng_modal_begin();
 		const NSModalResponse r = [a runModal];

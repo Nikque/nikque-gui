@@ -98,16 +98,18 @@ bool EngineProcess::start(const std::wstring &exe, const std::wstring &args, con
 	}
 	pid_ = pid;
 	reaped_ = false;
+	status_ = -1;
 	in_write_ = in[1];
 	out_read_ = out[0];
 	read_ended_ = false;
 	reader_ = std::thread([this] { read_loop(); });
+	writer_ = std::thread([this] { write_loop(); });
 	return true;
 }
 
-bool EngineProcess::send(std::string_view text)
+// (a write to an engine that has ended fails: the program does not end with SIGPIPE, see above)
+bool EngineProcess::write_all(std::string_view text)
 {
-	if (in_write_ < 0) return false;
 	while (!text.empty()) {
 		const ssize_t n = ::write(in_write_, text.data(), text.size());
 		if (n < 0) {
@@ -117,6 +119,26 @@ bool EngineProcess::send(std::string_view text)
 		text.remove_prefix(static_cast<size_t>(n));
 	}
 	return true;
+}
+
+void EngineProcess::close_input()
+{
+	if (in_write_ >= 0) {
+		::close(in_write_);
+		in_write_ = -1;
+	}
+}
+
+void EngineProcess::stop_writer()
+{
+	if (writer_.joinable()) {
+		end_input();
+		writer_.join();  // (the process has ended: a write the thread waits on fails)
+	}
+	close_input();  // (a start that failed before the thread)
+	std::lock_guard lock(write_mutex_);
+	to_write_.clear();
+	input_closing_ = write_failed_ = false;
 }
 
 void EngineProcess::take_lines(std::vector<std::string> &out)
@@ -145,12 +167,7 @@ void EngineProcess::read_loop()
 			if (buf[k] != '\n' && buf[k] != '\r') continue;
 			partial_.append(buf + i, k - i);
 			i = k + 1;
-			// the engine's prompt ">" may come before a line
-			size_t a = 0;
-			while (a < partial_.size() && (partial_[a] == '>' || partial_[a] == ' ')) ++a;
-			// ... and after one ("Sorting book...done>")
-			while (partial_.size() > a && partial_.back() == '>') partial_.pop_back();
-			if (a < partial_.size()) batch.emplace_back(partial_.substr(a));
+			add_line(batch, partial_);
 			partial_.clear();
 		}
 		partial_.append(buf + i, n - i);
@@ -165,19 +182,29 @@ void EngineProcess::read_loop()
 			if (was_empty && notify_) post_message(notify_, msg_, tag_, 0);
 		}
 	}
+	// the last line, when the engine ended without ending it (its error, as Edax without its eval file)
+	add_line(batch, partial_);
+	partial_.clear();
+	if (!batch.empty()) {
+		std::lock_guard lock(mutex_);
+		for (auto &l : batch) lines_.push_back(std::move(l));
+	}
 	read_ended_ = true;
 	if (notify_) post_message(notify_, msg_, tag_, 1);  // the output has ended
 }
 
 namespace {
 
-// the process has ended (and is reaped); false while it runs
-bool ended(int pid, bool *reaped)
+// the process has ended (and is reaped, its status kept: -1 when it is not known); false while it runs
+bool ended(int pid, bool *reaped, int *status)
 {
 	if (*reaped) return true;
 	int st = 0;
 	const pid_t r = ::waitpid(pid, &st, WNOHANG);
-	if (r == pid || (r < 0 && errno == ECHILD)) *reaped = true;
+	if (r == pid || (r < 0 && errno == ECHILD)) {
+		*reaped = true;
+		*status = r == pid ? st : -1;
+	}
 	return *reaped;
 }
 
@@ -185,11 +212,8 @@ bool ended(int pid, bool *reaped)
 
 void EngineProcess::quit()
 {
-	if (pid_ > 0 && in_write_ >= 0 && !ended(pid_, &reaped_)) send("quit\n");
-	if (in_write_ >= 0) {
-		::close(in_write_);
-		in_write_ = -1;
-	}
+	if (pid_ > 0 && !ended(pid_, &reaped_, &status_)) send("quit\n");  // (once: the input then closes)
+	end_input();
 }
 
 bool EngineProcess::exited() const
@@ -197,7 +221,15 @@ bool EngineProcess::exited() const
 	if (pid_ <= 0) return true;
 	// (its last lines may be still in the pipe a moment after its end)
 	auto *self = const_cast<EngineProcess *>(this);
-	return ended(pid_, &self->reaped_) && (read_ended_ || !reader_.joinable());
+	return ended(pid_, &self->reaped_, &self->status_) && (read_ended_ || !reader_.joinable());
+}
+
+std::optional<int> EngineProcess::exit_code() const
+{
+	auto *self = const_cast<EngineProcess *>(this);
+	if (pid_ <= 0 || !ended(pid_, &self->reaped_, &self->status_) || status_ < 0) return std::nullopt;
+	if (WIFEXITED(status_)) return WEXITSTATUS(status_);
+	return 128 + (WIFSIGNALED(status_) ? WTERMSIG(status_) : 0);  // (ended by a signal)
 }
 
 void EngineProcess::close(unsigned wait_ms)
@@ -205,12 +237,13 @@ void EngineProcess::close(unsigned wait_ms)
 	quit();
 	if (pid_ > 0) {
 		const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(wait_ms);
-		while (!ended(pid_, &reaped_) && std::chrono::steady_clock::now() < until) ::usleep(10 * 1000);
-		if (!ended(pid_, &reaped_)) {
+		while (!ended(pid_, &reaped_, &status_) && std::chrono::steady_clock::now() < until) ::usleep(10 * 1000);
+		if (!ended(pid_, &reaped_, &status_)) {
 			::kill(pid_, SIGKILL);
-			for (int i = 0; i < 500 && !ended(pid_, &reaped_); ++i) ::usleep(10 * 1000);
+			for (int i = 0; i < 500 && !ended(pid_, &reaped_, &status_); ++i) ::usleep(10 * 1000);
 		}
 	}
+	stop_writer();
 	if (reader_.joinable()) reader_.join();  // (the pipe closes when the process ends; the thread then stops)
 	if (out_read_ >= 0) {
 		::close(out_read_);
@@ -218,6 +251,7 @@ void EngineProcess::close(unsigned wait_ms)
 	}
 	pid_ = -1;
 	reaped_ = false;
+	status_ = -1;
 	partial_.clear();
 	std::lock_guard lock(mutex_);
 	lines_.clear();

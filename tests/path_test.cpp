@@ -3,7 +3,9 @@
 // short form of its folder. Arguments: folders to try in (for example the temporary folder and one on D:).
 #include <windows.h>
 
+#include <algorithm>
 #include <cstdio>
+#include <cwchar>
 #include <filesystem>
 #include <string>
 
@@ -12,6 +14,8 @@
 using namespace ng;
 
 static int failures = 0;
+// the longest folder Windows makes without the long names of Windows 10 (MAX_PATH - 12: room for an 8.3 name)
+constexpr size_t kMaxDir = MAX_PATH - 12 - 1;
 #define CHECK(c)                                                              \
 	do {                                                                      \
 		if (!(c)) {                                                           \
@@ -38,6 +42,10 @@ static void try_in(const std::filesystem::path &base)
 {
 	namespace fs = std::filesystem;
 	const fs::path dir = base / L"ng path test" / L"日本語 の dir";  // "日本語 の dir"
+	if (dir.wstring().size() > kMaxDir) {
+		std::printf("%ls: the folder is too long for this test (%zu letters; not tried)\n", base.c_str(), base.wstring().size());
+		return;
+	}
 	std::error_code ec;
 	fs::create_directories(dir, ec);
 	CHECK(!ec);
@@ -130,7 +138,21 @@ static void test_codepage_utf8()
 static void test_arg_path(const std::filesystem::path &base)
 {
 	namespace fs = std::filesystem;
-	const fs::path dir = base / L"ng arg test" / std::wstring(120, L'\x3042') / L"a b";  // 120 Japanese letters
+	// a name short enough stays as it is, spaces too
+	const std::wstring plain = (base / L"a b" / L"book.dat").wstring();
+	const auto same = engine_arg_path(plain, EngineName::Book);
+	CHECK(same && *same == plain);
+	// The long folder: 120 Japanese letters, fewer when the folder of the test is long, so that the folder stays within
+	// kMaxDir letters and the name of a file in it within MAX_PATH - 1. The name of the file must still be longer than
+	// 259 bytes (each letter is 2 bytes or more in a code page that has it); a folder too long for that is said and not
+	// tried.
+	const size_t outer = (base / L"ng arg test" / L"a b").wstring().size() + 1;  // (+1: the separator of the letters)
+	const size_t letters = outer < kMaxDir ? std::min<size_t>(120, kMaxDir - outer) : 0;
+	if (letters == 0 || outer + std::wcslen(L"\\eval.dat") + 2 * letters <= 259) {
+		std::printf("%ls: the folder is too long for this test (%zu letters; not tried)\n", base.c_str(), base.wstring().size());
+		return;
+	}
+	const fs::path dir = base / L"ng arg test" / std::wstring(letters, L'\x3042') / L"a b";
 	std::error_code ec;
 	fs::create_directories(dir, ec);
 	CHECK(!ec);
@@ -203,10 +225,6 @@ static void test_arg_path(const std::filesystem::path &base)
 		std::filesystem::copy_file(file, book, fs::copy_options::overwrite_existing, ec);
 		CHECK(!engine_arg_path(book.wstring(), EngineName::Book));
 	}
-	// a name short enough stays as it is, spaces too
-	const std::wstring plain = (base / L"a b" / L"book.dat").wstring();
-	const auto same = engine_arg_path(plain, EngineName::Book);
-	CHECK(same && *same == plain);
 	fs::remove_all(base / L"ng arg test", ec);
 }
 
@@ -218,12 +236,19 @@ int main(int argc, char **argv)
 	test_codepage();
 	test_codepage_utf8();
 	test_engine_text();
-	try_in(std::filesystem::temp_directory_path());
-	test_arg_path(std::filesystem::temp_directory_path());
-	for (int i = 1; i < argc; ++i) {
-		try_in(std::filesystem::path(argv[i]));
-		test_arg_path(std::filesystem::path(argv[i]));
-	}
+	// in a folder of this run in each folder (runs side by side, and the files an earlier run left, do not meet)
+	const auto in = [](const std::filesystem::path &base) {
+		const std::filesystem::path run = base / (L"ng-path-test-" + std::to_wstring(GetCurrentProcessId()));
+		std::error_code ec;
+		std::filesystem::remove_all(run, ec);
+		std::filesystem::create_directories(run, ec);
+		CHECK(!ec);
+		try_in(run);
+		test_arg_path(run);
+		std::filesystem::remove_all(run, ec);
+	};
+	in(std::filesystem::temp_directory_path());
+	for (int i = 1; i < argc; ++i) in(std::filesystem::path(argv[i]));
 	if (failures) {
 		std::printf("%d failures\n", failures);
 		return 1;

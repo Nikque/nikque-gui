@@ -139,18 +139,24 @@ int App::run(HINSTANCE, int)
 	create_record_box();
 	build_menu();
 
-	// the view has its size before the engines start and the startup script runs (as on Windows)
-	while (s.width <= 0) {
+	// the view has its size before the engines start and the startup script runs (as on Windows); the app closed before
+	// that ends without starting them
+	while (s.width <= 0 && !s.quit) {
 		AndroidEvent e;
 		if (!pop_event(&e, 1000)) continue;
-		if (e.kind == kEvResize || e.kind == kEvSurface || e.kind == kEvActive) handle(*this, e);
+		if (e.kind == kEvResize || e.kind == kEvSurface || e.kind == kEvActive || e.kind == kEvClose ||
+		    (e.kind == kEvMessage && static_cast<UINT>(e.a) == WM_CLOSE))
+			handle(*this, e);
 	}
-	layout();
-	started();
+	if (!s.quit) {
+		layout();
+		started();
+	}
 
 	while (!s.quit) {
 		AndroidEvent e;
-		if (pop_event(&e, s.needs_paint ? 0 : wait_ms())) {
+		// (without a surface the drawing waits for it: the thread sleeps until an event or a timer)
+		if (pop_event(&e, s.needs_paint && s.surface ? 0 : wait_ms())) {
 			handle(*this, e);
 			while (!s.quit && pop_event(&e, 0)) handle(*this, e);
 		}
@@ -158,6 +164,7 @@ int App::run(HINSTANCE, int)
 		fire_timers(*this);
 		if (s.needs_paint && s.surface && !s.quit) {
 			s.needs_paint = false;
+			gfx_.resize();  // (the picture of the window again, when it could not be made before)
 			paint();
 		}
 	}

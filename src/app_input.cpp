@@ -112,7 +112,7 @@ void App::do_action(Action a)
 	}
 	case Action::PlayCand:
 		if (com_turn()) break;  // the computer's move
-		if (selected_sq_ != kNoMove && game_.play(selected_sq_)) {
+		if (selected_sq_ != kNoMove && !clock_ran_out() && game_.play(selected_sq_)) {  // (not after the end of the time)
 			selected_sq_ = kNoMove;
 			position_changed();
 		}
@@ -250,7 +250,7 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 		return;
 	}
 	if (sq != kNoMove) {
-		if (!com_turn() && game_.play(sq)) {  // not on the computer's move
+		if (!com_turn() && !clock_ran_out() && game_.play(sq)) {  // not on the computer's move, nor after the end of the time
 			selected_sq_ = kNoMove;
 			position_changed();
 		}
@@ -316,7 +316,7 @@ void App::on_mouse_down(int x, int y, bool right, bool dbl)
 			}
 		for (auto &[s, r] : row_rects_)
 			if (inside(r, fx, fy)) {
-				if (dbl && !com_turn() && game_.play(s)) {  // not on the computer's move
+				if (dbl && !com_turn() && !clock_ran_out() && game_.play(s)) {  // not on the computer's move, nor after the end of the time
 					selected_sq_ = kNoMove;
 					position_changed();
 				} else {

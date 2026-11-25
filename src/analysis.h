@@ -58,6 +58,8 @@ struct PosInfo {
 	bool book_done = false;
 	bool book_peeked = false;      // the values of the book were looked up in its file (the engine was reading it)
 	bool values_done = false;      // the values of the book came, by themselves or with the rest
+	bool book_failed = false;      // a book analysis of it ended with an error: not done, and not asked again by itself
+	                               // until the book or its settings change, or the values are asked again (Recompute)
 	bool in_book = false;
 	bool count_done = false;
 	// search
@@ -101,7 +103,7 @@ inline Position position_of(const PosKey &k) { return {k.black, k.white, k.side}
 // the positions seen, the oldest dropped beyond `limit`
 class AnalysisCache {
 public:
-	explicit AnalysisCache(size_t limit = 4096) : limit_(limit) {}
+	explicit AnalysisCache(size_t limit = 4096) : limit_(limit) { touch(); }
 	PosInfo &get(const Position &p);
 	PosInfo *peek(const Position &p);
 	const PosInfo *peek(const Position &p) const;
@@ -112,8 +114,15 @@ public:
 	// what is known of a position, for the position turned by a symmetry (the values and the book are the same)
 	void copy_symmetric(const Position &p, int s);
 	size_t size() const noexcept { return map_.size(); }
+	// a number that changes whenever what the cache holds may change (an entry made or dropped, one given out to be
+	// changed: get and the peek that can change, cleared), and differs between caches: what is made from the cache and
+	// kept (the lines of the book tree) is made again when it is not the same
+	std::uint64_t generation() const noexcept { return generation_; }
 
 private:
+	void touch() noexcept { generation_ = ++last_generation_; }
+	inline static std::uint64_t last_generation_ = 0;  // (the window's thread only)
+	std::uint64_t generation_ = 0;
 	struct Entry {
 		PosInfo info;
 		std::list<PosKey>::iterator age;
@@ -174,8 +183,13 @@ int next_request_id(int last, InUse in_use)
 // applies an "@move" line of book moveinfo to the position's moves
 void apply_move_line(PosInfo &info, const Fields &f);
 
-// a search to the end (the move is searched as deep as the empty squares after it)
+// a search to the end: the move is searched as deep as the empty squares after it, at 100 %, and its value is not a
+// bound ('<' or '>': not exact even then)
 bool move_exact(const MoveEval &m, const Position &p);
+// the bound of the value shown for the move ('<', '>' or 0): only a value of the search has one
+char shown_bound(const MoveEval &m, bool use_book);
+// the bound of a value seen from the other side (the value negated): '<' and '>' change places
+constexpr char other_side_bound(char b) { return b == '<' ? '>' : b == '>' ? '<' : b; }
 
 // the game line after the backward analysis: position i (after i moves)
 struct LineEval {
@@ -183,9 +197,11 @@ struct LineEval {
 	bool complete = false;   // every move has a value (so the best value can go back)
 	int best = 0;            // from the side to move
 	bool exact = false;
+	char bound = 0;          // '<' or '>' when the best value is a bound of the search (from the side to move)
 	bool played_known = false;  // the move played from here (the next move of the game)
 	int played = 0;
 	bool played_exact = false;
+	char played_bound = 0;
 	bool played_improved = false;
 };
 

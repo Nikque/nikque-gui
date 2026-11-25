@@ -39,8 +39,19 @@ check_zip() {  # <zip> <sha256> <size>
 check_zip "$NZIP" $NIKQUE_SHA $NIKQUE_SIZE
 check_zip "$EZIP" $NEWEDAX_SHA $NEWEDAX_SIZE
 [ "$(git -C "$NESRC" rev-parse HEAD)" = $NEWEDAX_COMMIT ] || { echo "$NESRC is not $NEWEDAX_TAG ($NEWEDAX_COMMIT)"; exit 1; }
+# the sources of the engines as committed (changes not committed and files of an earlier build are not taken)
+export_source() {  # <git folder> <commit> <folder>
+	mkdir -p "$3"
+	git -C "$1" archive --format=tar "$2" | tar -x -C "$3"
+}
+# the files of the GUI as committed (no changes not committed, no files not committed among those copied), and the app
+# built after its last commit
+dirty=$({ git status --porcelain --untracked-files=no; git status --porcelain -- readme.txt LICENSE.txt res lang manual; } | sort -u)
+[ -z "$dirty" ] || { echo "$dirty"; echo "the files of the GUI are not those of the commit"; exit 1; }
+[ "$(stat -f %m "$APP/Contents/MacOS/nikque GUI")" -ge "$(git log -1 --format=%ct)" ] || { echo "$APP is older than the last commit"; exit 1; }
 
 WORK=$(mktemp -d)
+git -C "$NESRC" archive --format=tar $NEWEDAX_COMMIT problem/fforum-1-19.obf | tar -x -C "$WORK"
 unzip -q "$NZIP" -d "$WORK/n"
 unzip -q "$EZIP" -d "$WORK/e"
 [ "$(stat -f %z "$WORK/n/bin/data/eval.dat")" = $NIKQUE_EVAL ] || { echo "nikque eval.dat is not of $NIKQUE_TAG"; exit 1; }
@@ -51,7 +62,7 @@ for arch in arm64 x64-modern; do
 	cc=arm64
 	[ $arch = x64-modern ] && cc=x86_64
 	rm -rf "$WORK/ne-$arch"
-	cp -R "$NESRC" "$WORK/ne-$arch"
+	export_source "$NESRC" $NEWEDAX_COMMIT "$WORK/ne-$arch"
 	mkdir -p "$WORK/ne-$arch/bin"
 	make -s -C "$WORK/ne-$arch/src" build ARCH=$arch COMP=clang OS=osx CC="clang++ -arch $cc" BOOST_DIR="$BOOST_DIR" > "$WORK/ne-$arch.log" 2>&1 ||
 		{ tail -30 "$WORK/ne-$arch.log"; exit 1; }
@@ -107,7 +118,7 @@ esac
 for e in nikque newedax; do
 	lipo "$DST/engines/$e/mEdax-arm64" -verify_arch arm64
 	lipo "$DST/engines/$e/mEdax-x64-modern" -verify_arch x86_64
-	(cd "$DST/engines/$e" && "./$host_engine" -n 1 -l 60 -book-usage off -solve "$NESRC/problem/fforum-1-19.obf" > "$WORK/solve-$e.log" 2>&1) ||
+	(cd "$DST/engines/$e" && "./$host_engine" -n 1 -l 60 -book-usage off -solve "$WORK/problem/fforum-1-19.obf" > "$WORK/solve-$e.log" 2>&1) ||
 		{ cat "$WORK/solve-$e.log"; exit 1; }
 	tail -2 "$WORK/solve-$e.log"
 	grep -Fq '19 positions; 0 erroneous move; 0 erroneous score;' "$WORK/solve-$e.log"
@@ -115,6 +126,10 @@ for e in nikque newedax; do
 done
 lipo -info "$DST/nikque GUI.app/Contents/MacOS/nikque GUI"
 for f in "$DST"/engines/*/mEdax-*; do lipo -info "$f"; done
+# the GUI for both kinds of Mac: a build with one of them is not a distribution
+for arch in arm64 x86_64; do
+	lipo "$DST/nikque GUI.app/Contents/MacOS/nikque GUI" -verify_arch $arch || { echo "the GUI has no $arch"; exit 1; }
+done
 
 # nothing that is made by a run
 bad=$(find "$DST" \( -name book.dat -o -name kept.txt -o -name '*.log' -o -name '.DS_Store' \) -print)

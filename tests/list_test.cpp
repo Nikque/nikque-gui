@@ -7,6 +7,7 @@
 #include <psapi.h>
 #else
 #include <sys/resource.h>
+#include <unistd.h>
 #endif
 
 #include <algorithm>
@@ -36,6 +37,25 @@ static int failures = 0;
 			++failures;                                                       \
 		}                                                                     \
 	} while (0)
+
+// The temporary folder of this run (in the one of the system, made at its first use and removed at the end): runs side
+// by side, and the files an earlier run left, do not meet.
+static std::filesystem::path test_temp()
+{
+#if defined(_WIN32)
+	static const unsigned long pid = GetCurrentProcessId();
+#else
+	static const unsigned long pid = static_cast<unsigned long>(getpid());
+#endif
+	static const std::filesystem::path dir = [] {
+		const auto d = std::filesystem::temp_directory_path() / ("ng-list-test-" + std::to_string(pid));
+		std::error_code ec;
+		std::filesystem::remove_all(d, ec);
+		std::filesystem::create_directories(d, ec);
+		return d;
+	}();
+	return dir;
+}
 
 static double ms_since(std::chrono::steady_clock::time_point t)
 {
@@ -166,7 +186,7 @@ static void test_list_basics()
 	}
 
 	// a file written and read again
-	const std::wstring path = (std::filesystem::temp_directory_path() / "ng_list_test.txt").wstring();
+	const std::wstring path = (test_temp() / "ng_list_test.txt").wstring();
 	CHECK(write_list(path, l));
 	GameList r;
 	CHECK(read_list(path, r).games == l.size());
@@ -474,7 +494,7 @@ static void test_parts()
 	CHECK(text.size() > (2u << 20));
 	GameList r1;
 	const ListReadStats st1 = read_list_text(text, r1);
-	const std::wstring path = (std::filesystem::temp_directory_path() / "ng_list_parts.txt").wstring();
+	const std::wstring path = (test_temp() / "ng_list_parts.txt").wstring();
 	CHECK(write_list(path, s));
 	GameList r2;
 	const ListReadStats st2 = read_list(path, r2);
@@ -496,7 +516,7 @@ static void timings()
 	GameList l;
 	for (int i = 0; i < n; ++i) l.add(Position{}, random_game(rng, 60));
 	std::printf("list of %d games: %.1f MB\n", n, l.bytes() / 1048576.0);
-	const std::wstring path = (std::filesystem::temp_directory_path() / "ng_list_big.txt").wstring();
+	const std::wstring path = (test_temp() / "ng_list_big.txt").wstring();
 	auto t = std::chrono::steady_clock::now();
 	write_list(path, l);
 	std::printf("  write %.0f ms (%.1f MB)\n", ms_since(t), std::filesystem::file_size(path) / 1048576.0);
@@ -530,6 +550,68 @@ static void timings()
 	CHECK(!hits2.empty());
 }
 
+// Games added from another list: the same games in the same order as added one by one (with starts of their own too),
+// the other list left empty. A list cleared gives its memory back. A list cut keeps the moves it would keep cut game by
+// game. A list written over a file replaces it whole and leaves no other file; one that cannot be written says so.
+static void test_append_clear_write()
+{
+	std::mt19937_64 rng(5);
+	GameList a, b, want;
+	for (int i = 0; i < 50; ++i) {
+		const auto g = random_game(rng, 1 + i % 60);
+		a.add(Position{}, g);
+		want.add(Position{}, g);
+	}
+	for (int i = 0; i < 70; ++i) {
+		// every third game from the position after its first 4 moves (the same start for those of the same first moves)
+		const auto g = random_game(rng, 8 + i % 50);
+		const size_t k = i % 3 ? 0 : 4;
+		const Position s = play_all(Position{}, g, k);
+		const std::span<const std::uint8_t> m = std::span<const std::uint8_t>(g).subspan(k);
+		b.add(s, m);
+		want.add(s, m);
+	}
+	auto same = [](const GameList &x, const GameList &y) {
+		if (x.size() != y.size()) return false;
+		for (size_t i = 0; i < x.size(); ++i)
+			if (!(x.start(i) == y.start(i)) || list_line(x.start(i), x.moves(i)) != list_line(y.start(i), y.moves(i))) return false;
+		return true;
+	};
+	a.append(std::move(b));
+	CHECK(b.empty() && b.bytes() == 0 && same(a, want));
+	GameList e;
+	e.append(GameList(want));
+	CHECK(same(e, want));
+	a.clear();
+	CHECK(a.empty() && a.bytes() == 0);
+
+	for (const int n : {0, 3, 200}) {
+		GameList t = want, by_game;
+		truncate_list(t, n);
+		for (size_t i = 0; i < want.size(); ++i) {
+			const auto m = want.moves(i);
+			by_game.add(want.start(i), m.first(std::min<size_t>(m.size(), static_cast<size_t>(n))));
+		}
+		CHECK(same(t, by_game));
+	}
+
+	const auto dir = test_temp() / "ng_list_write_test";
+	std::error_code ec;
+	std::filesystem::remove_all(dir, ec);
+	std::filesystem::create_directory(dir);
+	const auto path = dir / "games.txt";
+	std::ofstream(path) << "an old file, longer than nothing\n";
+	CHECK(write_list(path.wstring(), want));
+	GameList r;
+	const ListReadStats st = read_list(path.wstring(), r);
+	CHECK(st.opened && !st.failed && !st.cancelled && same(r, want));
+	size_t files = 0;
+	for (const auto &f : std::filesystem::directory_iterator(dir)) files += f.is_regular_file();
+	CHECK(files == 1);
+	CHECK(!write_list((dir / "none" / "games.txt").wstring(), want));
+	std::filesystem::remove_all(dir, ec);
+}
+
 int main(int argc, char **argv)
 {
 	// list_test --findline "<64 squares> <X|O>" [nodes] [dead ends kept]: the line search without the book to that
@@ -548,7 +630,11 @@ int main(int argc, char **argv)
 #else
 		rusage ru{};
 		getrusage(RUSAGE_SELF, &ru);
-		const double peak = ru.ru_maxrss / 1048576.0;  // (bytes on macOS)
+#if defined(__APPLE__)
+		const double peak = ru.ru_maxrss / 1048576.0;  // bytes on macOS
+#else
+		const double peak = ru.ru_maxrss / 1024.0;  // kilobytes (1024 bytes) on Linux
+#endif
 #endif
 		std::printf("found %d, nodes %lld, gave up %d, dead %zu, %.0f ms, peak working set %.1f MB\n", r.line.has_value(), r.nodes,
 		            r.gave_up, r.dead, ms_since(t), peak);
@@ -570,7 +656,12 @@ int main(int argc, char **argv)
 	test_find_line(argc, argv);
 	test_parts();
 	test_read_stopped();
+	test_append_clear_write();
 	timings();
+	{
+		std::error_code ec;
+		std::filesystem::remove_all(test_temp(), ec);
+	}
 	if (failures) {
 		std::printf("%d failures\n", failures);
 		return 1;

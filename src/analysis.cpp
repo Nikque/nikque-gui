@@ -41,7 +41,7 @@ void PosInfo::reset_book()
 		m.cmp_bound = keep.cmp_bound;
 	}
 	book_params.clear();
-	book_begun = book_done = book_peeked = values_done = in_book = count_done = false;
+	book_begun = book_done = book_peeked = values_done = in_book = count_done = book_failed = false;
 	levels_done = false;
 	levels.clear();
 	levels_positions = -1;
@@ -63,7 +63,7 @@ void PosInfo::reset_book_params()
 		m.umi_exact = true;
 		m.umi_black = m.umi_white = -1;
 	}
-	book_begun = book_done = false;
+	book_begun = book_done = book_failed = false;
 }
 
 bool PosInfo::set_book_params(const std::string &params)
@@ -111,6 +111,7 @@ static PosInfo new_info(const Position &p)
 
 PosInfo &AnalysisCache::get(const Position &p)
 {
+	touch();
 	const PosKey k = key_of(p);
 	auto it = map_.find(k);
 	if (it != map_.end()) {
@@ -131,7 +132,9 @@ PosInfo &AnalysisCache::get(const Position &p)
 PosInfo *AnalysisCache::peek(const Position &p)
 {
 	auto it = map_.find(key_of(p));
-	return it == map_.end() ? nullptr : &it->second.info;
+	if (it == map_.end()) return nullptr;
+	touch();  // (it may be changed)
+	return &it->second.info;
 }
 
 const PosInfo *AnalysisCache::peek(const Position &p) const
@@ -142,11 +145,13 @@ const PosInfo *AnalysisCache::peek(const Position &p) const
 
 void AnalysisCache::clear_book()
 {
+	touch();
 	for (auto &[k, e] : map_) e.info.reset_book();
 }
 
 void AnalysisCache::clear_search()
 {
+	touch();
 	for (auto &[k, e] : map_) e.info.reset_search();
 }
 
@@ -404,7 +409,14 @@ void unmix_lines(std::vector<std::string> &lines, std::string &open)
 
 bool move_exact(const MoveEval &m, const Position &p)
 {
-	return m.searched && m.selectivity >= 100 && m.depth >= p.empties() - 1;
+	return m.searched && m.bound == 0 && m.selectivity >= 100 && m.depth >= p.empties() - 1;
+}
+
+char shown_bound(const MoveEval &m, bool use_book)
+{
+	// (the order of shown_value: a value of the book goes before the search, a leaf after it)
+	if (use_book && m.in_book) return 0;
+	return m.searched ? m.bound : 0;
 }
 
 std::vector<LineEval> backward_line(const Game &g, const AnalysisCache &cache, bool use_book, bool backward)
@@ -430,6 +442,7 @@ std::vector<LineEval> backward_line(const Game &g, const AnalysisCache &cache, b
 				e.complete = next->complete;
 				e.best = e.played = from_next(next->best);
 				e.exact = e.played_exact = next->exact;
+				e.bound = e.played_bound = turn ? other_side_bound(next->bound) : next->bound;
 			}
 			continue;
 		}
@@ -437,36 +450,44 @@ std::vector<LineEval> backward_line(const Game &g, const AnalysisCache &cache, b
 		if (!info) continue;
 		int best = -999;
 		bool all = !info->moves.empty(), best_exact = false;
+		char best_bound = 0;
 		for (const MoveEval &m : info->moves) {
 			int v = 0;
 			bool known = shown_value(m, use_book, &v);
 			bool ex = known && !(use_book && m.in_book) && move_exact(m, p);
+			char bound = known ? shown_bound(m, use_book) : 0;
 			bool improved = false;
 			const bool played = i < n && m.sq == g.moves()[i];
 			if (played && backward && next && next->complete && !(use_book && m.in_book) && !ex) {
 				v = from_next(next->best);
 				ex = next->exact;
+				bound = turn ? other_side_bound(next->bound) : next->bound;
 				known = improved = true;
 			}
 			if (played) {
 				e.played_known = known;
 				e.played = v;
 				e.played_exact = ex;
+				e.played_bound = bound;
 				e.played_improved = improved;
 			}
 			if (!known) {
 				all = false;
 				continue;
 			}
-			if (v > best) {
+			// the same value again: a lower bound ('>') says the best may be above it; a value without a bound says
+			// the best is not below it (an upper bound '<' of it says less)
+			if (v > best || (v == best && (bound == '>' || (best_bound == '<' && bound == 0)))) {
 				best = v;
 				best_exact = ex;
+				best_bound = bound;
 			}
 		}
 		if (best != -999) {
 			e.known = true;
 			e.best = best;
 			e.exact = best_exact;
+			e.bound = best_bound;
 		}
 		e.complete = all;
 	}

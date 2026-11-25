@@ -3,6 +3,7 @@
 	<string name="menu">メニュー</string>
 	<string name="preparing">ファイルを準備しています…</string>
 	<string name="prepare_failed">アプリのファイルを準備できませんでした。</string>
+	<string name="prepare_retry">ここを押すと、もう一度準備します。</string>
 	<string name="exit_ask">nikque GUI を終了しますか？</string>
 	<string name="exit_yes">終了</string>
 </resources>

@@ -23,7 +23,12 @@ for i in $(seq 1 90); do
 	fi
 	if ! adb shell pidof $PKG > /dev/null; then echo "the app has ended after $((i * 10)) s"; break; fi
 done
-adb shell pidof $PKG > /dev/null && echo "the app is still running"
+# failed: the app still running at the time limit (the script did not end), or a file of the script missing
+fail=0
+if adb shell pidof $PKG > /dev/null; then
+	echo "timeout: the app is still running"
+	fail=1
+fi
 
 adb logcat -d -v brief > run/logcat-all.txt
 grep -E "nikque|AndroidRuntime|DEBUG|libc|SELinux|avc:" run/logcat-all.txt | tail -300 > run/logcat.txt
@@ -36,6 +41,8 @@ if ! ls run/android-*.png > /dev/null 2>&1; then
 	done
 fi
 adb shell run-as $PKG ls -la files/app files/app/engines/nikque files/app/engines/newedax > run/files-list.txt 2>&1
+bash .github/ci/check_smoke.sh .github/ci/smoke-android.txt run || fail=1
+adb shell am force-stop $PKG
 
 # the app once more without the script: pictures of the whole screen (the row of buttons, the list of the menus, a
 # move played by a tap, the question of the Back button), then it is stopped
@@ -66,4 +73,4 @@ adb logcat -d -v brief | grep -E "nikque|AndroidRuntime|F/DEBUG|F/libc" | tail -
 adb shell am force-stop $PKG
 rm -f run/files.tar run/logcat-all.txt
 ls -la run
-ls run/android-0*.png > /dev/null
+exit $fail

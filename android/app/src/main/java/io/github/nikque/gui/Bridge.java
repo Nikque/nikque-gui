@@ -11,7 +11,9 @@ import android.content.Context;
 import android.graphics.Typeface;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.Editable;
 import android.text.InputType;
+import android.text.TextWatcher;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -163,14 +165,27 @@ final class Bridge {
 					col.addView(e);
 					controls[i] = e;
 					if (kinds[i] == 5) {
+						// the slider and the number show the same value: the slider moves with a number typed in its
+						// range (a number out of it is refused at OK), the number with the slider
 						final SeekBar s = new SeekBar(a);
-						final int low = lo[i], high = Math.max(hi[i], lo[i] + 1);
+						final int low = lo[i], high = Math.max(hi[i], lo[i]);
 						s.setMax(high - low);
-						try {
-							s.setProgress(Math.max(low, Math.min(high, Integer.parseInt(texts[i].trim()))) - low);
-						} catch (NumberFormatException x) {
-							// (the slider stays at its start)
-						}
+						final Runnable follow = () -> {
+							try {
+								final int v = Integer.parseInt(e.getText().toString().trim());
+								if (v >= low && v <= high && s.getProgress() != v - low) s.setProgress(v - low);
+							} catch (NumberFormatException x) {
+								// (not a number yet: the slider stays)
+							}
+						};
+						follow.run();
+						e.addTextChangedListener(new TextWatcher() {
+							@Override public void beforeTextChanged(CharSequence t, int start, int count, int after) {}
+							@Override public void onTextChanged(CharSequence t, int start, int before, int count) {}
+							@Override public void afterTextChanged(Editable t) {
+								follow.run();
+							}
+						});
 						s.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
 							@Override public void onProgressChanged(SeekBar bar, int p, boolean user) {
 								if (user) e.setText(String.valueOf(p + low));

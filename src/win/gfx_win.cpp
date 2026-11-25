@@ -91,8 +91,13 @@ bool Gfx::init(NativeWindow hwnd)
 	return create_device();
 }
 
+// A part that cannot be made (memory, the driver): nothing of the device is kept, and the next frame tries again.
 bool Gfx::create_device()
 {
+	const auto failed = [this] {
+		release_device();
+		return false;
+	};
 	const D3D_FEATURE_LEVEL levels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1,
 	                                    D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_9_3};
 	const UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
@@ -101,12 +106,12 @@ bool Gfx::create_device()
 	if (FAILED(hr))
 		hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, flags, levels, 5, D3D11_SDK_VERSION, &d3d_,
 		                       nullptr, nullptr);
-	if (FAILED(hr)) return false;
+	if (FAILED(hr)) return failed();
 	ComPtr<IDXGIDevice1> dxgi;
-	d3d_.As(&dxgi);
+	if (FAILED(d3d_.As(&dxgi))) return failed();
 	dxgi->SetMaximumFrameLatency(1);
-	if (FAILED(factory_->CreateDevice(dxgi.Get(), &device_))) return false;
-	if (FAILED(device_->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &dc_))) return false;
+	if (FAILED(factory_->CreateDevice(dxgi.Get(), &device_))) return failed();
+	if (FAILED(device_->CreateDeviceContext(D2D1_DEVICE_CONTEXT_OPTIONS_NONE, &dc_))) return failed();
 	dc_.As(&dc1_);
 	canvas_.d = dc_.Get();
 	canvas_.factory = factory_.Get();
@@ -114,9 +119,9 @@ bool Gfx::create_device()
 	dc_->SetUnitMode(D2D1_UNIT_MODE_PIXELS);
 
 	ComPtr<IDXGIAdapter> adapter;
-	dxgi->GetAdapter(&adapter);
+	if (FAILED(dxgi->GetAdapter(&adapter))) return failed();
 	ComPtr<IDXGIFactory2> dxgi_factory;
-	adapter->GetParent(IID_PPV_ARGS(&dxgi_factory));
+	if (FAILED(adapter->GetParent(IID_PPV_ARGS(&dxgi_factory)))) return failed();
 	DXGI_SWAP_CHAIN_DESC1 sd{};
 	sd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
 	sd.SampleDesc.Count = 1;
@@ -125,13 +130,14 @@ bool Gfx::create_device()
 	sd.Scaling = DXGI_SCALING_NONE;
 	sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
 	sd.AlphaMode = DXGI_ALPHA_MODE_IGNORE;
-	if (FAILED(dxgi_factory->CreateSwapChainForHwnd(d3d_.Get(), hwnd_, &sd, nullptr, nullptr, &swap_))) return false;
+	if (FAILED(dxgi_factory->CreateSwapChainForHwnd(d3d_.Get(), hwnd_, &sd, nullptr, nullptr, &swap_))) return failed();
 	dxgi_factory->MakeWindowAssociation(hwnd_, DXGI_MWA_NO_ALT_ENTER);
-	dc_->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0), &brush_);
+	if (FAILED(dc_->CreateSolidColorBrush(D2D1::ColorF(0, 0, 0), &brush_))) return failed();
 	create_target();
 	return true;
 }
 
+// (not made: target_ stays empty, and begin_frame tries again)
 void Gfx::create_target()
 {
 	ComPtr<IDXGISurface> surface;
@@ -139,7 +145,10 @@ void Gfx::create_target()
 	const D2D1_BITMAP_PROPERTIES1 bp = D2D1::BitmapProperties1(
 		D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
 		D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE), 96.0f, 96.0f);
-	dc_->CreateBitmapFromDxgiSurface(surface.Get(), &bp, &target_);
+	if (FAILED(dc_->CreateBitmapFromDxgiSurface(surface.Get(), &bp, &target_)) || !target_) {
+		target_.Reset();
+		return;
+	}
 	dc_->SetTarget(target_.Get());
 	const D2D1_SIZE_U s = target_->GetPixelSize();
 	width_ = s.width;
@@ -182,6 +191,7 @@ void Gfx::resize()
 bool Gfx::begin_frame()
 {
 	if (!dc_ && !create_device()) return false;
+	if (!target_) create_target();
 	if (!target_) return false;
 	dc_->BeginDraw();
 	dc_->SetTransform(D2D1::Matrix3x2F::Identity());
@@ -350,6 +360,20 @@ const NumberShape &Gfx::shape(std::wstring_view text, float em, Face face)
 	return shapes_[key] = std::move(s);
 }
 
+// Whether the glows kept, with one more of `pixels` pixels, are too many: more than 512, or more than kGlowPixels pixels
+// in all (a large window has large ones). They are then all made again as they are drawn.
+constexpr double kGlowPixels = 32.0 * 1024 * 1024;
+
+static bool glows_too_many(const std::unordered_map<std::wstring, Glow> &glows, double pixels)
+{
+	if (glows.size() > 512) return true;
+	for (const auto &[k, g] : glows) {
+		const D2D1_SIZE_U s = g.bitmap->GetPixelSize();
+		pixels += static_cast<double>(s.width) * s.height;
+	}
+	return pixels > kGlowPixels;
+}
+
 static std::wstring glow_key(std::wstring_view shape_key, const D2D1_COLOR_F &c, float radius)
 {
 	wchar_t b[96];
@@ -386,7 +410,10 @@ void Gfx::prepare_glow(std::wstring_view text, float em, const D2D1_COLOR_F &col
 	dc_->EndDraw();
 
 	ComPtr<ID2D1Effect> shadow;
-	dc_->CreateEffect(CLSID_D2D1Shadow, &shadow);
+	if (FAILED(dc_->CreateEffect(CLSID_D2D1Shadow, &shadow)) || !shadow) {
+		dc_->SetTarget(old.Get());
+		return;  // (not kept: made again the next time)
+	}
 	shadow->SetInput(0, mask.Get());
 	shadow->SetValue(D2D1_SHADOW_PROP_BLUR_STANDARD_DEVIATION, radius);
 	shadow->SetValue(D2D1_SHADOW_PROP_COLOR, D2D1::Vector4F(color.r, color.g, color.b, color.a));
@@ -398,7 +425,7 @@ void Gfx::prepare_glow(std::wstring_view text, float em, const D2D1_COLOR_F &col
 	dc_->EndDraw();
 
 	dc_->SetTarget(old.Get());
-	if (glows_.size() > 512) glows_.clear();
+	if (glows_too_many(glows_, static_cast<double>(size.width) * size.height)) glows_.clear();
 	glows_[key] = Glow{out, {-origin.x, -origin.y}};
 }
 

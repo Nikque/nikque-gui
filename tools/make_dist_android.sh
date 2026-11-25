@@ -43,6 +43,14 @@ check_zip "$NZIP" $NIKQUE_SHA $NIKQUE_SIZE
 check_zip "$EZIP" $NEWEDAX_SHA $NEWEDAX_SIZE
 [ "$(git -C "$NESRC" rev-parse HEAD)" = $NEWEDAX_COMMIT ] || { echo "$NESRC is not $NEWEDAX_TAG ($NEWEDAX_COMMIT)"; exit 1; }
 [ "$(git -C "$NKSRC" rev-parse HEAD)" = $NIKQUE_COMMIT ] || { echo "$NKSRC is not $NIKQUE_TAG ($NIKQUE_COMMIT)"; exit 1; }
+# the sources of the engines as committed (changes not committed and files of an earlier build are not taken)
+export_source() {  # <git folder> <commit> <folder>
+	mkdir -p "$3"
+	git -C "$1" archive --format=tar "$2" | tar -x -C "$3"
+}
+# the files of the GUI as committed: no changes not committed, no files not committed among those copied
+dirty=$({ git status --porcelain --untracked-files=no; git status --porcelain -- readme.txt LICENSE.txt res lang; } | sort -u)
+[ -z "$dirty" ] || { echo "$dirty"; echo "the files of the GUI are not those of the commit"; exit 1; }
 
 WORK=$(mktemp -d)
 unzip -q "$NZIP" -d "$WORK/n"
@@ -59,9 +67,9 @@ cp "$WORK/e/bin/aEdax-arm64-v8a" "$LIBS/arm64-v8a/libedax_newedax.so"
 file "$LIBS"/arm64-v8a/*
 
 # x86_64 for the emulator, from the sources of the tags (newedax finds Boost in third_party next to its folder)
-cp -R "$NKSRC" "$WORK/nk"
+export_source "$NKSRC" $NIKQUE_COMMIT "$WORK/nk"
 mkdir -p "$WORK/nesrc/third_party"
-cp -R "$NESRC" "$WORK/nesrc/ne"
+export_source "$NESRC" $NEWEDAX_COMMIT "$WORK/nesrc/ne"
 ln -s "$BOOST_DIR" "$WORK/nesrc/third_party/boost_1_92_0"
 for e in nikque newedax; do
 	src=$WORK/nk/src
@@ -114,6 +122,7 @@ grep -n "^startup\|^level\|^kind" "$WORK/assets-ci/app/config.ini"
 
 # ---- the APKs
 mkdir -p dist
+rm -rf android/app/build android/app/.cxx  # (nothing of an earlier build)
 gradle --version | grep -E "^Gradle|JVM" || true
 gradle -p android --no-daemon -q assembleRelease -PngAbi=arm64-v8a -PngAssets="$WORK/assets" -PngJniLibs="$LIBS"
 cp android/app/build/outputs/apk/release/app-release.apk "dist/$NAME.apk"
@@ -126,6 +135,11 @@ BT=$(ls -d "${ANDROID_HOME:-$ANDROID_SDK_ROOT}"/build-tools/* | sort -V | tail -
 "$BT/aapt2" dump badging "dist/$NAME.apk" | grep -E "^package|sdkVersion|native-code" || true
 unzip -l "dist/$NAME.apk" | grep -E "lib/|assets/app/(config.ini|engines/.*/eval.dat)|classes"
 if unzip -l "dist/$NAME.apk" | grep -q "lib/x86_64/"; then echo "the release APK holds x86_64"; exit 1; fi
+# the programs of each APK for its CPU: the GUI and the two engines
+for f in libnikquegui.so libedax_nikque.so libedax_newedax.so; do
+	unzip -l "dist/$NAME.apk" | grep -q "lib/arm64-v8a/$f" || { echo "the release APK has no lib/arm64-v8a/$f"; exit 1; }
+	unzip -l "dist/$NAME-ci.apk" | grep -q "lib/x86_64/$f" || { echo "the APK of the CI has no lib/x86_64/$f"; exit 1; }
+done
 unzip -l "dist/$NAME.apk" | awk 'NR>3 && $4!="" {printf "%12s  %s\n", $1, $4}' | sort -k2 > "dist/$NAME-files.txt"
 sha256sum "dist/$NAME.apk" | tee -a "dist/$NAME-files.txt"
 ls -la dist

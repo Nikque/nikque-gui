@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 
 #include "app.h"
@@ -51,7 +52,7 @@ SavedFile newest_saved(const std::wstring &book)
 	return best;
 }
 
-std::wstring local_time(std::filesystem::file_time_type t)
+std::time_t file_time(std::filesystem::file_time_type t)
 {
 #if defined(_WIN32)
 	const auto sys = std::chrono::clock_cast<std::chrono::system_clock>(t);
@@ -59,12 +60,21 @@ std::wstring local_time(std::filesystem::file_time_type t)
 	// (libc++ has no clock_cast for the clock of the files)
 	const auto sys = std::chrono::time_point_cast<std::chrono::system_clock::duration>(std::chrono::file_clock::to_sys(t));
 #endif
-	const std::time_t tt = std::chrono::system_clock::to_time_t(sys);
+	return std::chrono::system_clock::to_time_t(sys);
+}
+
+std::wstring local_time(std::time_t tt)
+{
 	std::tm tm{};
 	local_tm(tt, &tm);
 	wchar_t b[32];
 	wcsftime(b, 32, L"%m/%d %H:%M", &tm);
 	return b;
+}
+
+std::wstring local_time(std::filesystem::file_time_type t)
+{
+	return local_time(file_time(t));
 }
 
 // where book reduce counts from, in the words of the log
@@ -188,6 +198,9 @@ void App::start_learning_at(const std::string &command, const Position &start, c
 		ini_.set("learn", "last_command", one_line);
 		ini_.set("learn", "last_start", start.to_board_string());
 		ini_.set("learn", "last_moves", moves);
+		// the book it learns (its files saved on the way are next to it) and when it started (they are not older)
+		ini_.set("learn", "last_book", narrow(saved_base()));
+		ini_.set("learn", "last_started", std::to_string(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now())));
 	}
 	log(lang::f(learn_keeps_book_ ? "devexp.started" : "learn.started", {engine_text(command)}));
 	send(0, out);
@@ -197,6 +210,7 @@ void App::start_learning_at(const std::string &command, const Position &start, c
 
 void App::learning_line(const std::string &line)
 {
+	if (line.starts_with("ERROR")) job_error(0);  // (the files the job replaces stay as they are; the line goes on below)
 	// the result of book deviate ... export: "Book deviate2 2 4 export ends...finished: 7 lines written (lines.txt)"
 	if (line.starts_with("Book deviate") && line.find(" export ") != std::string::npos && line.find("finished:") != std::string::npos) {
 		long long n = 0;
@@ -273,7 +287,7 @@ void App::learning_ended()
 
 void App::stop_learning()
 {
-	if (!learning_) return;
+	if (!learning_ && !load_wait_.end_id) return;  // (also while the file to go on from is loaded)
 	const SavedFile saved = newest_saved(saved_base());
 	const std::wstring when = saved.path.empty() ? lang::t("learn.never_saved")
 	                                             : lang::f("learn.saved_at", {local_time(saved.time), saved.path});
@@ -289,7 +303,7 @@ void App::stop_learning()
 	forget_main_requests();
 	cache_.clear_book();
 	log(lang::t("learn.stopped"));
-	finish_moves(0);
+	finish_moves(0, false);  // (stopped: the files it would replace stay as they are)
 	start_engines();
 	update_menu();
 	position_changed();
@@ -298,12 +312,25 @@ void App::stop_learning()
 
 void App::continue_learning()
 {
-	if (learning_ || !eng_[0].alive) return;
-	const SavedFile saved = newest_saved(saved_base());
+	if (learning_ || load_wait_.end_id || !eng_[0].alive) return;
+	const std::wstring base = saved_base();
+	const SavedFile saved = newest_saved(base);
 	std::error_code ec;
 	const auto book_time = std::filesystem::last_write_time(book_file(), ec);
 	if (saved.path.empty() || (!ec && saved.time <= book_time)) {
 		message(lang::t("learn.nothing_newer"), MB_ICONINFORMATION);
+		return;
+	}
+	// the learning kept is of this book, and the file saved on the way is of it (not of a learning before it)
+	const std::string last_book = ini_.get("learn", "last_book");
+	if (last_book.empty() || !iequals(last_book, narrow(base))) {
+		message(lang::f("learn.other_book", {last_book.empty() ? lang::t("learn.book_unknown") : widen(last_book), base}), MB_ICONWARNING);
+		return;
+	}
+	const std::string started_text = ini_.get("learn", "last_started");
+	const std::time_t started = static_cast<std::time_t>(std::atoll(started_text.c_str()));
+	if (started > 0 && file_time(saved.time) + 2 < started) {  // (2 s: the times of some file systems are coarse)
+		message(lang::f("learn.old_saved", {saved.path, local_time(saved.time), local_time(started)}), MB_ICONWARNING);
 		return;
 	}
 	std::string kept = ini_.get("learn", "last_command");
@@ -318,9 +345,41 @@ void App::continue_learning()
 		return;
 	const auto path = engine_path_or_say(saved.path, FileUse::Read, 0);  // the engine reads the name up to a space
 	if (!path) return;
-	send(0, "book load " + *path + "\n");
+	// the learning goes on only when the file is loaded: else it would go on with the book as it was. A marker after
+	// the command ends the wait (the engine reads no other command while it loads), also with an engine that does
+	// not say "@load"
+	send(0, stop_main_analyses());
+	load_wait_ = LoadWait{};
+	load_wait_.end_id = new_id();
+	load_wait_.file = saved.path;
+	load_wait_.command = *last;
+	load_wait_.started = started_text;
+	send(0, "book load " + *path + "\necho M" + std::to_string(load_wait_.end_id) + "\n");
 	cache_.clear_book();
-	if (last->empty()) {
+	log(lang::f("learn.loading", {saved.path}));
+	update_menu();
+}
+
+void App::load_answered(bool ended)
+{
+	const LoadWait w = std::move(load_wait_);
+	load_wait_ = LoadWait{};
+	update_menu();
+	// loaded: said so ("@load ok=1"), or an engine that does not say it, without an ERROR line
+	std::wstring why;
+	if (ended) why = lang::t("learn.load_ended");
+	else if (w.said == 0) why = L"@load ok=0";
+	else if (w.said != 1 && w.error) why = L"ERROR";
+	if (!why.empty()) {
+		const std::wstring text = lang::f("learn.load_failed", {w.file, why});
+		log(text);
+		load_box_ = text;
+		set_timer(kTimerLoadBox, 1);
+		schedule_script();
+		return;
+	}
+	cache_.clear_book();  // (the analyses of the book loaded)
+	if (w.command.empty()) {
 		request_analysis();
 		return;
 	}
@@ -333,7 +392,9 @@ void App::continue_learning()
 		game_.go_to(game_.size());
 		orient_ = 0;  // the game as it was learned from
 	}
-	start_learning(*last);
+	start_learning(w.command);
+	// (the same learning: its start stays, so that a stop before its next file saved on the way can go on again)
+	if (!w.started.empty()) ini_.set("learn", "last_started", w.started);
 }
 
 // book reduce: the window of the menu

@@ -8,13 +8,17 @@
 #include <atomic>
 #include <bit>
 #include <cctype>
+#include <chrono>
+#include <filesystem>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <share.h>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <unordered_set>
 #include <vector>
 
@@ -36,6 +40,37 @@ static int failures = 0;
 
 static std::wstring self;
 static std::wstring src_dir;  // the folder of the sources (the first argument)
+
+// A temporary folder of this run, made in the one of the system and set as TMP and TEMP, which the engines started by
+// the tests get too: runs side by side, and the files an earlier run left, do not meet. It is removed at the end of
+// the run. Empty (and said) when it
+// cannot be made, or when it is too long for the names the tests make in it (MAX_PATH).
+static std::wstring run_temp_folder()
+{
+	std::wstring base(32768, L'\0');
+	const DWORD n = GetTempPathW(static_cast<DWORD>(base.size()), base.data());
+	if (n == 0 || n >= base.size()) {
+		std::printf("no temporary folder\n");
+		return {};
+	}
+	base.resize(n);
+	if (base.back() != L'\\') base += L'\\';
+	for (unsigned k = 0; k < 100; ++k) {
+		const std::wstring dir = base + L"ng-app-test-" + std::to_wstring(GetCurrentProcessId()) + L"-" + std::to_wstring(k) + L"\\";
+		if (dir.size() + 64 > MAX_PATH) {
+			std::printf("the temporary folder is too long for this test (%zu letters): %ls\n", base.size(), base.c_str());
+			return {};
+		}
+		if (CreateDirectoryW(dir.c_str(), nullptr)) {
+			SetEnvironmentVariableW(L"TMP", dir.c_str());
+			SetEnvironmentVariableW(L"TEMP", dir.c_str());
+			return dir;
+		}
+		if (GetLastError() != ERROR_ALREADY_EXISTS) break;
+	}
+	std::printf("the temporary folder of the run cannot be made in %ls\n", base.c_str());
+	return {};
+}
 
 static std::unique_ptr<App> make_app()
 {
@@ -1777,6 +1812,295 @@ static void test_close_waits_for_save()
 	DeleteFileW(saved.c_str());
 }
 
+// The save of the book as the main engine ends fails (its ERROR line with a last line not ended, an end that is not
+// normal, or "@save ok=0"): the log and a box say it was not saved (not "saved"), the queue of learning jobs does not go
+// on, and what was asked after the save is done. A save said, or ended as usual, is saved.
+static void test_save_failed()
+{
+	const std::wstring saved = make_app()->temp_dir_ + L"ng-save-failed.txt";
+	for (const std::string how : {"error", "crash", "said", "saidok", ""}) {
+		DeleteFileW(saved.c_str());
+		auto a = make_app();
+		std::vector<std::wstring> asked;
+		a->message_hook_ = [&](const std::wstring &text, UINT) {
+			asked.push_back(text);
+			return IDOK;
+		};
+		start_engine(*a, (L"--engine slowquit 0 \"" + saved + L"\" " + widen(how)).c_str());
+		a->eng_[0].book_changed = true;  // (a command that changes the book was sent)
+		a->learn_queue_.push_back({Position{}, "", "book store"});
+		a->queue_running_ = true;
+		bool then = false;
+		a->stop_engines([&] { then = true; });
+		CHECK(a->book_saving_);
+		for (const ULONGLONG end = GetTickCount64() + 5000; !a->eng_[0].proc.exited() && GetTickCount64() < end;) Sleep(1);
+		a->proc(a->hwnd_, WM_TIMER, kTimerSave, 0);
+		const bool ok = how == "saidok" || how.empty();
+		CHECK(then && !a->book_saving_ && a->book_save_failed_ == !ok);
+		CHECK(logged(*a, key_head("log.engine_saved")) == ok && logged(*a, key_head("log.engine_save_failed")) == !ok);
+		CHECK(a->queue_running_ == ok && asked.size() == (ok ? 0u : 1u));
+		if (how == "error") {  // (the last line, not ended: once)
+			int n = 0;
+			for (const auto &l : a->log_) n += l.find(L"existing book was not replaced") != std::wstring::npos;
+			CHECK(n == 1);
+		}
+	}
+	DeleteFileW(saved.c_str());
+}
+
+// Going on with the last learning from its file saved on the way: only on the book it learned, and from a file saved
+// after it started (else the file is of another learning); else it is said and nothing is sent. Gone on with, it keeps
+// its start.
+static void test_continue_learning()
+{
+	namespace fs = std::filesystem;
+	auto a = make_app();
+	const std::wstring book = a->temp_dir_ + L"ng-cont-book.dat", other = a->temp_dir_ + L"ng-cont-other.dat";
+	const std::wstring dev = book + L".dev";
+	for (const std::wstring &f : {book, dev})
+		if (FILE *fp = _wfsopen(f.c_str(), L"wb", _SH_DENYNO)) std::fclose(fp);
+	fs::last_write_time(dev, fs::last_write_time(book) + std::chrono::seconds(60));
+	for (const char *sec : {"nikque", "newedax"}) a->ini_.set(sec, "book", narrow(book));
+	std::vector<std::wstring> asked;
+	a->message_hook_ = [&](const std::wstring &text, UINT) {
+		asked.push_back(text);
+		return IDOK;
+	};
+	auto asked_for = [&](const char *key) {
+		const std::wstring head = key_head(key);
+		return std::any_of(asked.begin(), asked.end(), [&](const std::wstring &s) { return s.starts_with(head); });
+	};
+	const long long now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+	start_engine(*a, L"--engine load ok");
+	a->ini_.set("learn", "last_command", "book deviate 2 4");
+	a->ini_.set("learn", "last_start", Position{}.to_board_string());
+	a->ini_.set("learn", "last_moves", "");
+	// the last learning was on another book (or its book is not known)
+	for (const std::string last : {narrow(other), std::string()}) {
+		asked.clear();
+		a->ini_.set("learn", "last_book", last);
+		a->ini_.set("learn", "last_started", std::to_string(now - 3600));
+		a->continue_learning();
+		CHECK(asked_for("learn.other_book") && !asked_for("learn.ask_continue") && !a->learning_);
+	}
+	// this book, but the file saved on the way is older than its start
+	asked.clear();
+	a->ini_.set("learn", "last_book", narrow(book));
+	a->ini_.set("learn", "last_started", std::to_string(now + 3600));
+	a->continue_learning();
+	CHECK(asked_for("learn.old_saved") && !a->learning_);
+	// both: it goes on, and its start stays
+	asked.clear();
+	a->ini_.set("learn", "last_started", std::to_string(now - 3600));
+	// the file is loaded first ("book load", then a marker): the learning goes on when it is said loaded
+	auto wait_load = [&] {
+		for (const ULONGLONG end = GetTickCount64() + 10000; a->load_wait_.end_id && GetTickCount64() < end; Sleep(1)) {
+			MSG m{};
+			while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a->on_engine(m.wParam, m.lParam != 0);
+		}
+		CHECK(a->load_wait_.end_id == 0);
+		play_timer(*a, kTimerLoadBox);  // (the box comes after the lines of the engine are read)
+	};
+	asked.clear();
+	a->ini_.set("learn", "last_started", std::to_string(now - 3600));
+	a->continue_learning();
+	CHECK(asked_for("learn.ask_continue") && !a->learning_ && a->load_wait_.end_id != 0 && a->book_held());
+	wait_load();
+	CHECK(a->learning_ && !asked_for("learn.load_failed"));
+	CHECK(a->ini_.get("learn", "last_started") == std::to_string(now - 3600) && a->ini_.get("learn", "last_book") == narrow(book));
+	// not loaded ("@load ok=0", an ERROR line from an engine that does not say "@load", the engine ended): the learning
+	// does not go on, the log and a box say it; an engine that says nothing and no error: it goes on (as before "@load")
+	for (const std::string how : {"fail", "error", "end", "none"}) {
+		a->eng_[0].proc.close(0);
+		MSG m{};  // (the end of the engine closed, of the same tag as the next one: not taken)
+		while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) {}
+		a->learning_ = false;
+		a->forget_main_requests();
+		start_engine(*a, widen("--engine load " + how).c_str());
+		asked.clear();
+		a->continue_learning();
+		CHECK(a->load_wait_.end_id != 0);
+		wait_load();
+		const bool goes_on = how == "none";
+		CHECK(a->learning_ == goes_on && asked_for("learn.load_failed") == !goes_on);
+		if (a->learning_ != goes_on) std::printf("  (load %s)\n", how.c_str());
+		CHECK(!a->book_held() || goes_on);
+	}
+	a->eng_[0].proc.close(0);
+	for (const std::wstring &f : {book, dev}) DeleteFileW(f.c_str());
+}
+
+// A move after the end of the time of its side, before the next tick of the clock: that side has lost on time (not the
+// other one). The computer's move is then not played; a move of the person stops the game there. A move in time is played.
+static void test_clock_late_move()
+{
+	const int f5 = parse_square("f5"), d6 = parse_square("d6");
+	auto game = [](bool person_late) {
+		auto a = make_app();
+		a->play_mode_ = PlayMode::HumanBlack;
+		a->game_clock_ = true;
+		a->clock_left_ms_[0] = a->clock_left_ms_[1] = 60000;
+		a->clock_side_ = kBlack;
+		a->clock_t0_ = std::chrono::steady_clock::now();
+		if (person_late) a->clock_left_ms_[kBlack] = 50;
+		return a;
+	};
+	// the person's move, late: not played (the move chosen, played by its key)
+	{
+		auto a = game(true);
+		Sleep(100);
+		a->selected_sq_ = f5;
+		a->do_action(Action::PlayCand);
+		CHECK(a->game_.size() == 0);
+		CHECK(logged(*a, lang::t("play.time_out_black")) && !logged(*a, lang::t("play.time_out_white")));
+		CHECK(a->play_mode_ == PlayMode::Free && a->clock_side_ < 0);
+	}
+	// ... played by a way that does not look at the clock first: the same side has lost on time
+	{
+		auto a = game(true);
+		Sleep(100);
+		CHECK(a->game_.play(f5));
+		a->position_changed();
+		CHECK(logged(*a, lang::t("play.time_out_black")) && !logged(*a, lang::t("play.time_out_white")));
+		CHECK(a->play_mode_ == PlayMode::Free && a->clock_side_ < 0);
+	}
+	// the computer's move, late: not played
+	{
+		auto a = game(false);
+		a->game_.play(f5);
+		a->clock_side_ = kWhite;
+		a->clock_left_ms_[kWhite] = 50;
+		a->clock_t0_ = std::chrono::steady_clock::now() - std::chrono::milliseconds(100);
+		a->com_pos_ = key_of(a->game_.now());
+		a->com_played(d6);
+		CHECK(a->game_.size() == 1 && logged(*a, lang::t("play.time_out_white")) && !logged(*a, lang::t("play.time_out_black")));
+		CHECK(a->play_mode_ == PlayMode::Free);
+	}
+	// in time: played, the clock goes to the other side
+	{
+		auto a = game(false);
+		a->game_.play(f5);
+		a->clock_side_ = kWhite;
+		a->com_pos_ = key_of(a->game_.now());
+		a->com_played(d6);
+		CHECK(a->game_.size() == 2 && a->clock_side_ == kBlack && !logged(*a, lang::t("play.time_out_white")));
+		a->set_play_mode(PlayMode::Free);
+	}
+}
+
+// The missing lines written as games and read by the list again: the same start (its board and side to move, also
+// when it is not the usual one), the same moves and the same end. From the usual start the lines stay moves only.
+static void test_missing_written()
+{
+	const std::wstring file = make_app()->temp_dir_ + L"ng-missing-written.txt";
+	auto first = [](const Position &p) { return std::countr_zero(p.moves()); };
+	for (const bool usual : {false, true}) {
+		auto a = make_app();
+		Game g;
+		Position start;
+		if (!usual) {  // a start set by hand (here the position after f5 d6 c3: white to move)
+			Game s;
+			replay(s, Position{}, parse_moves("f5d6c3").moves);
+			start = s.now();
+		}
+		replay(g, start, parse_moves(usual ? "f5d6" : "d3").moves);
+		g.go_to(g.size());
+		a->game_ = g;
+		// a missing line from the position shown: two moves, then its leaf
+		Game h = g;
+		MissingLine ml;
+		for (int k = 0; k < 2; ++k) {
+			ml.moves.push_back(first(h.now()));
+			CHECK(h.play(ml.moves.back()));
+		}
+		ml.leaf = first(h.now());
+		CHECK(h.play(ml.leaf));
+		a->missing_.lines.push_back(ml);
+		a->missing_.pos = key_of(g.now());
+		CHECK(a->write_missing(file));
+		GameList list;
+		read_list(file, list);
+		CHECK(list.size() == 1);
+		if (list.size() == 1) {
+			const auto mv = list.moves(0);
+			CHECK(list.start(0) == start && static_cast<int>(mv.size()) == h.size());
+			Game r;
+			replay(r, list.start(0), std::vector<int>(mv.begin(), mv.end()));
+			CHECK(r.now() == h.now());
+		}
+		std::string text;
+		if (FILE *f = _wfsopen(file.c_str(), L"rb", _SH_DENYNO)) {
+			for (int c; (c = std::fgetc(f)) != EOF;) text += static_cast<char>(c);
+			std::fclose(f);
+		}
+		CHECK(usual == text.starts_with("f5d6"));
+	}
+	DeleteFileW(file.c_str());
+}
+
+// Answers that are not whole: a book analysis that ends with an error is not done (not kept as analysed), is not asked
+// again by itself and its cells wait no longer, and Recompute asks it again; a hint that ended without some moves: their
+// cells wait no longer; the book lines asked again before the first answer: only the answer of the last is taken.
+static void test_answers_not_whole()
+{
+	const int f5 = parse_square("f5");
+	{
+		auto a = make_app();
+		start_engine(*a);
+		a->show_eval_ = a->use_book_ = true;
+		a->count_ = false;
+		a->request_analysis();
+		const int values = a->values_id_;
+		CHECK(values != 0);
+		const std::string id = std::to_string(values);
+		feed(*a, "!@error id=" + id + " memory=1\n!@end id=" + id + " error=1\n");
+		const PosInfo &info = a->cache_.get(a->game_.now());
+		CHECK(!info.values_done && !info.book_done && info.book_failed);
+		CHECK(a->values_id_ == 0 && a->book_id_ == 0 && a->graph_id_ == 0 && !a->cell_view(f5).pending);
+		a->script_wait_ = App::ScriptWait::Analysis;  // a script waiting for the analysis does not wait for it any more
+		CHECK(!a->script_condition());
+		a->script_wait_ = App::ScriptWait::None;
+		a->request_analysis();
+		CHECK(a->values_id_ == 0 && a->book_id_ == 0);
+		a->on_command(cmd::Recompute);
+		CHECK(a->values_id_ != 0 && !a->cache_.get(a->game_.now()).book_failed);
+		a->eng_[0].proc.close(0);
+	}
+	{
+		auto a = make_app();
+		start_search_engine(*a);
+		a->show_eval_ = true;
+		PosInfo &info = a->cache_.get(a->game_.now());
+		MoveEval *d3 = info.find(parse_square("d3"));
+		d3->searched = true;
+		d3->score = 0;
+		d3->depth = 10;
+		info.search_level = a->level_;
+		CHECK(a->cell_view(f5).pending);  // (the hint goes on)
+		info.search_done = true;          // it has ended without f5
+		CHECK(!a->cell_view(f5).pending && a->cell_view(parse_square("d3")).has_value);
+		a->eng_[1].proc.close(0);
+	}
+	{
+		auto a = make_app();
+		start_engine(*a);
+		CHECK(a->ask_book_lines(0, 60, 10, false));
+		const int one = a->list_book_id_;
+		CHECK(!a->ask_book_lines(0, 60, 10, false) && a->list_book_id_ == one);  // (not again before its answer)
+		// an answer of book lines asked before (not the last): not taken
+		const int old = a->new_id();
+		a->requests_[old] = {Request::ListBook, key_of(a->game_.now())};
+		feed(*a, "!@end id=" + std::to_string(old) + " lines=0 written=0 ms=0\n");
+		CHECK(a->list_book_id_ == one);
+		feed(*a, "!@end id=" + std::to_string(one) + " error=1\n");
+		CHECK(a->list_book_id_ == 0);
+		CHECK(a->ask_book_lines(0, 60, 10, false));
+		const int two = a->list_book_id_;
+		CHECK(two != one && a->book_lines_file(two) != a->book_lines_file(one));  // (a file of its own)
+		a->eng_[0].proc.close(0);
+	}
+}
+
 // The moves on the lines of the openings are marked: 2 the move makes an opening, 1 it is on the way to one; the same
 // in every orientation, whether the values are shown or not, and not when the setting is off.
 static void test_opening_marks()
@@ -2495,17 +2819,44 @@ static void test_send_not_read()
 	GetTempPathW(MAX_PATH, tmp);
 	EngineProcess p;
 	CHECK(p.start(self, L"--engine deaf", tmp, nullptr, 0, 0, nullptr));
+	// more than the pipe holds, from the thread of the window: none of the sends waits for the engine
 	const std::string line = std::string(999, 'x') + "\n";
-	std::atomic<bool> sent{false};
-	std::thread t([&] {
-		for (int i = 0; i < 200; ++i) p.send(line);
-		sent = true;
-	});
-	const ULONGLONG end = GetTickCount64() + 2000;
-	while (!sent && GetTickCount64() < end) Sleep(10);
-	CHECK(sent);
-	t.join();  // (a send that waits fails when the engine ends)
+	const ULONGLONG t0 = GetTickCount64();
+	bool all = true;
+	for (int i = 0; i < 3000; ++i) all = p.send(line) && all;
+	CHECK(all && GetTickCount64() - t0 < 1000);
+	// closed with its commands not read: at once
+	const ULONGLONG t1 = GetTickCount64();
 	p.close(0);
+	CHECK(GetTickCount64() - t1 < 3000 && !p.running());
+	CHECK(!p.send(line));  // (closed: the sender is told)
+	// an engine that has ended: a send is said to fail (here when the engine has ended before its commands were written)
+	CHECK(p.start(self, L"--engine deaf 0", tmp, nullptr, 0, 0, nullptr));
+	for (const ULONGLONG end = GetTickCount64() + 5000; !p.exited() && GetTickCount64() < end;) Sleep(5);
+	bool failed = false;
+	for (const ULONGLONG end = GetTickCount64() + 5000; !failed && GetTickCount64() < end; Sleep(5)) failed = !p.send(line);
+	CHECK(failed);
+	p.close(0);
+}
+
+// An engine that ends with a last line not ended by '\n' (Edax without its eval file says so that way): the line is
+// read, once.
+static void test_last_line_unended()
+{
+	wchar_t tmp[MAX_PATH];
+	GetTempPathW(MAX_PATH, tmp);
+	EngineProcess p;
+	CHECK(p.start(self, L"-q", tmp, nullptr, 0, 0, nullptr));
+	for (const ULONGLONG end = GetTickCount64() + 5000; !p.exited() && GetTickCount64() < end;) Sleep(5);
+	CHECK(p.exited());
+	std::vector<std::string> lines;
+	p.take_lines(lines);
+	p.take_lines(lines);
+	CHECK(lines.size() == 1 && lines[0] == "Cannot open the eval file");
+	p.close(0);
+	lines.clear();
+	p.take_lines(lines);
+	CHECK(lines.empty());
 }
 
 // config.ini that cannot be written (here a folder where it is written first): the log says the settings were not
@@ -2924,6 +3275,186 @@ static int replay(const std::wstring &file)
 	return failures ? 1 : 0;
 }
 
+// A file a job writes whole (book export, book extract, the base commands) takes the place of the file chosen only
+// when the job has ended well: the file stays as it was while the job runs, when the job is not started, is stopped
+// or says an error. A WThor file comes back with the players of its folder.
+static void test_replace_after_job()
+{
+	auto a = make_app();
+	const std::wstring dir = a->temp_dir_ + L"ng-replace-test";
+	std::error_code ec;
+	std::filesystem::remove_all(dir, ec);
+	CreateDirectoryW(dir.c_str(), nullptr);
+	const std::wstring out = dir + L"\\out.txt";
+	std::string text;
+	auto job = [&](const std::wstring &file, bool well, bool error, const char *written) {
+		CHECK(a->engine_path_or_say(file, App::FileUse::Replace, 2).has_value());
+		CHECK(!a->moves_after_job_.empty());
+		if (a->moves_after_job_.empty()) return;
+		if (written) CHECK(write_file(a->moves_after_job_.back().from, written));
+		CHECK(read_file(file, &text) && text == "old");  // (not taken away before the job ends)
+		if (error) a->job_error(2);
+		a->finish_moves(2, well);
+		CHECK(a->moves_after_job_.empty());
+	};
+	CHECK(write_file(out, "old"));
+	job(out, false, false, "new");  // stopped
+	CHECK(read_file(out, &text) && text == "old" && logged(*a, lang::f("log.file_not_replaced", {out})));
+	job(out, true, true, "new");  // an error said
+	CHECK(read_file(out, &text) && text == "old");
+	job(out, true, false, nullptr);  // not started (or nothing written)
+	CHECK(read_file(out, &text) && text == "old");
+	job(out, true, false, "new");
+	CHECK(read_file(out, &text) && text == "new" && logged(*a, lang::f("log.file_moved", {out, L""}).substr(0, 8)));
+
+	const std::wstring wtb = dir + L"\\out.wtb", players = dir + L"\\WTHOR.JOU";
+	CHECK(write_file(wtb, "old") && write_file(players, "p1"));
+	CHECK(a->engine_path_or_say(wtb, App::FileUse::Replace, 2).has_value() && !a->moves_after_job_.empty());
+	if (!a->moves_after_job_.empty()) {
+		const App::PendingMove &m = a->moves_after_job_.back();
+		CHECK(read_file(m.also_from, &text) && text == "p1" && m.also_to == players);
+		CHECK(write_file(m.also_from, "p2") && write_file(m.from, "games"));
+		a->finish_moves(2, true);
+		CHECK(read_file(wtb, &text) && text == "games" && read_file(players, &text) && text == "p2");
+	}
+	std::filesystem::remove_all(dir, ec);
+}
+
+// The lines of the book tree are kept between drawings: drawn again (a scroll, the mouse) they are not made again, and
+// they are the same as lines made anew (the order, the rows a click goes to, the values) after each change: the
+// scroll, a value of the cache, a node closed.
+static void test_tree_kept()
+{
+	auto a = make_app();
+	DestroyWindow(a->hwnd_);
+	a->hwnd_ = CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 1200, 800, nullptr, nullptr, nullptr, nullptr);
+	CHECK(a->gfx_.init(a->hwnd_));
+	a->gfx_.resize();
+	a->layout();
+	a->use_book_ = true;
+	a->eng_[0].alive = true;  // (no process: the tree is drawn from the cache)
+	a->tab_ = Tab::Tree;
+	a->tree_set_ = true;
+	a->lay_.table = {0, 100, 400, 100 + 4 * a->lay_.row};  // three rows under the head
+	const Position root;
+	const int f5 = parse_square("f5"), d3 = parse_square("d3");
+	auto in_book = [&](const Position &p) {
+		PosInfo &info = a->cache_.get(p);
+		info.values_done = info.book_done = true;
+		int v = 0;
+		for (auto &m : info.moves) {
+			m.in_book = m.book_row = true;
+			m.book_value = v += 2;
+		}
+	};
+	in_book(root);
+	in_book(root.play(f5));
+	a->tree_open_ = {{f5}};
+	struct Seen {
+		std::vector<std::vector<int>> rows;
+		std::vector<std::tuple<int, int, int, bool>> lines;  // depth, square, value, open
+		bool operator==(const Seen &) const = default;
+	};
+	auto draw = [&] {
+		ID2D1DeviceContext *dc = a->gfx_.dc()->d;
+		dc->BeginDraw();
+		draw_panel(*a);
+		dc->EndDraw();
+		Seen s;
+		for (const auto &r : a->tree_rows_) s.rows.push_back(r.path);
+		for (const auto &l : a->tree_lines_) s.lines.emplace_back(l.depth, l.m ? l.m->sq : -1, l.m ? l.m->book_value : 0, l.open);
+		return s;
+	};
+	auto fresh = [&] {
+		a->tree_lines_root_.reset();
+		return draw();
+	};
+	const Seen first = draw();
+	CHECK(first.rows.size() >= 3 && first.lines.size() == 7);  // (4 moves, 3 under f5)
+	const std::uint64_t made = a->tree_lines_generation_;
+	CHECK(draw() == first && a->tree_lines_generation_ == made && a->cache_.generation() == made);
+	CHECK(fresh() == first);
+	a->tree_scroll_ = 2;
+	const Seen scrolled = draw();
+	CHECK(scrolled.rows.size() >= 3 && scrolled.rows[0] == first.rows[2] && a->tree_lines_generation_ == a->cache_.generation());
+	CHECK(fresh() == scrolled);
+	a->tree_scroll_ = 0;
+	a->cache_.get(root).find(d3)->book_value = 99;  // the best move now
+	const Seen changed = draw();
+	CHECK(changed.rows[0] == std::vector<int>{d3} && fresh() == changed);
+	a->tree_open_.clear();
+	const Seen closed = draw();
+	CHECK(closed.lines.size() == 4 && fresh() == closed);
+	a->eng_[0].alive = false;
+}
+
+// The record tab in a small window: the wheel brings the rows of the last moves into the rows drawn, and back to the
+// first move (the rows drawn are those that a click goes to).
+static void test_record_scroll()
+{
+	auto a = make_app();
+	DestroyWindow(a->hwnd_);
+	a->hwnd_ = CreateWindowExW(0, L"STATIC", L"", WS_POPUP, 0, 0, 1200, 800, nullptr, nullptr, nullptr, nullptr);
+	CHECK(a->gfx_.init(a->hwnd_));
+	a->gfx_.resize();
+	a->layout();
+	for (bool moved = true; moved;) {  // a whole game: the first legal square each time
+		moved = false;
+		for (int sq = 0; sq < 64 && !moved; ++sq) moved = a->game_.play(sq);
+	}
+	CHECK(a->game_.size() >= 58);
+	a->tab_ = Tab::Record;
+	a->lay_.table = {0, 100, 300, 100 + 3 * a->lay_.row};
+	auto draw = [&] {
+		ID2D1DeviceContext *dc = a->gfx_.dc()->d;
+		dc->BeginDraw();
+		draw_panel(*a);
+		dc->EndDraw();
+		int first = 1 << 20, last = 0;
+		for (const auto &[n, r] : a->record_rects_) {
+			first = std::min(first, n);
+			last = std::max(last, n);
+			CHECK(r.top >= a->lay_.table.top && r.bottom <= a->lay_.table.bottom);
+		}
+		return std::pair{first, last};
+	};
+	const auto start = draw();
+	CHECK(start.first == 1 && start.second < a->game_.size());
+	for (int k = 0; k < 40; ++k) {
+		a->on_wheel(10, 110, -120);
+		draw();
+	}
+	CHECK(draw().second == a->game_.size());
+	for (int k = 0; k < 40; ++k) {
+		a->on_wheel(10, 110, 120);
+		draw();
+	}
+	CHECK(draw().first == 1);
+}
+
+// "Next" and "Previous" through the games found go to the game found after or before the game shown (the first
+// one when the game shown is not among them), and stay at the ends.
+static void test_hits_next_prev()
+{
+	auto a = make_app();
+	const std::uint8_t mv[] = {static_cast<std::uint8_t>(parse_square("f5")), static_cast<std::uint8_t>(parse_square("d6"))};
+	for (int i = 0; i < 6; ++i) a->list_.add(Position{}, mv);
+	a->hits_ = {ListHit{1, 1, 0}, ListHit{3, 1, 0}, ListHit{4, 1, 0}};
+	a->hits_shown_ = true;
+	a->list_index_ = 2;  // (not a game found)
+	const struct {
+		int cmd, want;
+	} steps[] = {{cmd::ListNext, 1}, {cmd::ListNext, 3}, {cmd::ListNext, 4}, {cmd::ListNext, 4},
+	             {cmd::ListPrev, 3}, {cmd::ListPrev, 1}, {cmd::ListPrev, 1}};
+	for (const auto &s : steps) {
+		a->list_command(s.cmd);
+		CHECK(a->list_index_ == s.want);
+	}
+	a->list_index_ = 2;
+	a->list_command(cmd::ListPrev);
+	CHECK(a->list_index_ == 1);
+}
+
 int main(int argc, char **argv)
 {
 	wchar_t exe[MAX_PATH * 4];
@@ -2977,9 +3508,9 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	if (argc > 1 && std::string(argv[1]) == "--engine") {
-		// "--engine deaf": an engine that reads nothing for 5 s (busy, or stuck), then ends
+		// "--engine deaf [ms]": an engine that reads nothing for 5 s or <ms> (busy, or stuck), then ends
 		if (argc > 2 && std::string(argv[2]) == "deaf") {
-			Sleep(5000);
+			Sleep(argc > 3 ? static_cast<DWORD>(std::atoi(argv[3])) : 5000);
 			return 0;
 		}
 		FILE *read =argc > 2 && std::string(argv[2]) == "read" ? _wfsopen(engine_read_file().c_str(), L"wb", _SH_DENYNO) : nullptr;
@@ -2987,14 +3518,39 @@ int main(int argc, char **argv)
 		const bool replace = argc == 5 && std::string(argv[2]) == "replace";
 		// "--engine slowquit <ms> <file>": at "quit", <file> is made <ms> after, then the engine writes a last line (as
 		// Edax its error of the save, or the save with its option -info) and ends (a large book saved)
-		const bool slow = argc == 5 && std::string(argv[2]) == "slowquit";
+		// "--engine slowquit <ms> <file> <how>": the save fails: "error" (its ERROR line, the last part not ended by '\n',
+		// and the code 0), "crash" (nothing said, the code 3), "said" ("@save ok=0", the code 0), "saidok" (saved, said so)
+		const bool slow = (argc == 5 || argc == 6) && std::string(argv[2]) == "slowquit";
+		const std::string how = argc == 6 ? argv[5] : "";
+		// "--engine load <how>": "book load" answered: "ok" ("@load ok=1"), "fail" ("@load ok=0"), "none" (nothing, an
+		// engine before "@load"), "error" (an ERROR line only), "end" (the engine ends); "echo M<n>" answered as Edax does
+		const std::string load = argc == 4 && std::string(argv[2]) == "load" ? argv[3] : "";
 		for (std::string s; std::getline(std::cin, s);) {
 			if (s.starts_with("!")) {
 				std::cout << s.substr(1) << std::endl;
+			} else if (!load.empty() && s.starts_with("book load ")) {
+				const std::string file = s.substr(10);
+				if (load == "ok") std::cout << "@load ok=1 file=" << file << std::endl;
+				else if (load == "fail") std::cout << "@load ok=0 file=" << file << std::endl;
+				else if (load == "error") std::cout << "\nERROR: book.c : book_load : 1 :\nCannot open opening book " << file << std::endl;
+				else if (load == "end") return 1;
+			} else if (!load.empty() && s.starts_with("echo ")) {
+				std::cout << "WARNING: echo: \"" << s.substr(5) << "\" is not on or off; ignored" << std::endl;
 			} else if (replace && s == "quit") {
 				MoveFileExA(argv[3], argv[4], MOVEFILE_REPLACE_EXISTING);
 			} else if (slow && s == "quit") {
 				Sleep(static_cast<DWORD>(std::atoi(argv[3])));
+				if (how == "error") {
+					std::cout << "Saving book to " << argv[4] << "...\nERROR: book.c : book_save_to : 1 : error #28 : No space left on device\n"
+					          << "Cannot write complete book to " << argv[4] << "; existing book was not replaced" << std::flush;
+					return 0;
+				}
+				if (how == "crash") return 3;
+				if (how == "said") {
+					std::cout << "@save ok=0 file=" << argv[4] << std::endl;
+					return 0;
+				}
+				if (how == "saidok") std::cout << "@save ok=1 file=" << argv[4] << std::endl;
 				FILE *f = nullptr;
 				if (fopen_s(&f, argv[4], "wb") == 0 && f) std::fclose(f);
 				std::cout << "Saving book to " << argv[4] << "...done" << std::endl;
@@ -3010,6 +3566,8 @@ int main(int argc, char **argv)
 	lang::load(argc > 1 ? widen(argv[1]) : std::wstring(L"."), "ja");
 	src_dir = argc > 1 ? widen(argv[1]) : std::wstring(L".");
 	std::setvbuf(stdout, nullptr, _IONBF, 0);  // (the lines before a crash are kept)
+	const std::wstring run_temp = run_temp_folder();
+	if (run_temp.empty()) return 2;
 	std::printf("%s\n", "test_engine_default");
 	test_engine_default();
 	std::printf("%s\n", "test_mixed_lines");
@@ -3078,6 +3636,14 @@ int main(int argc, char **argv)
 	test_book_values_first();
 	std::printf("%s\n", "test_main_commands");
 	test_main_commands();
+	std::printf("%s\n", "test_replace_after_job");
+	test_replace_after_job();
+	std::printf("%s\n", "test_record_scroll");
+	test_record_scroll();
+	std::printf("%s\n", "test_tree_kept");
+	test_tree_kept();
+	std::printf("%s\n", "test_hits_next_prev");
+	test_hits_next_prev();
 	std::printf("%s\n", "test_requests_wait_for_book");
 	test_requests_wait_for_book();
 	std::printf("%s\n", "test_book_file");
@@ -3094,6 +3660,16 @@ int main(int argc, char **argv)
 	test_book_replaced();
 	std::printf("%s\n", "test_close_waits_for_save");
 	test_close_waits_for_save();
+	std::printf("%s\n", "test_save_failed");
+	test_save_failed();
+	std::printf("%s\n", "test_continue_learning");
+	test_continue_learning();
+	std::printf("%s\n", "test_clock_late_move");
+	test_clock_late_move();
+	std::printf("%s\n", "test_missing_written");
+	test_missing_written();
+	std::printf("%s\n", "test_answers_not_whole");
+	test_answers_not_whole();
 	std::printf("%s\n", "test_opening_marks");
 	test_opening_marks();
 	std::printf("%s\n", "test_stage_colors");
@@ -3112,6 +3688,8 @@ int main(int argc, char **argv)
 	test_config_not_saved();
 	std::printf("%s\n", "test_send_not_read");
 	test_send_not_read();
+	std::printf("%s\n", "test_last_line_unended");
+	test_last_line_unended();
 	std::printf("%s\n", "test_levels");
 	test_levels();
 	std::printf("%s\n", "test_script_switches");
@@ -3144,6 +3722,10 @@ int main(int argc, char **argv)
 	test_engine_names();
 	std::printf("%s\n", "test_config_names");
 	test_config_names();
+	{
+		std::error_code ec;
+		std::filesystem::remove_all(run_temp, ec);
+	}
 	if (failures) {
 		std::printf("%d failures\n", failures);
 		return 1;

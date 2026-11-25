@@ -128,7 +128,7 @@ int App::new_id()
 {
 	next_id_ = next_request_id(next_id_, [this](int id) {
 		if (requests_.count(id) || stopped_.count(id)) return true;
-		for (const int x : {marker_id_, hint_end_id_, cmp_marker_id_, cmp_end_id_, com_marker_id_, learn_end_id_, tool_end_id_,
+		for (const int x : {marker_id_, hint_end_id_, cmp_marker_id_, cmp_end_id_, com_marker_id_, learn_end_id_, tool_end_id_, load_wait_.end_id,
 		                    eng_[0].ping_id, eng_[1].ping_id, eng_[0].probe_id})
 			if (x == id) return true;
 		return false;
@@ -138,6 +138,8 @@ int App::new_id()
 
 void App::forget_main_requests()
 {
+	if (list_book_id_) delete_file(book_lines_file(list_book_id_));  // (its answer will not come)
+	load_wait_ = LoadWait{};  // (a file loaded by the engine closed: the learning is not gone on with)
 	requests_.clear();
 	stopped_.clear();
 	book_id_ = values_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = findline_id_ = list_book_id_ = 0;
@@ -318,6 +320,7 @@ void App::close_main_engine(std::function<void()> then)
 	s.alive = s.lost = false;
 	s.board.reset();
 	forget_main_requests();
+	if (learning_) finish_moves(0, false);  // (closed in the middle of a job)
 	learning_ = false;
 	if (!save) {
 		s.book_changed = false;
@@ -325,6 +328,8 @@ void App::close_main_engine(std::function<void()> then)
 		return;
 	}
 	book_saving_ = true;
+	save_error_line_ = false;
+	save_said_ = -1;
 	save_t0_ = std::chrono::steady_clock::now();
 	save_shown_s_ = -1;
 	after_save_ = std::move(then);
@@ -360,11 +365,33 @@ void App::end_save(bool cut)
 	// its last lines first (the save said by the engine, or why it could not save), which close() would drop: it has
 	// read them all when it has ended (exited)
 	if (!cut) on_engine(engine_tag(0, s.generation), false);
+	const std::optional<int> code = cut ? std::nullopt : s.proc.exit_code();
 	s.proc.close(0);  // (it has ended, else it is ended now)
 	s.book_changed = false;
 	book_saving_ = false;
+	// saved: said so ("@save ok=1"), or else no ERROR line and the usual end (Edax says nothing of a save that went well)
+	std::wstring why;
+	if (save_said_ == 0) why = L"@save ok=0";
+	else if (save_said_ != 1 && save_error_line_) why = L"ERROR";
+	else if (save_said_ != 1 && code && *code != 0) why = lang::f("log.engine_exit_code", {std::to_wstring(*code)});
+	const bool failed = !cut && !why.empty();
+	book_save_failed_ = cut || failed;
 	const auto sec = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - save_t0_).count();
-	log(cut ? lang::t("log.engine_save_cut") : lang::f("log.engine_saved", {std::to_wstring(sec / 60), std::to_wstring(sec % 60)}));
+	if (failed) {
+		// the jobs waiting for it do not go on: the queue of learning, the script
+		queue_running_ = false;
+		const bool script = !script_.empty() || script_wait_ != ScriptWait::None;
+		if (script) {
+			script_.clear();
+			script_wait_ = ScriptWait::None;
+			kill_timer(kTimerScript);
+		}
+		const std::wstring text = lang::f("log.engine_save_failed", {why});
+		log(text);
+		if (!script && !script_quit_) message(text, MB_ICONWARNING);
+	} else {
+		log(cut ? lang::t("log.engine_save_cut") : lang::f("log.engine_saved", {std::to_wstring(sec / 60), std::to_wstring(sec % 60)}));
+	}
 	update_menu();
 	invalidate();
 	schedule_script();  // (a script waits for the end of the save)
@@ -448,7 +475,7 @@ std::optional<Position> App::next_values()
 		const Position &p = game_.at(i);
 		if (p.game_over() || p.must_pass()) continue;
 		const PosInfo *info = cache_.peek(p);
-		if (!info || !info->values_done) return p;
+		if (!info || (!info->values_done && !info->book_failed)) return p;
 	}
 	return std::nullopt;
 }
@@ -458,7 +485,7 @@ std::optional<Position> App::next_values()
 // that may replace the file runs: see start_learning_at).
 bool App::book_held() const
 {
-	if (!eng_[0].loaded || learning_) return true;
+	if (!eng_[0].loaded || learning_ || load_wait_.end_id) return true;  // (reading a book: no other command meanwhile)
 	for (const auto &[id, r] : requests_) {
 		if (r.kind == Request::FindLine || r.kind == Request::ListBook || r.kind == Request::ListBookAdd ||
 		    r.kind == Request::BestExport || r.kind == Request::ReduceCount)
@@ -506,7 +533,7 @@ void App::pump_graph()
 		if (p.game_over() || p.must_pass()) continue;
 		PosInfo &info = cache_.get(p);
 		info.set_book_params(params);
-		if (info.book_done) continue;
+		if (info.book_done || info.book_failed) continue;
 		ask(p);
 		return;
 	}
@@ -588,7 +615,7 @@ void App::request_analysis()
 		const bool params_changed = info && info->set_book_params(params);
 		cancel(book_id_, book_on && same(book_id_) && !params_changed);
 		cancel(values_id_, book_on && same(values_id_));
-		const bool ask_values = info && values_apart() && !info->values_done && !values_id_;
+		const bool ask_values = info && values_apart() && !info->values_done && !info->book_failed && !values_id_;
 		// the rest is asked when the values are there: of the position shown, of the game and of the tree
 		const bool wait_values = info && values_apart() && (ask_values || values_id_ || (!background_paused_ && next_values()));
 		info = book_on ? &cache_.get(p) : nullptr;  // (the lookup of the nodes of the tree may make room)
@@ -597,7 +624,7 @@ void App::request_analysis()
 		// position waits while it is not known (the analyses of the engine are done one after the other)
 		const auto graph = requests_.find(graph_id_);
 		const bool graph_ok = graph != requests_.end() && graph->second.params == params;
-		if (graph_ok && info && !info->book_done && !book_id_ && graph->second.pos == key && !wait_values) {
+		if (graph_ok && info && !info->book_done && !info->book_failed && !book_id_ && graph->second.pos == key && !wait_values) {
 			graph->second.kind = Request::Book;
 			book_id_ = graph_id_;
 			graph_id_ = 0;
@@ -615,7 +642,7 @@ void App::request_analysis()
 			if (wait_values) {
 				stages_held_ = true;
 			} else {
-				if (!info->book_done && !book_id_)
+				if (!info->book_done && !info->book_failed && !book_id_)
 					book_id_ = ask_main(out, p, Request::Book, "book moveinfo", params, params);
 				if (count_ && !info->count_done && !count_id_)
 					count_id_ = ask_main(out, p, Request::Count, "book moveinfo", "parts=count");
@@ -790,6 +817,23 @@ void App::on_engine(WPARAM tag, bool ended)
 	}
 	for (const std::string &line : lines) {
 		if (line.empty()) continue;
+		if (role == 0 && line.starts_with("@save") && (line.size() == 5 || line[5] == ' ')) {
+			// the result of a save of the book: "@save ok=1 file=..." (ok=0: not saved, the file is as it was)
+			const bool ok = Fields(line).num("ok").value_or(0) != 0;
+			if (book_saving_) save_said_ = ok ? 1 : 0;
+			else if (!ok) log(lang::t("engine.main") + L": " + engine_text(line));
+			continue;
+		}
+		if (role == 0 && line.starts_with("@load") && (line.size() == 5 || line[5] == ' ')) {
+			// the answer of "book load": "@load ok=1 file=..." (ok=0: not loaded, the book stays as it was)
+			const bool ok = Fields(line).num("ok").value_or(0) != 0;
+			if (load_wait_.end_id) load_wait_.said = ok ? 1 : 0;
+			else if (!ok) log(lang::t("engine.main") + L": " + engine_text(line));
+			continue;
+		}
+		if (role == 0 && load_wait_.end_id && (line.starts_with("ERROR") || line.starts_with("FATAL ERROR"))) load_wait_.error = true;
+		// (an ERROR line while the engine saves its book as it ends: the save failed; the line goes to the log below)
+		if (role == 0 && book_saving_ && (line.starts_with("ERROR") || line.starts_with("FATAL ERROR"))) save_error_line_ = true;
 		if (line[0] == '@') {
 			const Fields f(line);
 			const int id = static_cast<int>(f.num("id").value_or(-1));
@@ -848,7 +892,13 @@ void App::on_engine(WPARAM tag, bool ended)
 			if (req.kind == Request::ListBook || req.kind == Request::ListBookAdd) {
 				if (last) {
 					requests_.erase(it);
-					list_book_written(req.kind == Request::ListBookAdd, done && !f.num("error").value_or(0));
+					// (only the answer of the lines asked last: an answer of one asked before writes the same file)
+					if (id == list_book_id_) {
+						list_book_written(req.kind == Request::ListBookAdd, done && !f.num("error").value_or(0));
+						update_menu();
+					} else {
+						delete_file(book_lines_file(id));
+					}
 				}
 				continue;
 			}
@@ -887,27 +937,34 @@ void App::on_engine(WPARAM tag, bool ended)
 			} else if (f.kind() == "level") {
 				info.levels.emplace_back(static_cast<int>(f.num("level").value_or(0)), f.num("count").value_or(0));
 			} else if (last) {
-				if (done && f.num("error").value_or(0)) log(lang::f("log.analysis_error", {engine_text(line)}));
+				// an answer that ended with an error is not done: what it gave is not taken as the analysis, and the
+				// position is not asked again by itself (book_failed)
+				const bool error = done && f.num("error").value_or(0);
+				const bool ok = done && !error;
+				if (error) log(lang::f("log.analysis_error", {engine_text(line)}));
 				if (req.kind == Request::Book) {
-					info.book_done = done;
-					info.values_done = info.values_done || done;
+					info.book_done = ok;
+					info.values_done = info.values_done || ok;
+					info.book_failed = info.book_failed || error;
 					if (book_id_ == id) book_id_ = 0;
-					if (done && req.pos == here) ask_missing = true;  // the best book move is known now
+					if (ok && req.pos == here) ask_missing = true;  // the best book move is known now
 				} else if (req.kind == Request::Values) {
-					info.values_done = done;
+					info.values_done = ok;
+					info.book_failed = info.book_failed || error;
 					changed = true;  // the position shown, or a point of the graph
 					if (values_id_ == id) values_id_ = 0;
 				} else if (req.kind == Request::Graph) {
-					info.book_done = done;
-					info.values_done = info.values_done || done;
+					info.book_done = ok;
+					info.values_done = info.values_done || ok;
+					info.book_failed = info.book_failed || error;
 					changed = true;  // a point of the graph
 					if (graph_id_ == id) graph_id_ = 0;
 				} else if (req.kind == Request::Count) {
-					info.count_done = done;
+					info.count_done = ok;
 					if (count_id_ == id) count_id_ = 0;
 				} else if (req.kind == Request::Levels) {
-					info.levels_done = done;
-					if (done) info.levels_positions = f.num("positions").value_or(-1);
+					info.levels_done = ok;
+					if (ok) info.levels_positions = f.num("positions").value_or(-1);
 					else info.levels.clear();
 					if (levels_id_ == id) levels_id_ = 0;
 				} else if (req.kind == Request::Best) {
@@ -991,6 +1048,7 @@ void App::on_engine(WPARAM tag, bool ended)
 			// the end of a learning command ("echo M<n>" after it), and its progress
 			if (const int mark = echo_marker(line); mark >= 0) {
 				if (learning_ && mark == learn_end_id_) learning_ended();
+				else if (load_wait_.end_id && mark == load_wait_.end_id) load_answered(false);
 				continue;
 			}
 			if (learning_) {
@@ -1021,7 +1079,9 @@ void App::on_engine(WPARAM tag, bool ended)
 		s.alive = s.lost = false;
 		log(lang::f("log.engine_ended", {lang::t(role ? "engine.search" : "engine.main")}));
 		if (role == 0) {
+			if (load_wait_.end_id) load_answered(true);  // (first: forget_main_requests forgets it)
 			forget_main_requests();
+			if (learning_) finish_moves(0, false);  // (ended in the middle of a job: what it wrote is not put in place)
 			learning_ = false;
 			queue_running_ = false;
 		} else {
@@ -1046,7 +1106,7 @@ void App::on_engine(WPARAM tag, bool ended)
 	// the computer waits for the book analysis of the position (its opening moves)
 	if (role == 0 && com_waiting_book_) {
 		const PosInfo *info = cache_.peek(game_.now());
-		if (info && info->values_done) {
+		if (info && (info->values_done || info->book_failed)) {  // (failed: the move is searched)
 			com_waiting_book_ = false;
 			kill_timer(kTimerCom);
 			com_think();
@@ -1114,13 +1174,18 @@ void App::export_missing()
 
 bool App::write_missing(const std::wstring &file)
 {
-	const std::string head = game_.to_text(true);
+	// a line a game from the start of the game: its board and side to move first when it is not the usual start (as the
+	// list writes it), so that the list reads the moves from there
+	std::vector<std::uint8_t> head;
+	for (int i = 0; i < game_.cursor(); ++i)
+		if (game_.moves()[i] != kPass) head.push_back(static_cast<std::uint8_t>(game_.moves()[i]));
 	std::string out;
 	for (const auto &ml : missing_.lines) {
-		out += head;
+		std::vector<std::uint8_t> moves = head;
 		for (int mv : ml.moves)
-			if (mv != kPass) out += square_name(mv);
-		if (ml.leaf != kNoMove && ml.leaf != kPass) out += square_name(ml.leaf);
+			if (mv != kPass) moves.push_back(static_cast<std::uint8_t>(mv));
+		if (ml.leaf != kNoMove && ml.leaf != kPass) moves.push_back(static_cast<std::uint8_t>(ml.leaf));
+		out += list_line(game_.start(), moves);
 		out += "\r\n";
 	}
 	// (as the other exports: the log says it with the file, written or not, also when the file cannot be opened)
@@ -1185,7 +1250,7 @@ void App::watch_engines()
 	for (int role = 0; role < 2; ++role) {
 		EngineSlot &s = eng_[role];
 		if (!s.alive || !s.loaded) continue;
-		const bool busy = role == 0 ? learning_ : hint_busy_;
+		const bool busy = role == 0 ? learning_ || load_wait_.end_id : hint_busy_;  // (a book loads: minutes for a large one)
 		if (s.ping_id) {
 			if (busy) {
 				s.ping_id = 0;  // busy since: the answer comes later

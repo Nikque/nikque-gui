@@ -109,12 +109,35 @@ void GameList::erase(size_t i)
 	if (unused_ > (1u << 16) && unused_ * 2 > pool_.size()) pack();
 }
 
+void GameList::append(GameList &&other)
+{
+	if (games_.empty()) {
+		*this = std::move(other);
+		other.clear();
+		return;
+	}
+	// room for all at once (growing the buffers game by game makes them up to twice as large as needed)
+	size_t moves = 0;
+	for (const Entry &e : other.games_) moves += e.len;
+	games_.reserve(games_.size() + other.games_.size());
+	pool_.reserve(pool_.size() + moves);
+	// the starts are numbered as add() numbers them: when a game first has them
+	constexpr std::uint32_t kNone = 0xFFFFFFFFu;
+	std::vector<std::uint32_t> ids(other.starts_.size(), kNone);
+	for (const Entry &e : other.games_) {
+		if (ids[e.start] == kNone) ids[e.start] = (!starts_.empty() && starts_[0] == other.starts_[e.start]) ? 0 : start_id(other.starts_[e.start]);
+		games_.push_back({static_cast<std::uint32_t>(pool_.size()), ids[e.start], e.len});
+		pool_.insert(pool_.end(), other.pool_.begin() + e.off, other.pool_.begin() + e.off + e.len);
+	}
+	other.clear();
+}
+
 void GameList::clear()
 {
-	games_.clear();
-	pool_.clear();
-	starts_.clear();
-	start_ids_.clear();
+	std::vector<Entry>().swap(games_);
+	std::vector<std::uint8_t>().swap(pool_);
+	std::vector<Position>().swap(starts_);
+	std::unordered_map<Position, std::uint32_t, StartHash>().swap(start_ids_);
 	unused_ = 0;
 }
 
@@ -349,15 +372,17 @@ ListReadStats read_list(const std::wstring &path, GameList &list, ng::stop_token
 		take_block(std::string_view(text).substr(0, end + 1), list, st, stop, usual);
 		text.erase(0, end + 1);
 	}
-	if (!st.cancelled && !text.empty()) take_block(text, list, st, stop, usual);
+	// (fread gives 0 at the end of the file and when it cannot read: an error is not taken for the end)
+	if (ferror(f)) st.failed = true;
+	if (!st.cancelled && !st.failed && !text.empty()) take_block(text, list, st, stop, usual);
 	fclose(f);
 	return st;
 }
 
-bool write_list(const std::wstring &path, const GameList &list)
+namespace {
+
+bool write_list_to(FILE *f, const GameList &list)
 {
-	FILE *f = open_file(path, L"wb");
-	if (!f) return false;
 	std::string out;
 	bool ok = true;
 	for (size_t i = 0; i < list.size() && ok; ++i) {
@@ -369,7 +394,20 @@ bool write_list(const std::wstring &path, const GameList &list)
 		}
 	}
 	if (ok && !out.empty()) ok = fwrite(out.data(), 1, out.size(), f) == out.size();
+	if (fflush(f) != 0) ok = false;
 	return fclose(f) == 0 && ok;
+}
+
+}  // namespace
+
+bool write_list(const std::wstring &path, const GameList &list)
+{
+	const std::wstring tmp = path + L".part" + std::to_wstring(process_id());
+	FILE *f = open_file(tmp, L"wb");
+	if (!f) return false;
+	if (write_list_to(f, list) && move_file(tmp, path)) return true;
+	delete_file(tmp);
+	return false;
 }
 
 // Shorter games first, then by the moves in the order of their names; the same games keep their order. Each game
@@ -445,11 +483,14 @@ size_t unique_list(GameList &list)
 
 void truncate_list(GameList &list, int n)
 {
+	const size_t keep = static_cast<size_t>(std::max(0, n));
+	size_t moves = 0;  // (the moves kept: not the games times n, which may be far more)
+	for (size_t i = 0; i < list.size(); ++i) moves += std::min(list.moves(i).size(), keep);
 	GameList out;
-	out.reserve(list.size(), list.size() * static_cast<size_t>(std::max(0, n)));
+	out.reserve(list.size(), moves);
 	for (size_t i = 0; i < list.size(); ++i) {
 		const auto m = list.moves(i);
-		out.add(list.start(i), m.first(std::min<size_t>(m.size(), static_cast<size_t>(std::max(0, n)))));
+		out.add(list.start(i), m.first(std::min(m.size(), keep)));
 	}
 	list = std::move(out);
 }
