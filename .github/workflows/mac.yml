@@ -1,6 +1,4 @@
-# The macOS build of nikque GUI: the app for Apple silicon and Intel (one bundle), the tests that need no test books,
-# the distribution (tools/make_dist_mac.sh: the app, the engine of Edax nikque from its release ZIP, newedax built from
-# the source of its release's tag), and a run of the distribution with a script (pictures of the window, the log).
+# Build and verify both native PGO engines before packaging the universal GUI.
 name: macOS
 
 on:
@@ -20,19 +18,25 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    runs-on: ${{ inputs.runner || 'macos-15' }}
+  train:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            cpu: arm64
+          - runner: macos-15-intel
+            cpu: x86_64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build
-        run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
-          cmake --build build -j 4 -- -k || { cmake --build build -j 1 -- -k 2>&1 | grep -E "error:|warning:" | sort -u | head -150; exit 1; }
-          lipo -info "build/nikque GUI.app/Contents/MacOS/nikque GUI"
-
-      - name: Tests
-        run: ctest --test-dir build --output-on-failure
+      - name: The source of Edax nikque
+        uses: actions/checkout@v4
+        with:
+          repository: Nikque/edax-reversi-AVX
+          ref: v4.5.5-nikque.34
+          path: nk
 
       - name: The source of newedax (the tag of its release)
         uses: actions/checkout@v4
@@ -64,8 +68,49 @@ jobs:
           gh release download v4.5.5-nikque.34 -R Nikque/edax-reversi-AVX -p 'edax-4.5.5-nikque.34.zip' -D dl
           gh release download v4.5.5-heath.21 -R Nikque/Heath -p 'edax-4.5.5-heath.21-64.zip' -D dl
 
+      - name: Train and verify native PGO engines
+        run: |
+          test "$(uname -m)" = "${{ matrix.cpu }}"
+          BOOST_DIR="$PWD/boost/boost_1_92_0" bash tools/make_dist_mac.sh --train dl/edax-4.5.5-nikque.34.zip dl/edax-4.5.5-heath.21-64.zip ne nk pgo
+
+      - name: Keep native PGO engines and evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-pgo-${{ matrix.cpu }}
+          path: pgo/
+          if-no-files-found: error
+
+  build:
+    needs: train
+    runs-on: ${{ inputs.runner || 'macos-15' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
+          cmake --build build -j 4 -- -k || { cmake --build build -j 1 -- -k 2>&1 | grep -E "error:|warning:" | sort -u | head -150; exit 1; }
+          lipo -info "build/nikque GUI.app/Contents/MacOS/nikque GUI"
+
+      - name: Tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: The release ZIPs of the engines
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v4.5.5-nikque.34 -R Nikque/edax-reversi-AVX -p 'edax-4.5.5-nikque.34.zip' -D dl
+          gh release download v4.5.5-heath.21 -R Nikque/Heath -p 'edax-4.5.5-heath.21-64.zip' -D dl
+
+      - name: Get both native PGO builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: mac-pgo-*
+          merge-multiple: true
+          path: pgo
+
       - name: The distribution
-        run: BOOST_DIR="$PWD/boost/boost_1_92_0" bash tools/make_dist_mac.sh "build/nikque GUI.app" dl/edax-4.5.5-nikque.34.zip dl/edax-4.5.5-heath.21-64.zip ne
+        run: PGO_MAC_DIR="$PWD/pgo" bash tools/make_dist_mac.sh "build/nikque GUI.app" dl/edax-4.5.5-nikque.34.zip dl/edax-4.5.5-heath.21-64.zip
 
       - name: Run the distribution with a script
         run: |
@@ -104,4 +149,5 @@ jobs:
           path: |
             dist/*.zip
             dist/*-files.txt
+          if-no-files-found: error
           compression-level: 0

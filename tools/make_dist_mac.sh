@@ -4,14 +4,12 @@
 # It holds "nikque GUI.app" (Apple silicon and Intel), config.ini (res/default-config.ini with the names of macOS in its
 # notes), opening.ini, readme.txt, LICENSE.txt, lang/, manual/, and the two engines in engines/nikque and
 # engines/newedax: mEdax-arm64 (Apple silicon), mEdax-x64-modern (Intel), data/eval.dat, LICENSE.txt, SOURCE.txt.
-#   nikque: the files of its release ZIP (checked by its SHA-256 and size), as they are.
-#   newedax: its release ZIP has no engine for macOS: the engines are built here from the source of the release's tag
-#            (ne/, checked out by the workflow at that tag; the commit is checked), with data/eval.dat of the release ZIP.
-# usage: BOOST_DIR=<Boost 1.92> tools/make_dist_mac.sh <app> <nikque zip> <newedax zip> <newedax source>
+# Both engines use native PGO builds from their pinned source tags.
+# usage: tools/make_dist_mac.sh <app> <nikque zip> <Heath zip>  # requires PGO_MAC_DIR
+#        BOOST_DIR=... tools/make_dist_mac.sh --train <nikque zip> <Heath zip> <Heath src> <nikque src> <output>
 set -euo pipefail
 
-APP=$1 NZIP=$2 EZIP=$3 NESRC=$(cd "$4" && pwd)
-[ -d "${BOOST_DIR:-}/boost" ] || { echo "BOOST_DIR: the folder of Boost 1.92 (its headers) for newedax"; exit 1; }
+APP=$1 NZIP=$2 EZIP=$3
 NIKQUE_TAG=v4.5.5-nikque.34
 NIKQUE_SHA=ea8ce8f654283a1030f66dd5f170a9960f7fc73e5f663742a1547ee122261a7a
 NIKQUE_SIZE=19275144
@@ -38,36 +36,67 @@ check_zip() {  # <zip> <sha256> <size>
 }
 check_zip "$NZIP" $NIKQUE_SHA $NIKQUE_SIZE
 check_zip "$EZIP" $NEWEDAX_SHA $NEWEDAX_SIZE
-[ "$(git -C "$NESRC" rev-parse HEAD)" = $NEWEDAX_COMMIT ] || { echo "$NESRC is not $NEWEDAX_TAG ($NEWEDAX_COMMIT)"; exit 1; }
-# the sources of the engines as committed (changes not committed and files of an earlier build are not taken)
-export_source() {  # <git folder> <commit> <folder>
-	mkdir -p "$3"
-	git -C "$1" archive --format=tar "$2" | tar -x -C "$3"
-}
-# the files of the GUI as committed (no changes not committed, no files not committed among those copied), and the app
-# built after its last commit
-dirty=$({ git status --porcelain --untracked-files=no; git status --porcelain -- readme.txt LICENSE.txt res lang manual; } | sort -u)
-[ -z "$dirty" ] || { echo "$dirty"; echo "the files of the GUI are not those of the commit"; exit 1; }
-[ "$(stat -f %m "$APP/Contents/MacOS/nikque GUI")" -ge "$(git log -1 --format=%ct)" ] || { echo "$APP is older than the last commit"; exit 1; }
 
 WORK=$(mktemp -d)
-git -C "$NESRC" archive --format=tar $NEWEDAX_COMMIT problem/fforum-1-19.obf | tar -x -C "$WORK"
+
 unzip -q "$NZIP" -d "$WORK/n"
 unzip -q "$EZIP" -d "$WORK/e"
 [ "$(stat -f %z "$WORK/n/bin/data/eval.dat")" = $NIKQUE_EVAL ] || { echo "nikque eval.dat is not of $NIKQUE_TAG"; exit 1; }
 [ "$(stat -f %z "$WORK/e/bin/data/eval.dat")" = $NEWEDAX_EVAL ] || { echo "newedax eval.dat is not of $NEWEDAX_TAG"; exit 1; }
 
-# newedax for macOS from the source of the tag (as the macOS jobs of its release workflow; 64 slots, its default)
-for arch in arm64 x64-modern; do
-	cc=arm64
-	[ $arch = x64-modern ] && cc=x86_64
-	rm -rf "$WORK/ne-$arch"
-	export_source "$NESRC" $NEWEDAX_COMMIT "$WORK/ne-$arch"
-	mkdir -p "$WORK/ne-$arch/bin"
-	make -s -C "$WORK/ne-$arch/src" build ARCH=$arch COMP=clang OS=osx CC="clang++ -arch $cc" BOOST_DIR="$BOOST_DIR" > "$WORK/ne-$arch.log" 2>&1 ||
-		{ tail -30 "$WORK/ne-$arch.log"; exit 1; }
-	[ -x "$WORK/ne-$arch/bin/mEdax-$arch" ] || { echo "no mEdax-$arch"; exit 1; }
-done
+if [ "$APP" = --train ]; then
+    NESRC=$(cd "$4" && pwd)
+    NKSRC=$(cd "$5" && pwd)
+    mkdir -p "$6"
+    out=$(cd "$6" && pwd)
+    [ -d "${BOOST_DIR:-}/boost" ]
+    [ "$(git -C "$NESRC" rev-parse HEAD)" = "$NEWEDAX_COMMIT" ]
+    [ "$(git -C "$NKSRC" rev-parse HEAD)" = "$NIKQUE_COMMIT" ]
+    cpu=$(uname -m)
+    case $cpu in
+        arm64) arch=arm64 ;;
+        x86_64) arch=x64-modern ;;
+        *) echo "Unsupported native macOS architecture: $cpu" >&2; exit 1 ;;
+    esac
+    for family in nikque newedax; do
+        case $family in
+            nikque) tree=$NKSRC commit=$NIKQUE_COMMIT eval_file=$WORK/n/bin/data/eval.dat compiler=clang ;;
+            newedax) tree=$NESRC commit=$NEWEDAX_COMMIT eval_file=$WORK/e/bin/data/eval.dat compiler=clang++ ;;
+        esac
+        stage=$WORK/$family
+        mkdir -p "$stage"
+        git -C "$tree" archive --format=tar "$commit" | tar -x -C "$stage"
+        evidence=$out/$family/$arch
+        bash tools/train_engine_pgo.sh "$stage" "mEdax-$arch" "$eval_file" "$stage/problem/fforum-1-19.obf" "$evidence" \
+            ARCH="$arch" COMP=clang OS=osx CC="$compiler -arch $cpu" BOOST_DIR="$BOOST_DIR"
+        printf '%s\n' "$commit" > "$evidence/source-commit.txt"
+        lipo "$stage/bin/mEdax-$arch" -verify_arch "$cpu"
+        cp "$stage/bin/mEdax-$arch" "$evidence/"
+        cp "$stage/problem/fforum-1-19.obf" "$evidence/"
+    done
+    exit 0
+fi
+
+dirty=$({ git status --porcelain --untracked-files=no; git status --porcelain -- readme.txt LICENSE.txt res lang manual; } | sort -u)
+[ -z "$dirty" ] || { echo "$dirty"; echo "the files of the GUI are not those of the commit"; exit 1; }
+[ "$(stat -f %m "$APP/Contents/MacOS/nikque GUI")" -ge "$(git log -1 --format=%ct)" ]
+: "${PGO_MAC_DIR:?PGO_MAC_DIR must contain evidence and binaries from both native training jobs}"
+PGO_MAC_DIR=$(cd "$PGO_MAC_DIR" && pwd)
+
+copy_engine() {
+    local family=$1 commit=$2 arch cpu src
+    for arch in arm64 x64-modern; do
+        src=$PGO_MAC_DIR/$family/$arch
+        [ "$(cat "$src/source-commit.txt")" = "$commit" ]
+        [ -s "$src/profile-sha256.txt" ]
+        grep -Fq '19 positions; 0 erroneous move; 0 erroneous score;' "$src/final-solve.txt"
+        cp "$src/mEdax-$arch" "$E/"
+        (cd "$E" && shasum -a 256 -c "$src/binary.sha256")
+        cpu=$arch
+        [ "$arch" != x64-modern ] || cpu=x86_64
+        lipo "$E/mEdax-$arch" -verify_arch "$cpu"
+    done
+}
 
 mkdir -p "$DST/lang" "$DST/engines"
 cp -R "$APP" "$DST/"
@@ -92,33 +121,33 @@ source_txt() {  # <title> <repo> <tag> <commit> <how>
 }
 E=$DST/engines/nikque
 mkdir -p "$E/data"
-cp "$WORK/n/bin/mEdax-arm64" "$WORK/n/bin/mEdax-x64-modern" "$E/"
+copy_engine nikque "$NIKQUE_COMMIT"
 cp "$WORK/n/bin/data/eval.dat" "$E/data/"
 cp "$WORK/n/LICENSE" "$E/LICENSE.txt"
 source_txt "Edax (C version, nikque)" https://github.com/Nikque/edax-reversi-AVX $NIKQUE_TAG $NIKQUE_COMMIT \
-	"The files of the release ZIP of the tag. / タグの Release の ZIP のファイルです。" > "$E/SOURCE.txt"
-for f in mEdax-arm64 mEdax-x64-modern data/eval.dat; do cmp "$WORK/n/bin/$f" "$E/$f"; done
+	"The programs use native PGO builds from the tagged source. data/eval.dat is from the release ZIP. / 実行ファイルはタグのソースから PGO でビルドしました。data/eval.dat は Release の ZIP から収録しました。" > "$E/SOURCE.txt"
+cmp "$WORK/n/bin/data/eval.dat" "$E/data/eval.dat"
 
 E=$DST/engines/newedax
 mkdir -p "$E/data"
-cp "$WORK/ne-arm64/bin/mEdax-arm64" "$WORK/ne-x64-modern/bin/mEdax-x64-modern" "$E/"
+copy_engine newedax "$NEWEDAX_COMMIT"
 cp "$WORK/e/bin/data/eval.dat" "$E/data/"
 cp "$WORK/e/LICENSE" "$E/LICENSE.txt"
 source_txt "Heath (formerly newedax, C++ version of Edax)" https://github.com/Nikque/Heath $NEWEDAX_TAG $NEWEDAX_COMMIT \
-	"The programs are built from the source of the tag (64 slots) for this distribution; data/eval.dat is of the release ZIP of the tag. / プログラムはこの配布物のためにタグのソース（64 枠）から作りました。data/eval.dat はタグの Release の ZIP のものです。" > "$E/SOURCE.txt"
+	"The programs use native PGO builds from the tagged source (64 slots); data/eval.dat is of the release ZIP of the tag. / 実行ファイルはタグのソース（64 枠）から PGO でビルドしました。data/eval.dat はタグの Release の ZIP のものです。" > "$E/SOURCE.txt"
 cmp "$WORK/e/bin/data/eval.dat" "$E/data/eval.dat"
 chmod +x "$DST"/engines/*/mEdax-*
 
 # the engines run: the first problems of FFO solved by each (on this Mac's own kind of CPU)
 case "$(uname -m)" in
-	arm64) host_engine=mEdax-arm64 ;;
-	x86_64) host_engine=mEdax-x64-modern ;;
+	arm64) host_engine=mEdax-arm64; host_arch=arm64 ;;
+	x86_64) host_engine=mEdax-x64-modern; host_arch=x64-modern ;;
 	*) echo "Unsupported Mac architecture"; exit 1 ;;
 esac
 for e in nikque newedax; do
 	lipo "$DST/engines/$e/mEdax-arm64" -verify_arch arm64
 	lipo "$DST/engines/$e/mEdax-x64-modern" -verify_arch x86_64
-	(cd "$DST/engines/$e" && "./$host_engine" -n 1 -l 60 -book-usage off -solve "$WORK/problem/fforum-1-19.obf" > "$WORK/solve-$e.log" 2>&1) ||
+	(cd "$DST/engines/$e" && "./$host_engine" -n 1 -l 60 -book-usage off -solve "$PGO_MAC_DIR/$e/$host_arch/fforum-1-19.obf" > "$WORK/solve-$e.log" 2>&1) ||
 		{ cat "$WORK/solve-$e.log"; exit 1; }
 	tail -2 "$WORK/solve-$e.log"
 	grep -Fq '19 positions; 0 erroneous move; 0 erroneous score;' "$WORK/solve-$e.log"
