@@ -16,13 +16,13 @@ NZIP=$(realpath "$1") EZIP=$(realpath "$2") NESRC=$(cd "$3" && pwd) NKSRC=$(cd "
 [ -x "${ANDROID_NDK:-}/ndk-build" ] || { echo "ANDROID_NDK: the folder of the NDK"; exit 1; }
 [ -f "${NG_KEYSTORE:-}" ] || { echo "NG_KEYSTORE: the keystore the release APK is signed with"; exit 1; }
 NIKQUE_TAG=v4.5.5-nikque.34
-NIKQUE_SHA=ea8ce8f654283a1030f66dd5f170a9960f7fc73e5f663742a1547ee122261a7a
-NIKQUE_SIZE=19275144
+NIKQUE_WEIGHT_SHA=f8b2299612d9fa4414157e70e932636e33111c2602d0c2fc382a7d90ef21b792
+NIKQUE_LICENSE_SHA=0b383d5a63da644f628d99c33976ea6487ed89aaa59f0b3257992deac1171e6b
 NIKQUE_COMMIT=4d16210cc91bb99fddaa372dceef8e2ca8990bfc
 NIKQUE_EVAL=13952436
 NEWEDAX_TAG=v4.5.5-heath.21
-NEWEDAX_SHA=edc50601c9cd7e37c1220ac1fcfa50b532515cf238af5462a1cf7e09235766e5
-NEWEDAX_SIZE=68972596
+NEWEDAX_WEIGHT_SHA=6f8ceb1f9d8e8fcfc9c5117ace2b31f5f893ea54336d44e94fd74ee9e9bf1dbc
+NEWEDAX_LICENSE_SHA=8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903
 NEWEDAX_COMMIT=87560a37e2a3aef4f9d58303b2aeec39b8f7ccc9
 NEWEDAX_EVAL=107612578
 
@@ -31,15 +31,6 @@ VER=$(sed -n 's/^project(nikque_gui VERSION \([0-9.]*\) .*/\1/p' CMakeLists.txt)
 NAME=nikque-gui-$VER-android
 [ ! -e "dist/$NAME.apk" ] || { echo "dist/$NAME.apk is there"; exit 1; }
 
-check_zip() {  # <zip> <sha256> <size>
-	local h s
-	h=$(sha256sum "$1" | cut -d' ' -f1)
-	s=$(stat -c %s "$1")
-	[ "$h" = "$2" ] && [ "$s" = "$3" ] || { echo "$1: SHA-256 $h, $s bytes (not the values of the release)"; exit 1; }
-	echo "zip ok  $h  $s  $1"
-}
-check_zip "$NZIP" $NIKQUE_SHA $NIKQUE_SIZE
-check_zip "$EZIP" $NEWEDAX_SHA $NEWEDAX_SIZE
 [ "$(git -C "$NESRC" rev-parse HEAD)" = $NEWEDAX_COMMIT ] || { echo "$NESRC is not $NEWEDAX_TAG ($NEWEDAX_COMMIT)"; exit 1; }
 [ "$(git -C "$NKSRC" rev-parse HEAD)" = $NIKQUE_COMMIT ] || { echo "$NKSRC is not $NIKQUE_TAG ($NIKQUE_COMMIT)"; exit 1; }
 # the sources of the engines as committed (changes not committed and files of an earlier build are not taken)
@@ -60,6 +51,11 @@ unzip -p "$EZIP" bin/data/eval.dat > "$WORK/e/bin/data/eval.dat"
 unzip -p "$EZIP" LICENSE > "$WORK/e/LICENSE"
 [ "$(stat -c %s "$WORK/n/bin/data/eval.dat")" = $NIKQUE_EVAL ] || { echo "nikque eval.dat is not of $NIKQUE_TAG"; exit 1; }
 [ "$(stat -c %s "$WORK/e/bin/data/eval.dat")" = $NEWEDAX_EVAL ] || { echo "newedax eval.dat is not of $NEWEDAX_TAG"; exit 1; }
+
+# The APK uses only these assets. Verify each byte without depending on the rest of either ZIP.
+printf '%s  %s\n' "$NIKQUE_WEIGHT_SHA" "$WORK/n/bin/data/eval.dat" \
+    "$NIKQUE_LICENSE_SHA" "$WORK/n/LICENSE" "$NEWEDAX_WEIGHT_SHA" "$WORK/e/bin/data/eval.dat" \
+    "$NEWEDAX_LICENSE_SHA" "$WORK/e/LICENSE" | sha256sum -c
 
 # Build each engine for each ABI with its own measured Android profile.
 LIBS=$WORK/jnilibs
