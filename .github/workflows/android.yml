@@ -1,11 +1,4 @@
-# The Android build of nikque GUI: the APK for devices (arm64-v8a, Android 10 or later; the engines of the release
-# ZIPs) and the APK of this workflow for the emulator (x86_64; the engines built from the sources of the tags of their
-# releases), made by tools/make_dist_android.sh, then a run of the second on an emulator with a script (pictures of
-# the screen, the log).
-# The APK for devices is signed with the key of the secrets NG_KEYSTORE_B64 (a keystore in base64),
-# NG_KEYSTORE_PASSWORD, NG_KEY_ALIAS and NG_KEY_PASSWORD. On master (the runs of the releases) the run stops without
-# them; on the other branches it signs with a key made for this run alone (an APK signed with another key is not
-# installed over this one).
+# Build Android APKs with ABI-specific PGO engines, then verify and run the x86_64 APK in the emulator.
 name: Android
 
 on:
@@ -19,6 +12,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 
@@ -44,6 +38,12 @@ jobs:
           repository: Nikque/Heath
           ref: v4.5.5-heath.21
           path: ne
+          sparse-checkout: |
+            /src/
+            /include/
+            /problem/
+            /tests/check-solve.py
+          sparse-checkout-cone-mode: false
 
       - name: The source of Edax nikque (the tag of its release)
         uses: actions/checkout@v4
@@ -51,6 +51,12 @@ jobs:
           repository: Nikque/edax-reversi-AVX
           ref: v4.5.5-nikque.34
           path: nk
+          sparse-checkout: |
+            /src/
+            /include/
+            /problem/
+            /tests/check-solve.py
+          sparse-checkout-cone-mode: false
 
       - name: Boost 1.92 (headers, for newedax)
         id: boost
@@ -106,6 +112,9 @@ jobs:
             echo "NG_KEY_PASSWORD=$KEY_PASSWORD"
           } >> "$GITHUB_ENV"
 
+      - name: Install ARM64 execution support for profiling
+        run: sudo apt-get update && sudo apt-get install -y qemu-user
+
       - name: The APKs
         run: BOOST_DIR="$PWD/boost/boost_1_92_0" bash tools/make_dist_android.sh dl/edax-4.5.5-nikque.34.zip dl/edax-4.5.5-heath.21-64.zip ne nk .github/ci/smoke-android.txt
 
@@ -116,6 +125,7 @@ jobs:
           path: |
             dist/*.apk
             dist/*-files.txt
+            dist/android-pgo/
           compression-level: 0
 
       - name: The emulator may use the virtualization of the runner
@@ -136,7 +146,7 @@ jobs:
           disk-size: 6000M
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
-          script: bash .github/ci/android_run.sh
+          script: bash tools/android_pgo_smoke.sh && bash .github/ci/android_run.sh
 
       - name: Keep the pictures and the log
         if: always()
