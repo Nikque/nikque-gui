@@ -40,6 +40,7 @@ void PosInfo::reset_book()
 		m.cmp_selectivity = keep.cmp_selectivity;
 		m.cmp_bound = keep.cmp_bound;
 	}
+	book_preview_id = 0;
 	book_params.clear();
 	book_begun = book_done = book_peeked = values_done = in_book = count_done = book_failed = false;
 	levels_done = false;
@@ -434,6 +435,7 @@ std::vector<LineEval> backward_line(const Game &g, const AnalysisCache &cache, b
 			const int diff = b > w ? b - w + em : b < w ? b - w - em : 0;
 			e.known = e.complete = e.exact = true;
 			e.best = p.side == kBlack ? diff : -diff;
+			e.lower = e.upper = e.best;
 			continue;
 		}
 		if (p.must_pass()) {
@@ -441,6 +443,8 @@ std::vector<LineEval> backward_line(const Game &g, const AnalysisCache &cache, b
 				e.known = e.played_known = true;
 				e.complete = next->complete;
 				e.best = e.played = from_next(next->best);
+				e.lower = turn ? -next->upper : next->lower;
+				e.upper = turn ? -next->lower : next->upper;
 				e.exact = e.played_exact = next->exact;
 				e.bound = e.played_bound = turn ? other_side_bound(next->bound) : next->bound;
 			}
@@ -448,9 +452,10 @@ std::vector<LineEval> backward_line(const Game &g, const AnalysisCache &cache, b
 		}
 		const PosInfo *info = cache.peek(p);
 		if (!info) continue;
-		int best = -999;
-		bool all = !info->moves.empty(), best_exact = false;
-		char best_bound = 0;
+		constexpr int unbounded = LineEval::unbounded;
+		int lower = -unbounded, upper = -unbounded;
+		bool all = !info->moves.empty(), lower_exact = false, omitted = false;
+		const bool complete_book = use_book && info->in_book && !info->book_preview_id && (info->values_done || info->book_peeked);
 		for (const MoveEval &m : info->moves) {
 			int v = 0;
 			bool known = shown_value(m, use_book, &v);
@@ -472,22 +477,33 @@ std::vector<LineEval> backward_line(const Game &g, const AnalysisCache &cache, b
 				e.played_improved = improved;
 			}
 			if (!known) {
-				all = false;
+				// A completed book value covers the other non-book moves through its best leaf.
+				if (complete_book) omitted = true;
+				else all = false;
 				continue;
 			}
-			// the same value again: a lower bound ('>') says the best may be above it; a value without a bound says
-			// the best is not below it (an upper bound '<' of it says less)
-			if (v > best || (v == best && (bound == '>' || (best_bound == '<' && bound == 0)))) {
-				best = v;
-				best_exact = ex;
-				best_bound = bound;
+			const int lo = improved ? (turn ? -next->upper : next->lower) : (bound == '<' ? -unbounded : v);
+			const int hi = improved ? (turn ? -next->lower : next->upper) : (bound == '>' ? unbounded : v);
+			if (lo > lower || (lo == lower && ex)) {
+				lower = lo;
+				lower_exact = ex;
 			}
+			upper = std::max(upper, hi);
 		}
-		if (best != -999) {
+		e.lower = lower;
+		e.upper = all ? upper : unbounded;
+		if (lower != -unbounded || (all && upper != -unbounded && upper != unbounded)) {
 			e.known = true;
-			e.best = best;
-			e.exact = best_exact;
-			e.bound = best_bound;
+			if (lower == e.upper) {
+				e.best = lower;
+				e.exact = all && lower_exact && !omitted;
+			} else if (lower != -unbounded) {
+				e.best = lower;
+				e.bound = '>';
+			} else {
+				e.best = upper;
+				e.bound = '<';
+			}
 		}
 		e.complete = all;
 	}

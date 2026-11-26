@@ -323,7 +323,10 @@ void App::continue_learning()
 	}
 	// the learning kept is of this book, and the file saved on the way is of it (not of a learning before it)
 	const std::string last_book = ini_.get("learn", "last_book");
-	if (last_book.empty() || !iequals(last_book, narrow(base))) {
+	std::error_code identity_error;
+	const bool same_book = !last_book.empty() && (last_book == narrow(base) ||
+	    std::filesystem::equivalent(std::filesystem::u8path(last_book), std::filesystem::u8path(narrow(base)), identity_error));
+	if (!same_book) {
 		message(lang::f("learn.other_book", {last_book.empty() ? lang::t("learn.book_unknown") : widen(last_book), base}), MB_ICONWARNING);
 		return;
 	}

@@ -29,35 +29,35 @@ bool Gfx::init(NativeWindow hwnd)
 
 	// unit shapes
 	auto make = [&](ComPtr<ID2D1PathGeometry> &g, const D2D1_POINT_2F *pts, int n) {
-		factory_->CreatePathGeometry(&g);
+		if (FAILED(factory_->CreatePathGeometry(&g))) return false;
 		ComPtr<ID2D1GeometrySink> s;
-		g->Open(&s);
+		if (FAILED(g->Open(&s))) return false;
 		s->BeginFigure(pts[0], D2D1_FIGURE_BEGIN_FILLED);
 		for (int i = 1; i < n; ++i) s->AddLine(pts[i]);
 		s->EndFigure(D2D1_FIGURE_END_CLOSED);
-		s->Close();
+		return SUCCEEDED(s->Close());
 	};
 	const D2D1_POINT_2F spark[] = {{0, -0.5f}, {0.09f, -0.09f}, {0.5f, 0}, {0.09f, 0.09f},
 	                               {0, 0.5f},  {-0.09f, 0.09f}, {-0.5f, 0}, {-0.09f, -0.09f}};
-	make(sparkle_, spark, 8);
+	if (!make(sparkle_, spark, 8)) return false;
 	D2D1_POINT_2F st[10];
 	for (int i = 0; i < 10; ++i) {
 		const float a = static_cast<float>(-std::numbers::pi / 2 + i * std::numbers::pi / 5);
 		const float r = (i & 1) ? 0.2f : 0.5f;
 		st[i] = {r * std::cos(a), r * std::sin(a) + 0.04f};
 	}
-	make(star_, st, 10);
+	if (!make(star_, st, 10)) return false;
 	const D2D1_POINT_2F rib[] = {{-0.35f, -0.5f}, {0.35f, -0.5f}, {0.35f, 0.5f}, {0, 0.22f}, {-0.35f, 0.5f}};
-	make(ribbon_, rib, 5);
+	if (!make(ribbon_, rib, 5)) return false;
 	{
-		factory_->CreatePathGeometry(&heart_);
+		if (FAILED(factory_->CreatePathGeometry(&heart_))) return false;
 		ComPtr<ID2D1GeometrySink> s;
-		heart_->Open(&s);
+		if (FAILED(heart_->Open(&s))) return false;
 		s->BeginFigure({0, 0.42f}, D2D1_FIGURE_BEGIN_FILLED);
 		s->AddBezier({{-0.62f, 0.02f}, {-0.36f, -0.52f}, {0, -0.2f}});
 		s->AddBezier({{0.36f, -0.52f}, {0.62f, 0.02f}, {0, 0.42f}});
 		s->EndFigure(D2D1_FIGURE_END_CLOSED);
-		s->Close();
+		if (FAILED(s->Close())) return false;
 	}
 	{
 		// a paw: one large pad and four toes
@@ -68,17 +68,17 @@ bool Gfx::init(NativeWindow hwnd)
 		ID2D1Geometry *gs[5];
 		ComPtr<ID2D1EllipseGeometry> es[5];
 		for (int i = 0; i < 5; ++i) {
-			factory_->CreateEllipseGeometry(parts[i], &es[i]);
+			if (FAILED(factory_->CreateEllipseGeometry(parts[i], &es[i]))) return false;
 			gs[i] = es[i].Get();
 		}
 		ComPtr<ID2D1GeometryGroup> grp;
-		factory_->CreateGeometryGroup(D2D1_FILL_MODE_WINDING, gs, 5, &grp);
+		if (FAILED(factory_->CreateGeometryGroup(D2D1_FILL_MODE_WINDING, gs, 5, &grp))) return false;
 		paw_ = grp;
 	}
 	{
-		factory_->CreatePathGeometry(&rays_);
+		if (FAILED(factory_->CreatePathGeometry(&rays_))) return false;
 		ComPtr<ID2D1GeometrySink> s;
-		rays_->Open(&s);
+		if (FAILED(rays_->Open(&s))) return false;
 		for (int i = 0; i < 10; ++i) {
 			const double a = i * std::numbers::pi / 5, w = 0.07;
 			s->BeginFigure({0, 0}, D2D1_FIGURE_BEGIN_FILLED);
@@ -86,7 +86,7 @@ bool Gfx::init(NativeWindow hwnd)
 			s->AddLine({static_cast<float>(std::cos(a + w)), static_cast<float>(std::sin(a + w))});
 			s->EndFigure(D2D1_FIGURE_END_CLOSED);
 		}
-		s->Close();
+		if (FAILED(s->Close())) return false;
 	}
 	return create_device();
 }

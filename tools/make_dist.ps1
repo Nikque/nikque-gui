@@ -45,10 +45,13 @@ if ((Get-Item $gui).VersionInfo.ProductVersion -ne $ver) { throw "nikque-gui.exe
 $man = Get-Content -Raw (Join-Path $root "res\app.manifest")
 if ($man -notmatch ('name="Nikque\.nikque-gui" version="' + [regex]::Escape("$ver.0") + '"')) { throw "res\app.manifest is not version $ver.0" }
 # the files of the GUI as committed (no changes not committed), and the program built after its last commit
-$dirty = & git -C $root status --porcelain --untracked-files=no
+$dirty = & git --no-optional-locks -C $root status --porcelain --untracked-files=no
 if ($LASTEXITCODE -ne 0) { throw "git status failed in $root" }
+$extra = & git --no-optional-locks -C $root ls-files --others -- lang manual
+if ($LASTEXITCODE -ne 0) { throw "git ls-files failed in $root" }
+if ($extra) { throw "untracked files in the GUI distribution inputs:`n$($extra -join "`n")" }
 if ($dirty) { throw "the files of the GUI have changes not committed:`n$($dirty -join "`n")" }
-$committed = [DateTimeOffset]::FromUnixTimeSeconds([long](& git -C $root log -1 --format=%ct)).LocalDateTime
+$committed = [DateTimeOffset]::FromUnixTimeSeconds([long](& git --no-optional-locks -C $root log -1 --format=%ct)).LocalDateTime
 if ((Get-Item $gui).LastWriteTime -lt $committed) { throw "nikque-gui.exe is older than the last commit (build it again)" }
 
 $name = "nikque-gui-$ver"

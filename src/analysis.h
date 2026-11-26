@@ -15,7 +15,22 @@
 
 namespace ng {
 
-struct MoveEval {
+struct BookMoveEval {
+	bool book_row = false;
+	bool in_book = false;
+	int book_value = 0, book_level = 0;
+	long long lines = -1;
+	int stage = -1;
+	long long missing = -1;
+	bool has_link = false;
+	int link = 0;
+	bool leaf = false;
+	int leaf_value = 0, leaf_level = 0;
+	bool umi_known = false, umi_none = false, umi_exact = true;
+	int umi_black = -1, umi_white = -1;
+};
+
+struct MoveEval : BookMoveEval {
 	int sq = kNoMove;
 
 	// search (hint), from the side to move
@@ -30,24 +45,7 @@ struct MoveEval {
 	int cmp_score = 0, cmp_depth = 0, cmp_selectivity = 100;
 	char cmp_bound = 0;
 
-	// book (book moveinfo)
-	bool book_row = false;   // the row of the move came
-	bool in_book = false;
-	int book_value = 0;
-	int book_level = 0;
-	long long lines = -1;
-	int stage = -1;          // 0..7, -1 not known yet
-	long long missing = -1;
-	bool has_link = false;
-	int link = 0;
-	bool leaf = false;       // the book's leaf move of the position (not in the book)
-	int leaf_value = 0;
-	int leaf_level = 0;
-	bool umi_known = false;
-	bool umi_none = false;   // too large
-	bool umi_exact = true;
-	int umi_black = -1, umi_white = -1;
-	long long positions = -1;
+	long long positions = -1;  // independent count request
 };
 
 struct PosInfo {
@@ -55,6 +53,7 @@ struct PosInfo {
 	// book analyses
 	std::string book_params;       // the parameters the book parts were asked with
 	bool book_begun = false;
+	int book_preview_id = 0;
 	bool book_done = false;
 	bool book_peeked = false;      // the values of the book were looked up in its file (the engine was reading it)
 	bool values_done = false;      // the values of the book came, by themselves or with the rest
@@ -196,6 +195,8 @@ struct LineEval {
 	bool known = false;      // a best value is known
 	bool complete = false;   // every move has a value (so the best value can go back)
 	int best = 0;            // from the side to move
+	static constexpr int unbounded = 999;
+	int lower = -unbounded, upper = unbounded;
 	bool exact = false;
 	char bound = 0;          // '<' or '>' when the best value is a bound of the search (from the side to move)
 	bool played_known = false;  // the move played from here (the next move of the game)

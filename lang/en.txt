@@ -87,6 +87,7 @@ bar.no_engine=No engine
 bar.loading=Reading the book
 bar.old_engine=No book analyses (old engine)
 bar.book_name=Book path not usable
+bar.book_unsaved=Book save unconfirmed
 bar.book_off=Book not used
 bar.opening_hidden=(opening)
 bar.accuracy=Book accuracy

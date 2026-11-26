@@ -71,6 +71,9 @@ bool EngineProcess::start(const std::wstring &exe, const std::wstring &args, con
 	ResumeThread(pi.hThread);
 	CloseHandle(pi.hThread);
 	process_ = pi.hProcess;
+	stop_io_ = false;
+	drain_until_ = 0;
+	writer_ended_ = false;
 	read_ended_ = false;
 	reader_ = std::thread([this] { read_loop(); });
 	writer_ = std::thread([this] { write_loop(); });
@@ -80,7 +83,7 @@ bool EngineProcess::start(const std::wstring &exe, const std::wstring &args, con
 bool EngineProcess::write_all(std::string_view text)
 {
 	DWORD done = 0;
-	while (!text.empty()) {
+	while (!text.empty() && !stop_io_) {
 		if (!WriteFile(in_write_, text.data(), static_cast<DWORD>(text.size()), &done, nullptr)) return false;
 		text.remove_prefix(done);
 	}
@@ -95,12 +98,20 @@ void EngineProcess::close_input()
 	}
 }
 
+void EngineProcess::notify_write_failure()
+{
+	if (notify_) PostMessageW(notify_, msg_, tag_, 2);
+}
+
 void EngineProcess::stop_writer()
 {
 	if (writer_.joinable()) {
 		end_input();
 		// (the process has ended: a write the thread waits on fails; this stops one that would wait all the same)
-		CancelSynchronousIo(writer_.native_handle());
+		while (!writer_ended_) {
+			CancelSynchronousIo(writer_.native_handle());
+			Sleep(1);
+		}
 		writer_.join();
 	}
 	close_input();  // (a start that failed before the thread)
@@ -124,7 +135,7 @@ void EngineProcess::read_loop()
 {
 	char buf[1 << 16];
 	std::vector<std::string> batch;
-	for (;;) {
+	while (!stop_io_) {
 		DWORD n = 0;
 		if (!ReadFile(out_read_, buf, sizeof buf, &n, nullptr) || n == 0) break;
 		size_t i = 0;
@@ -169,7 +180,15 @@ bool EngineProcess::exited() const
 {
 	if (!process_) return true;
 	// (its last lines may be still in the pipe a moment after its end)
-	return WaitForSingleObject(process_, 0) != WAIT_TIMEOUT && (read_ended_ || !reader_.joinable());
+	if (WaitForSingleObject(process_, 0) != WAIT_OBJECT_0) return false;
+	if (read_ended_ || !reader_.joinable()) return true;
+	if (!drain_until_) {
+		if (job_) TerminateJobObject(job_, 1);  // descendants may still hold the output pipe
+		drain_until_ = GetTickCount64() + 250;
+	} else if (GetTickCount64() >= drain_until_) {
+		CancelSynchronousIo(const_cast<EngineProcess *>(this)->reader_.native_handle());
+	}
+	return false;
 }
 
 std::optional<int> EngineProcess::exit_code() const
@@ -186,10 +205,17 @@ void EngineProcess::close(unsigned wait_ms)
 		TerminateProcess(process_, 1);
 		WaitForSingleObject(process_, 5000);
 	}
+	if (job_) {
+		CloseHandle(job_);
+		job_ = nullptr;
+	}
+	stop_io_ = true;
 	stop_writer();
 	if (reader_.joinable()) {
-		// the pipe closes when the process ends; the thread then stops
-		if (!process_) CancelSynchronousIo(reader_.native_handle());
+		while (!read_ended_) {
+			CancelSynchronousIo(reader_.native_handle());
+			Sleep(1);
+		}
 		reader_.join();
 	}
 	if (out_read_) {

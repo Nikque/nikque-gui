@@ -941,6 +941,7 @@ CellView App::cell_view(int sq) const
 		return shown_value(o, use_book_, x);
 	};
 	v.has_value = value_of(*m, &v.value);
+	if (v.has_value) v.bound = le && sq == played_sq && le->played_improved ? le->played_bound : shown_bound(*m, use_book_);
 	v.stage = (use_book_ && m->book_row && m->stage > 0) ? m->stage : 0;
 	// a value of the book whose stage is not known (the precision stages not asked, or not come yet): no level of the search
 	if (v.has_value && v.stage == 0 && !(use_book_ && m->in_book && !(le && sq == played_sq && le->played_improved))) {

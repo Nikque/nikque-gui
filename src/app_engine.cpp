@@ -136,10 +136,25 @@ int App::new_id()
 	return next_id_;
 }
 
+void App::discard_book_preview(int id)
+{
+	const auto it = requests_.find(id);
+	if (it == requests_.end() || it->second.previous_book_moves.empty()) return;
+	const auto &req = it->second;
+	PosInfo *info = cache_.peek(position_of(req.pos));
+	if (!info || info->book_preview_id != id) return;
+	for (size_t i = 0; i < info->moves.size(); ++i)
+		static_cast<BookMoveEval &>(info->moves[i]) = req.previous_book_moves[i];
+	info->book_begun = req.previous_book_begun;
+	info->in_book = req.previous_in_book;
+	info->book_preview_id = 0;
+}
+
 void App::forget_main_requests()
 {
 	if (list_book_id_) delete_file(book_lines_file(list_book_id_));  // (its answer will not come)
 	load_wait_ = LoadWait{};  // (a file loaded by the engine closed: the learning is not gone on with)
+	for (const auto &[id, req] : requests_) discard_book_preview(id);
 	requests_.clear();
 	stopped_.clear();
 	book_id_ = values_id_ = count_id_ = levels_id_ = best_id_ = graph_id_ = missing_id_ = findline_id_ = list_book_id_ = 0;
@@ -197,6 +212,7 @@ void App::stop_request(std::string &out, int &id)
 {
 	if (!id) return;
 	out += "stop id=" + std::to_string(id) + "\n";
+	discard_book_preview(id);
 	requests_.erase(id);
 	stopped_.insert(id);  // until its "@end" or "@cancel"
 	id = 0;
@@ -532,6 +548,7 @@ void App::pump_graph()
 		const Position &p = game_.at(i);
 		if (p.game_over() || p.must_pass()) continue;
 		PosInfo &info = cache_.get(p);
+		if (info.book_params != params) discard_book_preview(info.book_preview_id);
 		info.set_book_params(params);
 		if (info.book_done || info.book_failed) continue;
 		ask(p);
@@ -612,6 +629,7 @@ void App::request_analysis()
 		auto same = [&](int id) { return requests_.count(id) && requests_[id].pos == key; };
 		PosInfo *info = book_on ? &cache_.get(p) : nullptr;
 		const std::string params = book_params();
+		if (info && info->book_params != params) discard_book_preview(info->book_preview_id);
 		const bool params_changed = info && info->set_book_params(params);
 		cancel(book_id_, book_on && same(book_id_) && !params_changed);
 		cancel(values_id_, book_on && same(values_id_));
@@ -761,12 +779,18 @@ void App::eval_mismatch_box()
 	message(lang::f("warn.eval_mismatch", {lang::t(kRoleNames[eval_warned_role_])}), MB_ICONWARNING);
 }
 
-void App::on_engine(WPARAM tag, bool ended)
+void App::on_engine(WPARAM tag, LPARAM event)
 {
+	const bool ended = event != 0;
 	const int role = static_cast<int>(tag & 7);
 	if (role > 4) return;
 	EngineSlot &s = eng_[role];
 	if (static_cast<unsigned>(tag >> 3) != s.generation) return;  // from a process closed before
+	if (event == 2) {
+		if (!s.alive) return;
+		log(lang::f("log.engine_lost", {lang::t(kRoleNames[role])}));
+		if (role == 0 || role == 2) job_error(role);
+	}
 	std::vector<std::string> lines;
 	s.proc.take_lines(lines);
 	if (role == 0) unmix_lines(lines, s.open);
@@ -831,7 +855,8 @@ void App::on_engine(WPARAM tag, bool ended)
 			else if (!ok) log(lang::t("engine.main") + L": " + engine_text(line));
 			continue;
 		}
-		if (role == 0 && load_wait_.end_id && (line.starts_with("ERROR") || line.starts_with("FATAL ERROR"))) load_wait_.error = true;
+		if (role == 0 && load_wait_.end_id && (line.starts_with("ERROR") || line.starts_with("FATAL ERROR") ||
+		    (line.starts_with("WARNING: Book ") && line.ends_with(" was not loaded; current book retained")))) load_wait_.error = true;
 		// (an ERROR line while the engine saves its book as it ends: the save failed; the line goes to the log below)
 		if (role == 0 && book_saving_ && (line.starts_with("ERROR") || line.starts_with("FATAL ERROR"))) save_error_line_ = true;
 		if (line[0] == '@') {
@@ -856,8 +881,33 @@ void App::on_engine(WPARAM tag, bool ended)
 				if (last) stopped_.erase(id);
 				continue;
 			}
-			const Request req = it->second;
 			const bool done = f.kind() == "end";  // (the last line of an answer that has come to its end)
+			const auto kind = it->second.kind;
+			const bool book_result = kind == Request::Book || kind == Request::Graph || kind == Request::Values;
+			if (book_result && !last) {
+				if (f.kind() != "begin" && f.kind() != "move") continue;
+				auto &req = it->second;
+				PosInfo &info = cache_.get(position_of(req.pos));
+				if (kind != Request::Values && req.params != info.book_params) continue;
+				req.book_lines.push_back(line);
+				if (info.book_preview_id != 0 && info.book_preview_id != id) continue;
+				if (info.book_preview_id == 0) {
+					info.book_preview_id = id;
+					req.previous_book_moves.assign(info.moves.begin(), info.moves.end());
+					req.previous_book_begun = info.book_begun;
+					req.previous_in_book = info.in_book;
+				}
+				if (f.kind() == "begin") {
+					info.book_begun = true;
+					info.in_book = f.num("book").value_or(0) == 1;
+				} else {
+					apply_move_line(info, f);
+				}
+				changed = true;
+				continue;
+			}
+			if (book_result && last) discard_book_preview(id);
+			Request req = last ? std::move(it->second) : it->second;
 			if (req.kind == Request::FindLine) {
 				if (last) requests_.erase(it);  // first: the answer may change the requests
 				findline_answer(f, last);
@@ -894,7 +944,8 @@ void App::on_engine(WPARAM tag, bool ended)
 					requests_.erase(it);
 					// (only the answer of the lines asked last: an answer of one asked before writes the same file)
 					if (id == list_book_id_) {
-						list_book_written(req.kind == Request::ListBookAdd, done && !f.num("error").value_or(0));
+						list_book_written(req.kind == Request::ListBookAdd, done && !f.num("error").value_or(0),
+						                  f.num("lines") == 0 && f.num("written") == 0);
 						update_menu();
 					} else {
 						delete_file(book_lines_file(id));
@@ -941,6 +992,18 @@ void App::on_engine(WPARAM tag, bool ended)
 				// position is not asked again by itself (book_failed)
 				const bool error = done && f.num("error").value_or(0);
 				const bool ok = done && !error;
+				if (ok && book_result) {
+					if (info.book_preview_id) discard_book_preview(info.book_preview_id);
+					for (const auto &book_line : req.book_lines) {
+						const Fields part(book_line);
+						if (part.kind() == "begin") {
+							info.book_begun = true;
+							info.in_book = part.num("book").value_or(0) == 1;
+						} else {
+							apply_move_line(info, part);
+						}
+					}
+				}
 				if (error) log(lang::f("log.analysis_error", {engine_text(line)}));
 				if (req.kind == Request::Book) {
 					info.book_done = ok;

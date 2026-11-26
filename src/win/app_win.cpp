@@ -75,7 +75,7 @@ int App::run(HINSTANCE inst, int show)
 		DispatchMessageW(&m);
 	}
 	measure::finish(exe_dir_);
-	return 0;
+	return book_save_failed_ ? 1 : 0;
 }
 
 LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
@@ -207,7 +207,7 @@ LRESULT App::proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
 	case WM_CTLCOLORSTATIC:  // (the text box while it is disabled)
 		return record_color(reinterpret_cast<HDC>(wp));
 	case WM_ENGINE:
-		on_engine(wp, lp != 0);
+		on_engine(wp, lp);
 		return 0;
 	case WM_CLOSE:
 		close_window();

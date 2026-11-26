@@ -6,7 +6,14 @@ set -uo pipefail
 APK=$(ls dist/nikque-gui-*-android-ci.apk | head -1)
 PKG=io.github.nikque.gui
 mkdir -p run
+# Remove only the artifacts expected from this smoke run.
+while IFS= read -r line || [ -n "$line" ]; do
+	case $line in
+	"screenshot "?* | "savelog "?*) rm -f -- "run/${line#* }" ;;
+	esac
+done < .github/ci/smoke-android.txt
 adb install -r "$APK" || exit 1
+adb shell pm clear "$PKG" | grep -q "^Success" || exit 1
 adb logcat -c
 adb shell am start -n $PKG/.MainActivity || exit 1
 
@@ -31,6 +38,10 @@ if adb shell pidof $PKG > /dev/null; then
 fi
 
 adb logcat -d -v brief > run/logcat-all.txt
+if ! grep -qE "I/NikqueSmoke.*native exit code: 0[[:space:]]*$" run/logcat-all.txt; then
+	echo "native GUI did not report a successful exit"
+	fail=1
+fi
 grep -E "nikque|AndroidRuntime|DEBUG|libc|SELinux|avc:" run/logcat-all.txt | tail -300 > run/logcat.txt
 adb exec-out run-as $PKG sh -c 'cd files/app && tar cf - *.png *.txt config.ini 2>/dev/null' > run/files.tar
 tar -tf run/files.tar > /dev/null 2>&1 && tar -C run -xf run/files.tar

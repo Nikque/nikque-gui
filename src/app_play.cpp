@@ -129,20 +129,24 @@ void App::com_think()
 			return;
 		}
 		// the moves of the book position: its links and its leaf, as Edax plays from its book
-		auto book_value = [](const MoveEval &m) -> std::optional<int> {
-			if (m.sq == kPass) return std::nullopt;
+		const auto preview = requests_.find(info->book_preview_id);
+		auto book_value = [&](size_t i) -> std::optional<int> {
+			if (info->moves[i].sq == kPass) return std::nullopt;
+			const BookMoveEval &m = preview == requests_.end() ? static_cast<const BookMoveEval &>(info->moves[i])
+			                                                       : preview->second.previous_book_moves[i];
 			if (m.in_book) return m.book_value;
 			if (m.leaf) return m.leaf_value;
 			return std::nullopt;
 		};
 		int best = -999;
-		for (const auto &m : info->moves)
-			if (const auto v = book_value(m)) best = std::max(best, *v);
+		if (info->values_done)
+			for (size_t i = 0; i < info->moves.size(); ++i)
+				if (const auto v = book_value(i)) best = std::max(best, *v);
 		if (best > -999) {
 			const int width = opening_ == Opening::BookBest ? 0 : opening_width_;
 			std::vector<int> choice;
-			for (const auto &m : info->moves)
-				if (const auto v = book_value(m); v && *v >= best - width) choice.push_back(m.sq);
+			for (size_t i = 0; i < info->moves.size(); ++i)
+				if (const auto v = book_value(i); v && *v >= best - width) choice.push_back(info->moves[i].sq);
 			com_book_move_ = choice[rng()() % choice.size()];
 			set_timer(kTimerCom, kBookMoveDelayMs);
 			return;

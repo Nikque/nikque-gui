@@ -44,7 +44,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
 	// the engines: the folder of each in the files of the app, and its program among the native libraries
 	private static final String[][] ENGINES = {{"nikque", "libedax_nikque.so"}, {"newedax", "libedax_newedax.so"}};
 
-	private static boolean started;  // the thread of the app runs (one for the process)
+	private static boolean started;  // preparation or the native app is running
+	private static boolean prepared;
 	private final Handler handler = new Handler(Looper.getMainLooper());
 	private TextView waiting;
 
@@ -96,11 +97,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
 		setContentView(root);
 		view.requestFocus();
 
-		if (started) {
-			waiting.setVisibility(View.GONE);
-			return;
-		}
-		start();
+		if (prepared) waiting.setVisibility(View.GONE);
+		if (!started) start();
 	}
 
 	// The thread of the app: the files, then the C++ of the GUI until its window is closed. When the files cannot be
@@ -119,6 +117,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
 			}
 			final String failed = error;
 			handler.post(() -> {
+				prepared = failed == null;
 				if (failed != null) started = false;
 				final MainActivity a = Bridge.activity;
 				if (a == null) return;
@@ -126,6 +125,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
 					a.waiting.setVisibility(View.GONE);
 					return;
 				}
+				a.waiting.setVisibility(View.VISIBLE);
 				a.waiting.setText(a.getString(R.string.prepare_failed) + "\n" + failed + "\n\n" + a.getString(R.string.prepare_retry));
 				a.waiting.setOnClickListener(v -> {
 					if (started) return;
@@ -135,12 +135,13 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
 				});
 			});
 			if (failed != null) return;
-			Bridge.run(new File(app, "nikque-gui").getAbsolutePath(), temp.getAbsolutePath() + "/", density);
+			final int result = Bridge.run(new File(app, "nikque-gui").getAbsolutePath(), temp.getAbsolutePath() + "/", density);
+			if (BuildConfig.DEBUG) android.util.Log.i("NikqueSmoke", "native exit code: " + result);
 			handler.post(() -> {
 				final MainActivity a = Bridge.activity;
 				if (a != null) a.finishAndRemoveTask();
 				// (the app has ended: the process goes, and the engines with it)
-				handler.postDelayed(() -> System.exit(0), 300);
+				handler.postDelayed(() -> System.exit(result), 300);
 			});
 		}, "nikque-app", 16L << 20).start();
 	}

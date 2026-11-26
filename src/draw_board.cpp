@@ -17,7 +17,10 @@ constexpr float kTau = static_cast<float>(2 * std::numbers::pi);
 float frac(double x) { return static_cast<float>(x - std::floor(x)); }
 float wave(double t, double period, double phase = 0) { return std::sin(kTau * static_cast<float>(t / period + phase)); }
 
-std::wstring value_text(int v) { return std::to_wstring(v); }
+std::wstring value_text(int v, char bound)
+{
+	return (bound ? std::wstring(1, static_cast<wchar_t>(bound)) : std::wstring()) + std::to_wstring(v);
+}
 
 float value_em(const Layout &L, size_t len) { return std::round(L.cell * (len <= 2 ? 0.46f : 0.38f) * 2) / 2; }
 
@@ -101,7 +104,7 @@ void draw_value(App &app, const Theme &th, const RectF &rc, const CellView &v, d
 	const bool fx = eff != Effects::Off && k >= 3;
 	if (eff == Effects::Subdued) t = 0.8;
 	const StageStyle &st = th.stage[k];
-	const std::wstring text = value_text(v.value);
+	const std::wstring text = value_text(v.value, v.bound);
 	const float em = value_em(L, text.size());
 	const NumberShape &s = gx.shape(text, em);
 	const float w = s.bounds.right - s.bounds.left, h = s.bounds.bottom - s.bounds.top;
@@ -319,7 +322,7 @@ void App::prepare_glows()
 		if (!v.has_value || v.stage < 3) continue;
 		GlowSpec gs[2];
 		const int n = glow_specs(th, v.stage, lay_.cell, gs);
-		const std::wstring text = value_text(v.value);
+		const std::wstring text = value_text(v.value, v.bound);
 		for (int i = 0; i < n; ++i) gfx_.prepare_glow(text, value_em(lay_, text.size()), gs[i].color, gs[i].radius);
 	}
 }

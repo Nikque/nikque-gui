@@ -61,7 +61,11 @@ static void try_in(const std::filesystem::path &base)
 	}
 	// a plain name stays as it is
 	const auto plain = engine_path(base.wstring() + L"\\plain.txt", false);
-	CHECK(plain && plain->find(' ') == std::string::npos);
+	if (plain) CHECK(plain->find(' ') == std::string::npos);
+	else {
+		CHECK(base.wstring().find(L' ') != std::wstring::npos);
+		std::printf("%ls: path cannot be expressed as an unquoted engine path\n", base.c_str());
+	}
 
 	const auto p = engine_path(file.wstring(), true);
 	if (!p) {
@@ -239,15 +243,31 @@ int main(int argc, char **argv)
 	// in a folder of this run in each folder (runs side by side, and the files an earlier run left, do not meet)
 	const auto in = [](const std::filesystem::path &base) {
 		const std::filesystem::path run = base / (L"ng-path-test-" + std::to_wstring(GetCurrentProcessId()));
+		if (run.native().size() > kMaxDir) {
+			std::printf("%ls: temporary test path is too long (not tried)\n", run.c_str());
+			return;
+		}
 		std::error_code ec;
 		std::filesystem::remove_all(run, ec);
 		std::filesystem::create_directories(run, ec);
 		CHECK(!ec);
+		if (ec) return;
 		try_in(run);
 		test_arg_path(run);
 		std::filesystem::remove_all(run, ec);
 	};
-	in(std::filesystem::temp_directory_path());
+
+	// GetTempPathW can reject an overlong environment value before the filesystem test starts.
+	DWORD temp_length = GetEnvironmentVariableW(L"TMP", nullptr, 0);
+	if (!temp_length) temp_length = GetEnvironmentVariableW(L"TEMP", nullptr, 0);
+	if (temp_length > kMaxDir + 1) {
+		std::printf("TEMP/TMP is too long (not tried)\n");
+	} else {
+		std::error_code ec;
+		const auto temp = std::filesystem::temp_directory_path(ec);
+		CHECK(!ec);
+		if (!ec) in(temp);
+	}
 	for (int i = 1; i < argc; ++i) in(std::filesystem::path(argv[i]));
 	if (failures) {
 		std::printf("%d failures\n", failures);

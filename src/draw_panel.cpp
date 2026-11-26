@@ -68,28 +68,13 @@ std::wstring umi_text(const MoveEval &m)
 }
 
 // the best value of the position after i moves, from black
-std::optional<int> black_value(const App &app, int i)
+std::optional<int> black_value(const App &app, int i, const std::vector<LineEval> &line, char &bound)
 {
 	const Position &p = app.game_.at(i);
-	// the line after the backward analysis
-	if (app.line_.size() == static_cast<size_t>(app.game_.size()) + 1) {
-		if (!app.line_[i].known) return std::nullopt;
-		return p.side == kBlack ? app.line_[i].best : -app.line_[i].best;
-	}
-	if (p.game_over()) {
-		const int b = std::popcount(p.black), w = std::popcount(p.white);
-		const int e = 64 - b - w;
-		return b > w ? b - w + e : b < w ? b - w - e : 0;
-	}
-	const PosInfo *info = std::as_const(app.cache_).peek(p);
-	if (!info) return std::nullopt;
-	int best = -999;
-	for (const auto &m : info->moves) {
-		int v;
-		if (shown_value(m, app.use_book_, &v)) best = std::max(best, v);
-	}
-	if (best == -999) return std::nullopt;
-	return p.side == kBlack ? best : -best;
+	const auto &e = line[i];
+	if (!e.known) return std::nullopt;
+	bound = p.side == kBlack ? e.bound : other_side_bound(e.bound);
+	return p.side == kBlack ? e.best : -e.best;
 }
 
 // the stage of the i-th move (the move from the position after i moves), -1 unknown
@@ -833,9 +818,13 @@ void draw_graph(App &app, const Theme &th)
 
 	const int n = app.game_.size();
 	std::vector<std::optional<int>> vals(n + 1);
+	std::vector<char> bounds(n + 1);
+	const auto raw = app.line_.size() == vals.size() ? std::vector<LineEval>{}
+	                                               : backward_line(app.game_, app.cache_, app.use_book_, false);
+	const auto &line = raw.empty() ? app.line_ : raw;
 	int range = 8;
 	for (int i = 0; i <= n; ++i) {
-		vals[i] = black_value(app, i);
+		vals[i] = black_value(app, i, line, bounds[i]);
 		if (vals[i]) range = std::max(range, std::abs(*vals[i]));
 	}
 	range = std::min(64, (range + 7) / 8 * 8);
@@ -900,7 +889,13 @@ void draw_graph(App &app, const Theme &th)
 	for (int i = 0; i <= n; ++i) {
 		if (!vals[i]) continue;
 		const int k = move_stage(app, i - 1);
-		if (k < 0) {
+		if (bounds[i]) {
+			const float x = X(i), y = Y(*vals[i]);
+			const float dy = bounds[i] == '>' ? -r : r;
+			auto *b = gx.brush(th.text);
+			dc->draw_line({x - r, y}, {x, y + dy}, b, 1.5f * L.scale);
+			dc->draw_line({x + r, y}, {x, y + dy}, b, 1.5f * L.scale);
+		} else if (k < 0) {
 			dc->fill_ellipse(ellipse({X(i), Y(*vals[i])}, r * 0.8f, r * 0.8f), gx.brush(th.text_dim));
 		} else {
 			stage_dot(gx, th, k, {X(i), Y(*vals[i])}, r);
@@ -964,6 +959,7 @@ void draw_bar(App &app)
 	else if (app.eng_[0].alive && app.eng_[0].old) eng += L"  " + lang::t("bar.old_engine");
 	else if (app.use_book_ && app.eng_[0].alive && !app.eng_[0].loaded) eng += L"  " + lang::t("bar.loading");
 	if (!app.use_book_) eng += L"  " + lang::t("bar.book_off");
+	if (app.book_save_failed_) eng += L"  " + lang::t("bar.book_unsaved");
 	if (const std::wstring game = play_bar_text(app); !game.empty()) parts.push_back(game);
 	parts.push_back(eng);
 	float x = L.bar.left + 10 * L.scale;

@@ -67,7 +67,7 @@ void handle_message(unsigned msg, std::uintptr_t wp, std::intptr_t lp)
 	case WM_REDUCE: a.reduce_counted(); break;
 	case WM_BOOK_PEEK: a.book_peek_answers(); break;
 	case WM_EVAL_WARN: a.eval_mismatch_box(); break;
-	case WM_ENGINE: a.on_engine(wp, lp != 0); break;
+	case WM_ENGINE: a.on_engine(wp, lp); break;
 	case WM_CLOSE: a.close_window(); break;
 	default: break;
 	}
@@ -493,7 +493,7 @@ int App::run(HINSTANCE, int)
 	set_linux_window(nullptr);
 	gtk_widget_destroy(win);
 	g_lw = LinuxWindow{};
-	return 0;
+	return book_save_failed_ ? 1 : 0;
 }
 
 void App::set_window_icon()

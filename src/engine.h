@@ -70,17 +70,21 @@ private:
 			{
 				std::unique_lock lock(write_mutex_);
 				write_cv_.wait(lock, [this] { return !to_write_.empty() || input_closing_; });
-				if (to_write_.empty()) break;
+				if (to_write_.empty() || stop_io_) break;
 				chunk.swap(to_write_);
 			}
 			if (!write_all(chunk)) {
-				std::lock_guard lock(write_mutex_);
-				write_failed_ = true;
-				to_write_.clear();
+				{
+					std::lock_guard lock(write_mutex_);
+					write_failed_ = true;
+					to_write_.clear();
+				}
+				if (!stop_io_) notify_write_failure();
 				break;
 			}
 		}
 		close_input();
+		writer_ended_ = true;
 	}
 	// no command after this: the thread writes what is left, then closes the input
 	void end_input()
@@ -93,12 +97,14 @@ private:
 	void stop_writer();
 	bool write_all(std::string_view text);  // waits until it is written; false when it cannot be
 	void close_input();
+	void notify_write_failure();
 
 #if defined(_WIN32)
 	HANDLE process_ = nullptr;
 	HANDLE job_ = nullptr;
 	HANDLE in_write_ = nullptr;
 	HANDLE out_read_ = nullptr;
+	mutable ULONGLONG drain_until_ = 0;
 #else
 	int pid_ = -1;
 	int in_write_ = -1;
@@ -113,6 +119,9 @@ private:
 	std::string to_write_;        // the commands not written yet
 	bool input_closing_ = false;  // quit: nothing is taken any more
 	bool write_failed_ = false;
+	std::atomic<bool> stop_io_{false};
+	mutable std::atomic<bool> drain_output_{false};
+	std::atomic<bool> writer_ended_{false};
 	std::atomic<bool> read_ended_{false};  // the reader has read the output to its end (the lines are in lines_)
 	std::mutex mutex_;
 	std::vector<std::string> lines_;

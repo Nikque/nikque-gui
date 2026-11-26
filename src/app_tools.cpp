@@ -99,15 +99,13 @@ std::optional<std::string> App::replace_path_or_say(const std::wstring &path, in
 	for (auto &c : ext) c = static_cast<wchar_t>(std::towlower(c));
 	if (ext == L".wtb") {
 		const std::wstring players = path_join(slash == std::wstring::npos ? std::wstring() : path.substr(0, slash), L"WTHOR.JOU");
-		if (file_exists(players)) {
-			const std::wstring here = path_join(dir, L"WTHOR.JOU");
-			if (!copy_file(players, here)) {
-				message(lang::f("err.engine_path", {path}), MB_ICONWARNING);
-				return std::nullopt;
-			}
-			m.also_from = here;
-			m.also_to = players;
+		const std::wstring here = path_join(dir, L"WTHOR.JOU");
+		if (file_exists(players) && !copy_file(players, here)) {
+			message(lang::f("err.engine_path", {path}), MB_ICONWARNING);
+			return std::nullopt;
 		}
+		m.also_from = here;
+		m.also_to = players;
 	}
 	moves_after_job_.push_back(std::move(m));
 	return tp;
@@ -120,6 +118,29 @@ void App::job_error(int role)
 }
 
 namespace {
+
+bool complete_book_text(const std::wstring &file)
+{
+	FILE *f = open_file(file, L"rb");
+	if (!f) return false;
+	char tail[128];
+	size_t n = 0;
+	if (seek64(f, 0, SEEK_END) == 0) {
+		const auto end = tell64(f);
+		if (end > 0 && seek64(f, std::max(0LL, end - 127), SEEK_SET) == 0)
+			n = fread(tail, 1, sizeof tail - 1, f);
+	}
+	const bool read_ok = !ferror(f);
+	fclose(f);
+	if (!read_ok || n == 0 || tail[n - 1] != '\n') return false;
+	std::string_view line(tail, n - 1);
+	if (line.ends_with("\r")) line.remove_suffix(1);
+	const size_t last = line.rfind('\n');
+	if (last != std::string_view::npos) line.remove_prefix(last + 1);
+	if (!line.starts_with("% depth ")) return false;
+	line.remove_prefix(8);
+	return !line.empty() && line.find_first_not_of("0123456789") == std::string_view::npos;
+}
 
 // `from` put in the place of `to`: renamed when both are on the same drive, else copied next to `to` and that copy
 // renamed over it (`to` is never left half written). Taken away from its place when it could be.
@@ -146,8 +167,8 @@ void App::finish_moves(int role, bool ended_well)
 			++it;
 			continue;
 		}
-		if (it->replace && (!ended_well || it->failed)) {
-			if (path_exists(it->from)) log(lang::f("log.file_not_replaced", {it->to}));
+		if (it->replace && (!ended_well || it->failed || (it->book_text && !complete_book_text(it->from)))) {
+			if (it->book_text || path_exists(it->from)) log(lang::f("log.file_not_replaced", {it->to}));
 			delete_file(it->from);
 			if (!it->also_from.empty()) delete_file(it->also_from);
 		} else if (path_exists(it->from)) {
@@ -444,6 +465,7 @@ bool App::book_job(int id, std::string *command, std::wstring *warning)
 		// (the file confirmed to be replaced stays until the job has ended well: the engine writes a new one)
 		auto p = engine_path_or_say(f, FileUse::Replace, 0);
 		if (!p) return false;
+		if (ex) moves_after_job_.back().book_text = true;
 		*command = std::string(ex ? "book export " : "book extract ") + *p;
 		return true;
 	}

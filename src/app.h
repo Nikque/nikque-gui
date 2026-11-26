@@ -328,6 +328,7 @@ struct CellView {
 	bool last = false;
 	bool has_value = false;
 	int value = 0;
+	char bound = 0;
 	int stage = 0;
 	int level = 0;          // the small "Lv" of stage 0 (0: none)
 	bool exact = false;     // a search to the end
@@ -376,6 +377,9 @@ struct Request {
 	enum Kind { Book, Values, Count, Levels, Graph, Missing, Best, BestExport, FindLine, ListBook, ListBookAdd, ReduceCount } kind;
 	PosKey pos;
 	std::string params;  // the book settings asked with (book_params, Book and Graph)
+	std::vector<std::string> book_lines = {};
+	std::vector<BookMoveEval> previous_book_moves = {};
+	bool previous_book_begun = false, previous_in_book = false;
 };
 
 class App {
@@ -774,7 +778,7 @@ public:
 	// true (the main engine is then not used, closed nor started)
 	bool refuse_while_book_busy();
 	bool refuse_while_saving();    // while the main engine saves its book as it ends: says so and returns true
-	void on_engine(WPARAM tag, bool ended);
+	void on_engine(WPARAM tag, LPARAM event);
 	void request_analysis();
 	void pump_graph();
 	void request_book_peek();    // the positions to look up in the book file, the position shown first
@@ -832,7 +836,8 @@ public:
 	void stop_search(int role);  // "stop" to the search engine (1) or the compare engine (4); its lines after are not taken
 	void send_hint(const Position &p, bool background);
 	int new_id();                     // the number of a request (id=, echo markers): 1 .. kMaxRequestId, again from 1
-	void forget_main_requests();      // the main engine closed: its requests and the analyses asked of it go
+	void forget_main_requests();
+	void discard_book_preview(int id);      // the main engine closed: its requests and the analyses asked of it go
 	std::string stop_main_analyses(); // the book analyses in progress stop ("stop id=" lines to send), their answers dropped
 	void stop_request(std::string &out, int &id);  // "stop id=<id>" added to `out`, the answer dropped; id becomes 0
 	void cancel_reduce(std::string *out);  // the count of book reduce goes (its "stop id=" added to `out` if not null)
@@ -886,6 +891,7 @@ public:
 		int role;
 		bool replace = false;  // FileUse::Replace
 		bool failed = false;   // the job said an error
+		bool book_text = false;  // export format ends with a depth record
 		std::wstring also_from, also_to;  // moved first, with it (the players of a WThor file)
 	};
 	std::vector<PendingMove> moves_after_job_;
@@ -940,7 +946,7 @@ public:
 	void load_kept();
 	void save_kept();
 	void list_from_book();
-	void list_book_written(bool add, bool ok);
+	void list_book_written(bool add, bool ok, bool empty = false);
 	std::wstring book_lines_file(int id) const;  // the file of the book lines asked with request `id` (temporary folder)
 	bool ask_book_lines(int loss, int depth, int n, bool add);
 	void list_job_script(const std::wstring &label, std::function<void(GameList &)> work);

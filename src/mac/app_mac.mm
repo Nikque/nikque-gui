@@ -277,7 +277,7 @@ int virtual_key(NSEvent *e)
 	case ng::WM_REDUCE: a.reduce_counted(); break;
 	case ng::WM_BOOK_PEEK: a.book_peek_answers(); break;
 	case ng::WM_EVAL_WARN: a.eval_mismatch_box(); break;
-	case ng::WM_ENGINE: a.on_engine(wp, lp != 0); break;
+	case ng::WM_ENGINE: a.on_engine(wp, lp); break;
 	case WM_CLOSE: a.close_window(); break;
 	default: break;
 	}
@@ -553,7 +553,7 @@ int App::run(HINSTANCE, int)
 		[NSApp run];
 		hwnd_ = nullptr;
 	}
-	return 0;
+	return book_save_failed_ ? 1 : 0;
 }
 
 void App::set_window_icon() {}  // (the icon of the app is in its bundle)

@@ -87,6 +87,7 @@ bar.no_engine=無引擎
 bar.loading=正在讀取 book
 bar.old_engine=無 book 分析（舊引擎）
 bar.book_name=無法傳遞 book 位置
+bar.book_unsaved=未確認定石庫已儲存
 bar.book_off=不使用 book
 bar.opening_hidden=（定式名）
 bar.accuracy=book 的精度

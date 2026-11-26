@@ -175,8 +175,19 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 	HFONT font = CreateFontW(-px(14), 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, lang::ui_font());
 	HFONT bold = CreateFontW(-px(14), 0, 0, 0, FW_BOLD, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, 0, lang::ui_font());
 
-	const int label_w = px(230), field_w = px(150), note_w = px(360), row = px(30), pad = px(14);
-	const int width = pad * 2 + label_w + field_w + px(10) + note_w;
+	MONITORINFO mi{sizeof mi};
+	const bool screen = GetMonitorInfoW(MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST), &mi) != 0;
+	const RECT work = mi.rcWork;
+	RECT frame{};
+	AdjustWindowRectExForDpi(&frame, WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VSCROLL, FALSE, WS_EX_DLGMODALFRAME, dpi);
+	const int nominal = px(14) * 2 + px(230) + px(150) + px(10) + px(360);
+	const int width = screen ? std::clamp<int>(work.right - work.left - (frame.right - frame.left), 1, nominal)
+	                         : nominal;
+	const int row = px(30), pad = std::min(px(14), width / 20);
+	const int columns = std::max(3, width - pad * 2 - px(10));
+	const int label_w = width == nominal ? px(230) : std::min(px(230), columns * 3 / 10);
+	const int field_w = std::min(px(150), columns * 3 / 10);
+	const int note_w = columns - label_w - field_w;
 	// a long note is folded in its column: its row is as high as the folded text
 	std::vector<int> rows;
 	int rows_h = 0;
@@ -209,9 +220,6 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 	int ww = wr.right - wr.left, wh = wr.bottom - wr.top;
 	// on the screen of the main window: a form higher than it is as high as the screen and scrolls (the fields and the
 	// buttons are reached with its scroll bar, the wheel and Tab)
-	MONITORINFO mi{sizeof mi};
-	const bool screen = GetMonitorInfoW(MonitorFromWindow(owner, MONITOR_DEFAULTTONEAREST), &mi) != 0;
-	const RECT work = mi.rcWork;
 	const bool scrolls = screen && wh > work.bottom - work.top;
 	if (scrolls) {
 		style |= WS_VSCROLL;
@@ -243,9 +251,11 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 		si.nPage = static_cast<UINT>(rc.bottom);
 		SetScrollInfo(hwnd, SB_VERT, &si, FALSE);
 	}
+	bool child_failed = false;
 	auto child = [&](const wchar_t *cls, const std::wstring &text, DWORD s, int cx, int cy, int w, int h, int id = 0) {
 		HWND c = CreateWindowExW(0, cls, text.c_str(), WS_CHILD | WS_VISIBLE | s, cx, cy, w, h, hwnd,
 		                         reinterpret_cast<HMENU>(static_cast<INT_PTR>(id)), inst, nullptr);
+		child_failed = child_failed || !c;
 		SendMessageW(c, WM_SETFONT, reinterpret_cast<WPARAM>(font), FALSE);
 		return c;
 	};
@@ -279,7 +289,7 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 			break;
 		case FormField::Slider: {
 			// the number, and the slider over the rest of the row (the note goes under it)
-			const int nw = px(56);
+			const int nw = std::max(1, std::min(px(56), field_w / 2));
 			f.control = child(L"EDIT", f.text, WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL | ES_NUMBER, fx, cy, nw, h);
 			f.slider = child(TRACKBAR_CLASSW, L"", WS_TABSTOP | TBS_HORZ | TBS_AUTOTICKS | TBS_BOTTOM, fx + nw + px(6), cy,
 			                 field_w - nw - px(6) + px(10) + note_w, h + px(6));
@@ -299,9 +309,16 @@ bool run_form(HWND owner, const std::wstring &title, std::vector<FormField> &fie
 		else if (!f.note.empty()) child(L"STATIC", f.note, SS_LEFT | SS_NOPREFIX, nx, cy + px(4), note_w, this_row - px(6));
 		cy += this_row;
 	}
-	const int bw = px(100), bh = px(30);
+	const int bw = std::max(1, std::min(px(100), (width - 2 * pad - px(10)) / 2)), bh = px(30);
 	child(L"BUTTON", ok, WS_TABSTOP | BS_DEFPUSHBUTTON, width - pad - bw * 2 - px(10), cy + px(8), bw, bh, kIdOk);
 	child(L"BUTTON", cancel, WS_TABSTOP, width - pad - bw, cy + px(8), bw, bh, kIdCancel);
+	if (child_failed) {
+		DestroyWindow(hwnd);
+		DeleteObject(font);
+		DeleteObject(bold);
+		for (auto &f : fields) f.control = f.slider = nullptr;
+		return false;
+	}
 
 	EnableWindow(owner, FALSE);
 	ShowWindow(hwnd, SW_SHOW);

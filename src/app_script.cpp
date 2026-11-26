@@ -3,7 +3,9 @@
 // the position) waits for its end before the next line. The commands are listed in readme.txt.
 #include "platform.h"
 
+#include <cerrno>
 #include <cstdio>
+#include <limits>
 
 #include "app.h"
 #include "lang.h"
@@ -74,8 +76,10 @@ std::optional<int> number(const std::string &s)
 {
 	if (s.empty()) return std::nullopt;
 	char *end = nullptr;
+	errno = 0;
 	const long v = std::strtol(s.c_str(), &end, 10);
-	if (*end) return std::nullopt;
+	if (errno == ERANGE || end == s.c_str() || *end ||
+	    v < (std::numeric_limits<int>::min)() || v > (std::numeric_limits<int>::max)()) return std::nullopt;
 	return static_cast<int>(v);
 }
 
@@ -222,9 +226,14 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		return true;
 	}
 	if (c == "play") {
-		for (const int m : parse_moves(rest_after(line, 1)).moves)
+		const bool playing = play_mode_ != PlayMode::Free;
+		for (const int m : parse_moves(rest_after(line, 1)).moves) {
+			const int side = clock_side_;
+			if (clock_ran_out()) return bad(side == kBlack ? "play.time_out_black" : "play.time_out_white");
 			if (!game_.play(m)) return bad("script.bad_moves");
-		position_changed();
+			if (playing) position_changed();
+		}
+		if (!playing) position_changed();
 		return true;
 	}
 	if (c == "new") {
@@ -523,7 +532,9 @@ bool App::script_command(const std::string &line, int depth, std::wstring *error
 		const char *names[] = {"free", "black", "white", "engines"};
 		for (int k = 0; k < 4; ++k)
 			if (a1 == names[k]) {
-				set_play_mode(static_cast<PlayMode>(k), w.size() > 2 ? number(w[2]).value_or(1) : 1);
+				const auto games = w.size() > 2 ? number(w[2]) : std::optional<int>(1);
+				if (!games || *games < 1 || *games > 10000) return bad("script.bad_word");
+				set_play_mode(static_cast<PlayMode>(k), *games);
 				return true;
 			}
 		return bad("script.bad_word");

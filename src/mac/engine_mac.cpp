@@ -2,6 +2,8 @@
 // end ("quit", or the end of the input when the GUI ends without closing it).
 #include "engine.h"
 
+#include <poll.h>
+
 #include <fcntl.h>
 #include <signal.h>
 #include <spawn.h>
@@ -83,7 +85,8 @@ bool EngineProcess::start(const std::wstring &exe, const std::wstring &args, con
 	posix_spawnattr_t at;
 	posix_spawnattr_init(&at);
 	// only the three ends of the pipes go to the engine
-	posix_spawnattr_setflags(&at, POSIX_SPAWN_CLOEXEC_DEFAULT);
+	posix_spawnattr_setpgroup(&at, 0);
+	posix_spawnattr_setflags(&at, POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETPGROUP);
 	pid_t pid = -1;
 	const int r = posix_spawn(&pid, path.c_str(), &fa, &at, argv.data(), environ);
 	posix_spawn_file_actions_destroy(&fa);
@@ -101,6 +104,14 @@ bool EngineProcess::start(const std::wstring &exe, const std::wstring &args, con
 	status_ = -1;
 	in_write_ = in[1];
 	out_read_ = out[0];
+	if (::fcntl(in_write_, F_SETFL, O_NONBLOCK) < 0 || ::fcntl(out_read_, F_SETFL, O_NONBLOCK) < 0) {
+		if (error) *error = L"fcntl: " + widen(std::strerror(errno));
+		close(0);
+		return false;
+	}
+	stop_io_ = false;
+	drain_output_ = false;
+	writer_ended_ = false;
 	read_ended_ = false;
 	reader_ = std::thread([this] { read_loop(); });
 	writer_ = std::thread([this] { write_loop(); });
@@ -110,10 +121,14 @@ bool EngineProcess::start(const std::wstring &exe, const std::wstring &args, con
 // (a write to an engine that has ended fails: the program does not end with SIGPIPE, see above)
 bool EngineProcess::write_all(std::string_view text)
 {
-	while (!text.empty()) {
+	while (!text.empty() && !stop_io_) {
+		pollfd p{in_write_, POLLOUT, 0};
+		const int ready = ::poll(&p, 1, 50);
+		if (ready == 0 || (ready < 0 && errno == EINTR)) continue;
+		if (ready < 0) return false;
 		const ssize_t n = ::write(in_write_, text.data(), text.size());
 		if (n < 0) {
-			if (errno == EINTR) continue;
+			if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) continue;
 			return false;
 		}
 		text.remove_prefix(static_cast<size_t>(n));
@@ -127,6 +142,11 @@ void EngineProcess::close_input()
 		::close(in_write_);
 		in_write_ = -1;
 	}
+}
+
+void EngineProcess::notify_write_failure()
+{
+	if (notify_) post_message(notify_, msg_, tag_, 2);
 }
 
 void EngineProcess::stop_writer()
@@ -157,6 +177,12 @@ void EngineProcess::read_loop()
 	char buf[1 << 16];
 	std::vector<std::string> batch;
 	for (;;) {
+		if (stop_io_) break;
+		pollfd p{out_read_, POLLIN, 0};
+		const int ready = ::poll(&p, 1, 50);
+		if (ready == 0 && drain_output_) break;
+		if (ready == 0 || (ready < 0 && errno == EINTR)) continue;
+		if (ready < 0) break;
 		const ssize_t got = ::read(out_read_, buf, sizeof buf);
 		if (got < 0 && errno == EINTR) continue;
 		if (got <= 0) break;
@@ -200,6 +226,13 @@ bool ended(int pid, bool *reaped, int *status)
 {
 	if (*reaped) return true;
 	int st = 0;
+	siginfo_t ended_child{};
+	if (::waitid(P_PID, static_cast<id_t>(pid), &ended_child, WEXITED | WNOHANG | WNOWAIT) == 0) {
+		if (ended_child.si_pid == 0) return false;
+		::kill(-pid, SIGKILL);  // release the engine's inherited pipes before reaping the leader
+	} else if (errno != ECHILD) {
+		return false;
+	}
 	const pid_t r = ::waitpid(pid, &st, WNOHANG);
 	if (r == pid || (r < 0 && errno == ECHILD)) {
 		*reaped = true;
@@ -221,7 +254,9 @@ bool EngineProcess::exited() const
 	if (pid_ <= 0) return true;
 	// (its last lines may be still in the pipe a moment after its end)
 	auto *self = const_cast<EngineProcess *>(this);
-	return ended(pid_, &self->reaped_, &self->status_) && (read_ended_ || !reader_.joinable());
+	if (!ended(pid_, &self->reaped_, &self->status_)) return false;
+	drain_output_ = true;
+	return read_ended_ || !reader_.joinable();
 }
 
 std::optional<int> EngineProcess::exit_code() const
@@ -239,10 +274,11 @@ void EngineProcess::close(unsigned wait_ms)
 		const auto until = std::chrono::steady_clock::now() + std::chrono::milliseconds(wait_ms);
 		while (!ended(pid_, &reaped_, &status_) && std::chrono::steady_clock::now() < until) ::usleep(10 * 1000);
 		if (!ended(pid_, &reaped_, &status_)) {
-			::kill(pid_, SIGKILL);
+			::kill(-pid_, SIGKILL);
 			for (int i = 0; i < 500 && !ended(pid_, &reaped_, &status_); ++i) ::usleep(10 * 1000);
 		}
 	}
+	stop_io_ = true;
 	stop_writer();
 	if (reader_.joinable()) reader_.join();  // (the pipe closes when the process ends; the thread then stops)
 	if (out_read_ >= 0) {

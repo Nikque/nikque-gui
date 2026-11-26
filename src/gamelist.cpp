@@ -352,14 +352,19 @@ ListReadStats read_list(const std::wstring &path, GameList &list, ng::stop_token
 	// room for the games at once: two letters a move; a full game is about 120 letters
 	if (seek64(f, 0, SEEK_END) == 0) {
 		const long long size = tell64(f);
-		if (size > 0) list.reserve(static_cast<size_t>(size / 100), static_cast<size_t>(size / 2));
+		const long long reserved = std::min(size, 4LL << 20);
+		if (reserved > 0) list.reserve(static_cast<size_t>(reserved / 100), static_cast<size_t>(reserved / 2));
 		seek64(f, 0, SEEK_SET);
 	}
 	// blocks of 4 MB read after the rest of the block before: the whole lines are read on threads
 	constexpr size_t kBlock = 4u << 20;
 	std::string text;
-	bool first = true;
+	bool first = true, skipping_comment = false;
 	while (!st.cancelled) {
+		if (stop.stop_requested()) {
+			st.cancelled = true;
+			break;
+		}
 		const size_t had = text.size();
 		text.resize(had + kBlock);
 		const size_t n = fread(text.data() + had, 1, kBlock, f);
@@ -367,8 +372,29 @@ ListReadStats read_list(const std::wstring &path, GameList &list, ng::stop_token
 		if (n == 0) break;
 		if (first && text.size() >= 3 && text.compare(0, 3, "\xEF\xBB\xBF") == 0) text.erase(0, 3);
 		first = false;
+		if (skipping_comment) {
+			const size_t next = text.find('\n');
+			if (next == std::string::npos) {
+				text.clear();
+				continue;
+			}
+			text.erase(0, next + 1);
+			skipping_comment = false;
+		}
 		const size_t end = text.rfind('\n');
-		if (end == std::string::npos) continue;
+		if (end == std::string::npos) {
+			if (text.size() >= 2 * kBlock) {
+				const auto start = text.find_first_not_of(" \t\r");
+				if (start == std::string::npos || text[start] == '#' || text[start] == '%') {
+					skipping_comment = start != std::string::npos;
+					text.clear();
+				} else {
+					st.failed = true;  // a single game line exceeds the supported input size
+					break;
+				}
+			}
+			continue;
+		}
 		take_block(std::string_view(text).substr(0, end + 1), list, st, stop, usual);
 		text.erase(0, end + 1);
 	}

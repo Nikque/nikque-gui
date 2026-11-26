@@ -88,7 +88,7 @@ void handle(App &a, const AndroidEvent &e)
 		case WM_REDUCE: a.reduce_counted(); break;
 		case WM_BOOK_PEEK: a.book_peek_answers(); break;
 		case WM_EVAL_WARN: a.eval_mismatch_box(); break;
-		case WM_ENGINE: a.on_engine(static_cast<WPARAM>(e.b), e.c != 0); break;
+		case WM_ENGINE: a.on_engine(static_cast<WPARAM>(e.b), e.c); break;
 		case WM_CLOSE: a.close_window(); break;
 		default: break;
 		}
@@ -174,7 +174,7 @@ int App::run(HINSTANCE, int)
 	std::filesystem::remove_all(narrow(temp_dir_), ec);
 	g_timers.clear();
 	hwnd_ = nullptr;
-	return 0;
+	return book_save_failed_ ? 1 : 0;
 }
 
 App::~App() = default;

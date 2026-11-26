@@ -103,7 +103,8 @@ static void test_bounds()
 	auto line = backward_line(h, c, true, true);
 	CHECK(line[i + 1].known && line[i + 1].best == -5 && line[i + 1].bound == '>' && !line[i + 1].exact);
 	CHECK(line[i].played_improved && line[i].played == 5 && line[i].played_bound == '<' && !line[i].played_exact);
-	CHECK(line[i].best == 5 && line[i].bound == '<' && !line[i].exact);
+	CHECK(line[i].best == 0 && line[i].bound == '>' && !line[i].exact);
+	CHECK(line[i].lower == 0 && line[i].upper == 5);
 	// without the bounds: exact, and nothing to mark
 	for (auto &m : c.get(q).moves) m.bound = 0;
 	CHECK(move_exact(c.get(q).moves[0], q) && shown_bound(c.get(q).moves[0], true) == 0);
@@ -123,6 +124,23 @@ static void test_bounds()
 	c.get(p).moves[0].bound = '>';
 	line = backward_line(h, c, true, false);
 	CHECK(line[i].best == 3 && line[i].bound == '>' && !line[i].exact);
+	c.get(p).moves[0].score = -4;
+	line = backward_line(h, c, true, false);
+	CHECK(line[i].best == 3 && line[i].bound == '>' && !line[i].exact);
+	// A historical book position can have values only for its links and leaf.
+	PosInfo &book = c.get(Position{});
+	book.reset_book();
+	book.reset_search();
+	book.in_book = book.values_done = true;
+	book.moves[0].in_book = true;
+	book.moves[0].book_value = 3;
+	book.moves[1].leaf = true;
+	book.moves[1].leaf_value = 1;
+	line = backward_line(h, c, true, false);
+	CHECK(line[0].known && line[0].best == 3 && !line[0].bound && !line[0].exact);
+	book.values_done = false;
+	line = backward_line(h, c, true, false);
+	CHECK(line[0].known && line[0].bound == '>');
 }
 
 // the book answers cleared (another range, the book changed): the values of the search and of the other engine stay

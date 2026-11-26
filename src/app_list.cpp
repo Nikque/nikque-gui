@@ -464,7 +464,7 @@ std::wstring App::book_lines_file(int id) const
 	return path_join(temp_dir_, L"book-lines-" + std::to_wstring(id) + L".txt");
 }
 
-void App::list_book_written(bool add, bool ok)
+void App::list_book_written(bool add, bool ok, bool empty)
 {
 	const std::wstring file = book_lines_file(list_book_id_);
 	list_book_id_ = 0;
@@ -476,10 +476,10 @@ void App::list_book_written(bool add, bool ok)
 	auto nl = std::make_shared<GameList>();
 	const int limit = list_book_limit_;
 	const Position start = list_book_start_;
-	run_task(lang::t("menu.list.book"), [this, nl, file, add, limit, start](ng::stop_token st) -> std::function<void()> {
+	run_task(lang::t("menu.list.book"), [this, nl, file, add, limit, start, empty](ng::stop_token st) -> std::function<void()> {
 		const ListReadStats r = read_list(file, *nl, st, start);
 		delete_file(file);
-		const bool cancelled = r.cancelled, failed = r.failed;
+		const bool cancelled = r.cancelled, failed = r.failed || (!r.opened && !empty);
 		return [this, nl, file, add, limit, cancelled, failed] {
 			if (cancelled) {  // (the parts read in on threads stop half way each: nothing is added)
 				log(lang::t("task.cancelled"));

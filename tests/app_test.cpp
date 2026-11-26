@@ -121,7 +121,7 @@ static void feed(App &a, const std::string &lines)
 	const ULONGLONG end = GetTickCount64() + 10000;
 	while (a.eng_[0].probe_id && GetTickCount64() < end) {
 		MSG m{};
-		while (PeekMessageW(&m, a.hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a.on_engine(m.wParam, m.lParam != 0);
+		while (PeekMessageW(&m, a.hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a.on_engine(m.wParam, m.lParam);
 		Sleep(1);
 	}
 	CHECK(a.eng_[0].probe_id == 0);
@@ -223,7 +223,7 @@ static void test_deviate_export()
 	a->eng_[0].proc.send("!@cancel id=42 state=none export=1\n");
 	for (const ULONGLONG end = GetTickCount64() + 10000; a->eng_[0].probe_id && GetTickCount64() < end; Sleep(1)) {
 		MSG m{};
-		while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a->on_engine(m.wParam, m.lParam != 0);
+		while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a->on_engine(m.wParam, m.lParam);
 	}
 	CHECK(a->eng_[0].probe_id == 0 && a->eng_[0].exports);
 	CHECK(a->script_command("book deviate2 2 4 export " + narrow(file) + " ends", 1, &err));
@@ -760,7 +760,7 @@ static void test_eval_mismatch()
 		a->eng_[1].proc.send(warning);
 		for (const ULONGLONG end = GetTickCount64() + 10000; !logged(*a, search_log) && GetTickCount64() < end; Sleep(1)) {
 			MSG m{};
-			while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a->on_engine(m.wParam, m.lParam != 0);
+			while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a->on_engine(m.wParam, m.lParam);
 		}
 		CHECK(logged(*a, search_log));
 		pump_app(*a);
@@ -798,7 +798,8 @@ static void test_command_letters()
 {
 	auto a = make_app();
 	start_engine(*a);
-	const std::wstring dir = L"D:\\ng-test\\\u65e5\u672c\u8a9e\\";  // (letters of code page 932)
+	const std::wstring letters = acp(L"\u65e5\u672c\u8a9e") ? L"\u65e5\u672c\u8a9e" : L"sample";
+	const std::wstring dir = L"D:\\ng-test\\" + letters + L"\\";
 	const auto queued = acp(L"book save " + dir + L"queued.dat"), sent = acp(L"book save " + dir + L"sent.dat");
 	std::wstring err;
 	CHECK(a->script_command("learn book save " + narrow(dir) + "queued.dat", 1, &err));
@@ -808,14 +809,16 @@ static void test_command_letters()
 	CHECK(a->ini_.get("learn", "last_command") == narrow(L"book save " + dir + L"sent.dat"));
 	a->learning_ = false;
 	// a name in "..." (given as the engine can open it) and other letters: each in the code page once
-	const auto mixed = acp(L"echo 日本語 " + dir + L"q.dat");
-	CHECK(a->script_command("edax echo " + narrow(L"日本語 \"" + dir + L"q.dat\""), 1, &err));
+	const auto mixed = acp(L"echo " + letters + L" " + dir + L"q.dat");
+	CHECK(a->script_command("edax echo " + narrow(letters + L" \"" + dir + L"q.dat\""), 1, &err));
 	CHECK(mixed && a->learn_cmd_ == *mixed);
 	a->learning_ = false;
 	// a letter the engine cannot read: the command is not given
 	a->learn_queue_.clear();
-	CHECK(!a->script_command("learn book save D:\\\xF0\x9F\x90\xBE.dat", 1, &err));  // (U+1F43E)
-	CHECK(a->learn_queue_.empty());
+	const auto paw = acp(L"book save D:\\\U0001F43E.dat");
+	CHECK(a->script_command("learn book save D:\\\xF0\x9F\x90\xBE.dat", 1, &err) == paw.has_value());
+	CHECK(a->learn_queue_.empty() == !paw.has_value());
+	if (paw && !a->learn_queue_.empty()) CHECK(a->learn_queue_.back().command == *paw);
 }
 
 // An answer of a background analysis asked with other book settings is not taken for the settings of now.
@@ -910,7 +913,7 @@ static void test_engine_lost_then_ended()
 	CHECK(!a->eng_[2].alive && logged(*a, lang::f("log.engine_lost", {lang::t("engine.tool")})));
 	for (const ULONGLONG end = GetTickCount64() + 5000; a->tool_busy_ && GetTickCount64() < end; Sleep(1)) {
 		MSG m{};
-		while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a->on_engine(m.wParam, m.lParam != 0);
+		while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a->on_engine(m.wParam, m.lParam);
 	}
 	CHECK(!a->tool_busy_ && logged(*a, lang::t("tool.stopped").substr(0, 4)));
 }
@@ -1896,7 +1899,7 @@ static void test_continue_learning()
 	auto wait_load = [&] {
 		for (const ULONGLONG end = GetTickCount64() + 10000; a->load_wait_.end_id && GetTickCount64() < end; Sleep(1)) {
 			MSG m{};
-			while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a->on_engine(m.wParam, m.lParam != 0);
+			while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a->on_engine(m.wParam, m.lParam);
 		}
 		CHECK(a->load_wait_.end_id == 0);
 		play_timer(*a, kTimerLoadBox);  // (the box comes after the lines of the engine are read)
@@ -1910,7 +1913,7 @@ static void test_continue_learning()
 	CHECK(a->ini_.get("learn", "last_started") == std::to_string(now - 3600) && a->ini_.get("learn", "last_book") == narrow(book));
 	// not loaded ("@load ok=0", an ERROR line from an engine that does not say "@load", the engine ended): the learning
 	// does not go on, the log and a box say it; an engine that says nothing and no error: it goes on (as before "@load")
-	for (const std::string how : {"fail", "error", "end", "none"}) {
+	for (const std::string how : {"fail", "error", "warning", "end", "none"}) {
 		a->eng_[0].proc.close(0);
 		MSG m{};  // (the end of the engine closed, of the same tag as the next one: not taken)
 		while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) {}
@@ -2053,9 +2056,20 @@ static void test_answers_not_whole()
 		const int values = a->values_id_;
 		CHECK(values != 0);
 		const std::string id = std::to_string(values);
+		feed(*a, "!@begin id=" + id + " ply=0 turn=black moves=4 book=1\n!@move id=" + id + " sq=f5 book=1 value=4 level=4\n");
+		CHECK(a->cache_.get(a->game_.now()).find(f5)->in_book);
+		CHECK(a->cell_view(f5).has_value && a->cell_view(f5).value == 4);
+		CHECK(!a->cache_.get(a->game_.now()).values_done);
+		a->opening_until_ = 20;
+		a->play_mode_ = PlayMode::HumanWhite;
+		a->opening_ = Opening::BookBest;
+		a->com_think();
+		CHECK(a->com_waiting_book_ && a->com_book_move_ == kNoMove);
+		a->play_mode_ = PlayMode::Free;
+		a->com_stop();
 		feed(*a, "!@error id=" + id + " memory=1\n!@end id=" + id + " error=1\n");
 		const PosInfo &info = a->cache_.get(a->game_.now());
-		CHECK(!info.values_done && !info.book_done && info.book_failed);
+		CHECK(!info.values_done && !info.book_done && info.book_failed && !info.find(f5)->in_book);
 		CHECK(a->values_id_ == 0 && a->book_id_ == 0 && a->graph_id_ == 0 && !a->cell_view(f5).pending);
 		a->script_wait_ = App::ScriptWait::Analysis;  // a script waiting for the analysis does not wait for it any more
 		CHECK(!a->script_condition());
@@ -2097,6 +2111,24 @@ static void test_answers_not_whole()
 		CHECK(a->ask_book_lines(0, 60, 10, false));
 		const int two = a->list_book_id_;
 		CHECK(two != one && a->book_lines_file(two) != a->book_lines_file(one));  // (a file of its own)
+		auto wait_list = [&] {
+			const ULONGLONG end = GetTickCount64() + 10000;
+			while (a->task_busy_ && GetTickCount64() < end) {
+				MSG m{};
+				if (PeekMessageW(&m, a->hwnd_, WM_TASK, WM_TASK, PM_REMOVE)) a->task_ended();
+				Sleep(1);
+			}
+			CHECK(!a->task_busy_);
+		};
+		const std::uint8_t move = static_cast<std::uint8_t>(f5);
+		a->list_.add(Position{}, std::span<const std::uint8_t>(&move, 1));
+		feed(*a, "!@end id=" + std::to_string(two) + " lines=1 written=1 ms=0\n");
+		wait_list();
+		CHECK(a->list_.size() == 1);  // missing promised output, keep the list
+		CHECK(a->ask_book_lines(0, 60, 10, false));
+		feed(*a, "!@end id=" + std::to_string(a->list_book_id_) + " lines=0 written=0 ms=0\n");
+		wait_list();
+		CHECK(a->list_.size() == 0);  // successful empty result
 		a->eng_[0].proc.close(0);
 	}
 }
@@ -3070,7 +3102,7 @@ static int real_engine(const std::wstring &exe, const std::wstring &book)
 		const ULONGLONG end = GetTickCount64() + ms;
 		while (GetTickCount64() < end) {
 			MSG m{};
-			while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a->on_engine(m.wParam, m.lParam != 0);
+			while (PeekMessageW(&m, a->hwnd_, WM_ENGINE, WM_ENGINE, PM_REMOVE)) a->on_engine(m.wParam, m.lParam);
 			Sleep(1);
 		}
 	};
@@ -3287,10 +3319,11 @@ static void test_replace_after_job()
 	CreateDirectoryW(dir.c_str(), nullptr);
 	const std::wstring out = dir + L"\\out.txt";
 	std::string text;
-	auto job = [&](const std::wstring &file, bool well, bool error, const char *written) {
+	auto job = [&](const std::wstring &file, bool well, bool error, const char *written, bool book_text = false) {
 		CHECK(a->engine_path_or_say(file, App::FileUse::Replace, 2).has_value());
 		CHECK(!a->moves_after_job_.empty());
 		if (a->moves_after_job_.empty()) return;
+		a->moves_after_job_.back().book_text = book_text;
 		if (written) CHECK(write_file(a->moves_after_job_.back().from, written));
 		CHECK(read_file(file, &text) && text == "old");  // (not taken away before the job ends)
 		if (error) a->job_error(2);
@@ -3304,6 +3337,11 @@ static void test_replace_after_job()
 	CHECK(read_file(out, &text) && text == "old");
 	job(out, true, false, nullptr);  // not started (or nothing written)
 	CHECK(read_file(out, &text) && text == "old");
+	job(out, true, false, "incomplete\n% depth 10", true);
+	CHECK(read_file(out, &text) && text == "old");
+	job(out, true, false, "complete\n% depth 10\r\n", true);
+	CHECK(read_file(out, &text) && text == "complete\n% depth 10\r\n");
+	CHECK(write_file(out, "old"));
 	job(out, true, false, "new");
 	CHECK(read_file(out, &text) && text == "new" && logged(*a, lang::f("log.file_moved", {out, L""}).substr(0, 8)));
 
@@ -3533,6 +3571,7 @@ int main(int argc, char **argv)
 				if (load == "ok") std::cout << "@load ok=1 file=" << file << std::endl;
 				else if (load == "fail") std::cout << "@load ok=0 file=" << file << std::endl;
 				else if (load == "error") std::cout << "\nERROR: book.c : book_load : 1 :\nCannot open opening book " << file << std::endl;
+				else if (load == "warning") std::cout << "WARNING: Book " << file << " was not loaded; current book retained" << std::endl;
 				else if (load == "end") return 1;
 			} else if (!load.empty() && s.starts_with("echo ")) {
 				std::cout << "WARNING: echo: \"" << s.substr(5) << "\" is not on or off; ignored" << std::endl;

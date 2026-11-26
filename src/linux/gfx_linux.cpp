@@ -57,18 +57,33 @@ constexpr size_t kKeptPatterns = 256;
 cairo_pattern_t *pattern_of(const Gradient &gr)
 {
 	static std::map<std::vector<double>, cairo_pattern_t *> kept;
-	std::vector<double> key{gr.start().x, gr.start().y, gr.end().x, gr.end().y};
+	std::vector<double> key;
 	for (const auto &st : gr.stops()) key.insert(key.end(), {st.position, st.color.r, st.color.g, st.color.b, st.color.a});
-	if (const auto it = kept.find(key); it != kept.end()) return it->second;
-	if (kept.size() >= kKeptPatterns) {
-		for (auto &[k, p] : kept) cairo_pattern_destroy(p);
-		kept.clear();
+	const bool coincident = gr.start().x == gr.end().x && gr.start().y == gr.end().y;
+	key.push_back(coincident ? 1 : 0);
+	auto it = kept.find(key);
+	if (it == kept.end()) {
+		if (kept.size() >= kKeptPatterns) {
+			for (auto &[k, p] : kept) cairo_pattern_destroy(p);
+			kept.clear();
+		}
+		cairo_pattern_t *p = cairo_pattern_create_linear(0, 0, coincident ? 0 : 1, 0);
+		for (const auto &st : gr.stops())
+			cairo_pattern_add_color_stop_rgba(p, st.position, st.color.r, st.color.g, st.color.b, st.color.a);
+		cairo_pattern_set_extend(p, CAIRO_EXTEND_PAD);
+		it = kept.emplace(std::move(key), p).first;
 	}
-	cairo_pattern_t *p = cairo_pattern_create_linear(gr.start().x, gr.start().y, gr.end().x, gr.end().y);
-	for (const auto &st : gr.stops())
-		cairo_pattern_add_color_stop_rgba(p, st.position, st.color.r, st.color.g, st.color.b, st.color.a);
-	cairo_pattern_set_extend(p, CAIRO_EXTEND_PAD);
-	kept.emplace(std::move(key), p);
+	cairo_pattern_t *p = it->second;
+	const double x = gr.start().x, y = gr.start().y;
+	const double dx = gr.end().x - x, dy = gr.end().y - y;
+	const double len2 = dx * dx + dy * dy;
+	cairo_matrix_t matrix;
+	if (len2 > 0)
+		cairo_matrix_init(&matrix, dx / len2, -dy / len2, dy / len2, dx / len2,
+		                  -(dx * x + dy * y) / len2, (dy * x - dx * y) / len2);
+	else
+		cairo_matrix_init_translate(&matrix, 0.5 - x, -y);
+	cairo_pattern_set_matrix(p, &matrix);
 	return p;
 }
 

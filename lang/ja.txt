@@ -87,6 +87,7 @@ bar.no_engine=エンジンなし
 bar.loading=book を読み込み中
 bar.old_engine=book の解析なし（古いエンジン）
 bar.book_name=book の場所をエンジンに渡せません
+bar.book_unsaved=book の保存未確認
 bar.book_off=book を使わない
 bar.opening_hidden=（定石名）
 bar.accuracy=book の精度
