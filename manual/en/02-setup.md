@@ -50,8 +50,8 @@ The folder has the same contents as the Windows version: `config.ini`, `lang` an
   - `mEdax-arm64` (Apple silicon)
   - `mEdax-x64-modern` (Intel)
   - `data/eval.dat`
-- The nikque engine is the one from the release ZIP of v4.5.5-nikque.34.
-- The Heath engine is built for this distribution from the source of the heath.21 tag (64 slots; see `engines/newedax/SOURCE.txt`). This is because the heath.21 release has no engine for macOS.
+- The nikque engine is built for this distribution from the source of the v4.5.5-nikque.34 tag, with profile-guided optimization (PGO; see `engines/nikque/SOURCE.txt`). It is a different file from the Mac programs in the release ZIP of nikque.34.
+- The Heath engine is built for this distribution from the source of the heath.21 tag (64 slots), with PGO (see `engines/newedax/SOURCE.txt`). This is because the heath.21 release has no engine for macOS.
 - Paths use `/` as the separator. Paths in `config.ini` (`dir=` and others) are also written in the Mac form (for example `/Users/name/books/book.dat`).
 - Keys: use Command (⌘) where Windows uses Ctrl. For example, Command+C copies the game.
 - To right-click, click with two fingers on a trackpad, or click while holding control.
@@ -83,7 +83,7 @@ The folder has the same contents as the Windows version: `config.ini`, `lang` an
   - `lEdax-x86-64-v3` (AVX2)
   - `lEdax-x86-64` (other x64 CPUs)
   - `data/eval.dat`
-- The engines are built for this distribution from the sources of their tags (see `engines/*/SOURCE.txt`). The tags are v4.5.5-nikque.34, and heath.21 with 64 slots.
+- The engines are built for this distribution from the sources of their tags, with PGO (see `engines/*/SOURCE.txt`). The tags are v4.5.5-nikque.34, and heath.21 with 64 slots.
 - The Linux programs in the release ZIP of nikque.34 are for Ubuntu 24.04 or later. The heath.21 release has no engine for Linux.
 - Paths use `/` as the separator. Paths in `config.ini` (`dir=` and others) are also written in the Linux form (for example `/home/name/books/book.dat`).
 - A file whose name contains a space cannot be passed to the engine directly. The GUI then passes it through a temporary folder, and the log says so.
@@ -125,7 +125,8 @@ The first four are not in the menus either.
 
 Other notes:
 
-- Both engines are in the app: `aEdax-arm64-v8a` from the release ZIPs of v4.5.5-nikque.34 and heath.21.
+- Both engines are in the app. They are built for arm64-v8a for this distribution from the sources of the v4.5.5-nikque.34 and heath.21 tags, with PGO.
+- They are different files from `aEdax-arm64-v8a` in the release ZIPs.
 - The engines run as separate programs.
 - Heath uses about 160 to 275 MB of memory for each engine. On a device with little memory, switch to Engine → nikque type to use less memory.
 - The engines may keep thinking while another app is in front. When you are done, quit with Back.

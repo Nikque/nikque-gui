@@ -50,8 +50,8 @@
   - `mEdax-arm64`（Apple シリコン）
   - `mEdax-x64-modern`（Intel）
   - `data/eval.dat`
-- nikque 系のエンジンは、v4.5.5-nikque.34 の Release の ZIP に入っているものです。
-- Heath 系のエンジンは、heath.21 のタグのソース（64 枠）から、この配布版のためにビルドしたものです（`engines/newedax/SOURCE.txt`）。heath.21 の Release に、Mac 用が無いためです。
+- nikque 系のエンジンは、v4.5.5-nikque.34 のタグのソースから、この配布版のために PGO 付きでビルドしたものです（`engines/nikque/SOURCE.txt`）。nikque.34 の Release の ZIP にある Mac 用とは、別のファイルです。
+- Heath 系のエンジンは、heath.21 のタグのソース（64 枠）から、この配布版のために PGO 付きでビルドしたものです（`engines/newedax/SOURCE.txt`）。heath.21 の Release に、Mac 用が無いためです。
 - ファイルの場所は `/` で区切ります。`config.ini` の `dir=` などに書く場所も、Mac の書き方で書きます（例：`/Users/名前/books/book.dat`）。
 - キー操作では、Windows の Ctrl の代わりに Command（⌘）を使います。例えば、Command+C で棋譜をコピーします。
 - 右クリックは、トラックパッドの 2 本指のクリックか、control を押しながらのクリックです。
@@ -83,7 +83,7 @@
   - `lEdax-x86-64-v3`（AVX2）
   - `lEdax-x86-64`（その他の x64）
   - `data/eval.dat`
-- エンジンは、タグのソースから、この配布版のためにビルドしたものです（`engines/*/SOURCE.txt`）。使ったタグは、v4.5.5-nikque.34 と、heath.21 の 64 枠です。
+- エンジンは、タグのソースから、この配布版のために PGO 付きでビルドしたものです（`engines/*/SOURCE.txt`）。使ったタグは、v4.5.5-nikque.34 と、heath.21 の 64 枠です。
 - nikque.34 の Release の ZIP にある Linux 用は、Ubuntu 24.04 以上向けです。heath.21 の Release には、Linux 用がありません。
 - ファイルの場所は `/` で区切ります。`config.ini` の `dir=` などに書く場所も、Linux の書き方で書きます（例：`/home/名前/books/book.dat`）。
 - 空白を含む名前のファイルは、エンジンに直接渡せません。そのときは、GUI が一時フォルダを通して渡します。ログにもそう出ます。
@@ -125,7 +125,8 @@
 
 そのほか：
 
-- エンジンは両方とも入っています。v4.5.5-nikque.34 と heath.21 の Release の ZIP にある `aEdax-arm64-v8a` です。
+- エンジンは両方とも入っています。v4.5.5-nikque.34 と heath.21 のタグのソースから、この配布版のために arm64-v8a 用を PGO 付きでビルドしたものです。
+- Release の ZIP にある `aEdax-arm64-v8a` とは、別のファイルです。
 - エンジンは別のプログラムとして動きます。
 - Heath は、エンジン 1 つで約 160〜275 MB のメモリを使います。メモリの少ない端末では、「エンジン」→「nikque 系」に切り替えると軽くなります。
 - 別のアプリに切り替えている間も、エンジンが考え続けることがあります。使い終わったら、「戻る」で終了してください。
