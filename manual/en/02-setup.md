@@ -4,7 +4,7 @@
 
 ## Installing
 
-1. Unpack the ZIP (`nikque-gui-0.4.10.zip`) anywhere. No installation is needed.
+1. Unpack the ZIP (`nikque-gui-0.4.11.zip`) anywhere. No installation is needed.
 2. Start `nikque-gui.exe`.
 
 Contents of the folder:
@@ -14,8 +14,8 @@ Contents of the folder:
 | `nikque-gui.exe` | the GUI |
 | `config.ini` | settings ([11. Settings](11-settings.md)) |
 | `lang\*.txt` | the words of the screen (Japanese, English, Simplified and Traditional Chinese) |
-| `engines\nikque` | Edax v4.5.5-nikque.33, C version |
-| `engines\newedax` | Heath (formerly newedax): heath.20, C++ version (the 64-slot build) |
+| `engines\nikque` | Edax v4.5.5-nikque.34, C version |
+| `engines\newedax` | Heath (formerly newedax): heath.21, C++ version (the 64-slot build) |
 | `readme.txt` | short notes |
 
 - Each engine folder contains:
@@ -27,7 +27,7 @@ Contents of the folder:
 
 ## Mac (trial version)
 
-From 0.4.3 there is a Mac version (`nikque-gui-0.4.10-mac.zip`).
+From 0.4.3 there is a Mac version (`nikque-gui-0.4.11-mac.zip`).
 
 - It runs on macOS 13 or later, on both Apple silicon and Intel Macs.
 - It is still a trial version. Please report anything that does not work well.
@@ -36,10 +36,10 @@ From 0.4.3 there is a Mac version (`nikque-gui-0.4.10-mac.zip`).
 2. Once, before the first start, run this command in Terminal. The app is not signed, so macOS blocks it otherwise.
 
    ```
-   xattr -dr com.apple.quarantine ~/Downloads/nikque-gui-0.4.10-mac
+   xattr -dr com.apple.quarantine ~/Downloads/nikque-gui-0.4.11-mac
    ```
 
-   Replace `~/Downloads/nikque-gui-0.4.10-mac` with the folder you unpacked.
+   Replace `~/Downloads/nikque-gui-0.4.11-mac` with the folder you unpacked.
 
    After this, the app and all the engines in the folder can be opened.
 3. Open `nikque GUI.app`.
@@ -50,8 +50,8 @@ The folder has the same contents as the Windows version: `config.ini`, `lang` an
   - `mEdax-arm64` (Apple silicon)
   - `mEdax-x64-modern` (Intel)
   - `data/eval.dat`
-- The nikque engine is the one from the release ZIP of v4.5.5-nikque.33.
-- The Heath engine is built for this distribution from the source of the heath.20 tag (64 slots; see `engines/newedax/SOURCE.txt`). This is because the heath.20 release has no engine for macOS.
+- The nikque engine is the one from the release ZIP of v4.5.5-nikque.34.
+- The Heath engine is built for this distribution from the source of the heath.21 tag (64 slots; see `engines/newedax/SOURCE.txt`). This is because the heath.21 release has no engine for macOS.
 - Paths use `/` as the separator. Paths in `config.ini` (`dir=` and others) are also written in the Mac form (for example `/Users/name/books/book.dat`).
 - Keys: use Command (⌘) where Windows uses Ctrl. For example, Command+C copies the game.
 - To right-click, click with two fingers on a trackpad, or click while holding control.
@@ -60,7 +60,7 @@ The folder has the same contents as the Windows version: `config.ini`, `lang` an
 
 ## Linux (trial version)
 
-From 0.4.4 there is a Linux version (`nikque-gui-0.4.10-linux.tar.gz`).
+From 0.4.4 there is a Linux version (`nikque-gui-0.4.11-linux.tar.gz`).
 
 - It runs on x86-64 Ubuntu 22.04 or later. It should also run on other distributions of the same time or later.
 - It uses GTK 3 for the screen.
@@ -69,7 +69,7 @@ From 0.4.4 there is a Linux version (`nikque-gui-0.4.10-linux.tar.gz`).
 1. Unpack it anywhere:
 
    ```
-   tar -xzf nikque-gui-0.4.10-linux.tar.gz
+   tar -xzf nikque-gui-0.4.11-linux.tar.gz
    ```
 
 2. Start `nikque-gui` in the folder. Open it from the file manager, or run `./nikque-gui` in a terminal.
@@ -83,15 +83,15 @@ The folder has the same contents as the Windows version: `config.ini`, `lang` an
   - `lEdax-x86-64-v3` (AVX2)
   - `lEdax-x86-64` (other x64 CPUs)
   - `data/eval.dat`
-- The engines are built for this distribution from the sources of their tags (see `engines/*/SOURCE.txt`). The tags are v4.5.5-nikque.33, and heath.20 with 64 slots.
-- The Linux programs in the release ZIP of nikque.33 are for Ubuntu 24.04 or later. The heath.20 release has no engine for Linux.
+- The engines are built for this distribution from the sources of their tags (see `engines/*/SOURCE.txt`). The tags are v4.5.5-nikque.34, and heath.21 with 64 slots.
+- The Linux programs in the release ZIP of nikque.34 are for Ubuntu 24.04 or later. The heath.21 release has no engine for Linux.
 - Paths use `/` as the separator. Paths in `config.ini` (`dir=` and others) are also written in the Linux form (for example `/home/name/books/book.dat`).
 - A file whose name contains a space cannot be passed to the engine directly. The GUI then passes it through a temporary folder, and the log says so.
 - If you move the folder, move `nikque-gui`, `config.ini`, `lang` and `engines` together.
 
 ## Android (trial version)
 
-From 0.4.4 there is an Android version (`nikque-gui-0.4.10-android.apk`).
+From 0.4.4 there is an Android version (`nikque-gui-0.4.11-android.apk`).
 
 - It is for arm64 devices with Android 10 or later. Most phones and tablets of today are arm64 devices.
 - It is still a trial version. It has been checked on an emulator only, not yet on a real device.
@@ -125,7 +125,7 @@ The first four are not in the menus either.
 
 Other notes:
 
-- Both engines are in the app: `aEdax-arm64-v8a` from the release ZIPs of v4.5.5-nikque.33 and heath.20.
+- Both engines are in the app: `aEdax-arm64-v8a` from the release ZIPs of v4.5.5-nikque.34 and heath.21.
 - The engines run as separate programs.
 - Heath uses about 160 to 275 MB of memory for each engine. On a device with little memory, switch to Engine → nikque type to use less memory.
 - The engines may keep thinking while another app is in front. When you are done, quit with Back.
@@ -143,7 +143,7 @@ Switch with Engine → nikque type / Heath type (formerly newedax).
 - Use the `eval.dat` from the release of the same version as the Heath engine.
   - The 64-slot heath.17, heath.18 and heath.19 builds use the same file. With an `eval.dat` from eval2 or nikque, the engine runs, but its evaluation is wrong.
   - The GUI then shows a message ([12. Troubleshooting](12-troubleshooting.md)).
-- The 48-slot build is not included. It is `edax-4.5.5-heath.20-48.zip` in the Heath release. To use it:
+- The 48-slot build is not included. It is `edax-4.5.5-heath.21-48.zip` in the Heath release. To use it:
   1. Unpack that ZIP into another folder.
   2. In `config.ini`, write its `bin` folder in `dir=` of `[newedax]`. `[newedax]` holds the Heath settings.
 
