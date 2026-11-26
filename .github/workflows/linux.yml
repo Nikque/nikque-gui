@@ -120,4 +120,6 @@ jobs:
           path: |
             dist/*.tar.gz
             dist/*-files.txt
+            dist/pgo-linux/**
+          if-no-files-found: error
           compression-level: 0
