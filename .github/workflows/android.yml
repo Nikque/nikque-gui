@@ -137,7 +137,7 @@ jobs:
       - name: Run the APK of the CI on an emulator with a script
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: 35
           target: google_apis
           arch: x86_64
           profile: pixel_6
