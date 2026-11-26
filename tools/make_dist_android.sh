@@ -5,9 +5,8 @@
 # The APK holds the screen (Java), libnikquegui.so (the C++ of the GUI), the files of the app as assets (config.ini,
 # opening.ini, readme.txt, LICENSE.txt, lang/, and for each engine data/eval.dat, LICENSE.txt, SOURCE.txt) and the two
 # engines as programs among its native libraries (libedax_nikque.so, libedax_newedax.so: started as child processes).
-#   arm64-v8a: aEdax-arm64-v8a of the release ZIPs of the engines (checked by their SHA-256 and size), as they are.
-#   x86_64 (the CI only): the release ZIPs have none: built here with the NDK from the sources of the tags of the
-#           releases (checked out by the workflow at those tags; the commits are checked).
+# Both ABIs use the pinned release source, NDK and an execution profile collected for that ABI.
+# The pinned release ZIPs provide only the evaluation weights and license files.
 # usage: BOOST_DIR=<Boost 1.92> ANDROID_NDK=<NDK> tools/make_dist_android.sh <nikque zip> <newedax zip> <newedax source> <nikque source> <script of the CI>
 # The key of the release APK: NG_KEYSTORE, NG_KEYSTORE_PASSWORD, NG_KEY_ALIAS, NG_KEY_PASSWORD (android/app/build.gradle).
 set -euo pipefail
@@ -17,13 +16,13 @@ NZIP=$(realpath "$1") EZIP=$(realpath "$2") NESRC=$(cd "$3" && pwd) NKSRC=$(cd "
 [ -x "${ANDROID_NDK:-}/ndk-build" ] || { echo "ANDROID_NDK: the folder of the NDK"; exit 1; }
 [ -f "${NG_KEYSTORE:-}" ] || { echo "NG_KEYSTORE: the keystore the release APK is signed with"; exit 1; }
 NIKQUE_TAG=v4.5.5-nikque.34
-NIKQUE_SHA=ea8ce8f654283a1030f66dd5f170a9960f7fc73e5f663742a1547ee122261a7a
-NIKQUE_SIZE=19275144
+NIKQUE_WEIGHT_SHA=f8b2299612d9fa4414157e70e932636e33111c2602d0c2fc382a7d90ef21b792
+NIKQUE_LICENSE_SHA=0b383d5a63da644f628d99c33976ea6487ed89aaa59f0b3257992deac1171e6b
 NIKQUE_COMMIT=4d16210cc91bb99fddaa372dceef8e2ca8990bfc
 NIKQUE_EVAL=13952436
 NEWEDAX_TAG=v4.5.5-heath.21
-NEWEDAX_SHA=edc50601c9cd7e37c1220ac1fcfa50b532515cf238af5462a1cf7e09235766e5
-NEWEDAX_SIZE=68972596
+NEWEDAX_WEIGHT_SHA=6f8ceb1f9d8e8fcfc9c5117ace2b31f5f893ea54336d44e94fd74ee9e9bf1dbc
+NEWEDAX_LICENSE_SHA=8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903
 NEWEDAX_COMMIT=87560a37e2a3aef4f9d58303b2aeec39b8f7ccc9
 NEWEDAX_EVAL=107612578
 
@@ -32,54 +31,45 @@ VER=$(sed -n 's/^project(nikque_gui VERSION \([0-9.]*\) .*/\1/p' CMakeLists.txt)
 NAME=nikque-gui-$VER-android
 [ ! -e "dist/$NAME.apk" ] || { echo "dist/$NAME.apk is there"; exit 1; }
 
-check_zip() {  # <zip> <sha256> <size>
-	local h s
-	h=$(sha256sum "$1" | cut -d' ' -f1)
-	s=$(stat -c %s "$1")
-	[ "$h" = "$2" ] && [ "$s" = "$3" ] || { echo "$1: SHA-256 $h, $s bytes (not the values of the release)"; exit 1; }
-	echo "zip ok  $h  $s  $1"
-}
-check_zip "$NZIP" $NIKQUE_SHA $NIKQUE_SIZE
-check_zip "$EZIP" $NEWEDAX_SHA $NEWEDAX_SIZE
 [ "$(git -C "$NESRC" rev-parse HEAD)" = $NEWEDAX_COMMIT ] || { echo "$NESRC is not $NEWEDAX_TAG ($NEWEDAX_COMMIT)"; exit 1; }
 [ "$(git -C "$NKSRC" rev-parse HEAD)" = $NIKQUE_COMMIT ] || { echo "$NKSRC is not $NIKQUE_TAG ($NIKQUE_COMMIT)"; exit 1; }
 # the sources of the engines as committed (changes not committed and files of an earlier build are not taken)
 export_source() {  # <git folder> <commit> <folder>
 	mkdir -p "$3"
-	git -C "$1" archive --format=tar "$2" | tar -x -C "$3"
+	git -C "$1" archive --format=tar "$2" src include problem tests/check-solve.py | tar -x -C "$3"
 }
 # the files of the GUI as committed: no changes not committed, no files not committed among those copied
 dirty=$({ git status --porcelain --untracked-files=no; git status --porcelain -- readme.txt LICENSE.txt res lang; } | sort -u)
 [ -z "$dirty" ] || { echo "$dirty"; echo "the files of the GUI are not those of the commit"; exit 1; }
 
 WORK=$(mktemp -d)
-unzip -q "$NZIP" -d "$WORK/n"
-unzip -q "$EZIP" -d "$WORK/e"
+trap 'rm -rf -- "$WORK"' EXIT
+mkdir -p "$WORK/n/bin/data" "$WORK/e/bin/data"
+unzip -p "$NZIP" bin/data/eval.dat > "$WORK/n/bin/data/eval.dat"
+unzip -p "$NZIP" LICENSE > "$WORK/n/LICENSE"
+unzip -p "$EZIP" bin/data/eval.dat > "$WORK/e/bin/data/eval.dat"
+unzip -p "$EZIP" LICENSE > "$WORK/e/LICENSE"
 [ "$(stat -c %s "$WORK/n/bin/data/eval.dat")" = $NIKQUE_EVAL ] || { echo "nikque eval.dat is not of $NIKQUE_TAG"; exit 1; }
 [ "$(stat -c %s "$WORK/e/bin/data/eval.dat")" = $NEWEDAX_EVAL ] || { echo "newedax eval.dat is not of $NEWEDAX_TAG"; exit 1; }
-for z in n e; do [ -f "$WORK/$z/bin/aEdax-arm64-v8a" ] || { echo "no aEdax-arm64-v8a in the ZIP ($z)"; exit 1; }; done
 
-# ---- the engines as native libraries
+# The APK uses only these assets. Verify each byte without depending on the rest of either ZIP.
+printf '%s  %s\n' "$NIKQUE_WEIGHT_SHA" "$WORK/n/bin/data/eval.dat" \
+    "$NIKQUE_LICENSE_SHA" "$WORK/n/LICENSE" "$NEWEDAX_WEIGHT_SHA" "$WORK/e/bin/data/eval.dat" \
+    "$NEWEDAX_LICENSE_SHA" "$WORK/e/LICENSE" | sha256sum -c
+
+# Build each engine for each ABI with its own measured Android profile.
 LIBS=$WORK/jnilibs
-mkdir -p "$LIBS/arm64-v8a" "$LIBS/x86_64"
-cp "$WORK/n/bin/aEdax-arm64-v8a" "$LIBS/arm64-v8a/libedax_nikque.so"
-cp "$WORK/e/bin/aEdax-arm64-v8a" "$LIBS/arm64-v8a/libedax_newedax.so"
-file "$LIBS"/arm64-v8a/*
-
-# x86_64 for the emulator, from the sources of the tags (newedax finds Boost in third_party next to its folder)
 export_source "$NKSRC" $NIKQUE_COMMIT "$WORK/nk"
 mkdir -p "$WORK/nesrc/third_party"
 export_source "$NESRC" $NEWEDAX_COMMIT "$WORK/nesrc/ne"
 ln -s "$BOOST_DIR" "$WORK/nesrc/third_party/boost_1_92_0"
-for e in nikque newedax; do
-	src=$WORK/nk/src
-	[ $e = newedax ] && src=$WORK/nesrc/ne/src
-	(cd "$src" && "$ANDROID_NDK/ndk-build" NDK_PROJECT_PATH=. NDK_APPLICATION_MK=./Application.mk APP_ABI=x86_64 APP_PLATFORM=android-29 -j4) \
-		> "$WORK/ndk-$e.log" 2>&1 || { tail -60 "$WORK/ndk-$e.log"; exit 1; }
-	[ -f "$src/libs/x86_64/aEdax" ] || { echo "no aEdax for x86_64 ($e)"; tail -60 "$WORK/ndk-$e.log"; exit 1; }
-	cp "$src/libs/x86_64/aEdax" "$LIBS/x86_64/libedax_$e.so"
+for abi in arm64-v8a x86_64; do
+    mkdir -p "$LIBS/$abi"
+    bash tools/android_pgo.sh "$abi" "$WORK/nk" "$WORK/n/bin/data/eval.dat" \
+        "$LIBS/$abi/libedax_nikque.so" "dist/android-pgo/$abi/nikque"
+    bash tools/android_pgo.sh "$abi" "$WORK/nesrc/ne" "$WORK/e/bin/data/eval.dat" \
+        "$LIBS/$abi/libedax_newedax.so" "dist/android-pgo/$abi/heath"
 done
-file "$LIBS"/x86_64/*
 
 # ---- the files of the app (the assets)
 A=$WORK/assets/app
@@ -102,17 +92,17 @@ source_txt() {  # <title> <repo> <tag> <commit> <how>
 		"このエンジンは GNU GPL v3（LICENSE.txt）の自由なソフトウェアです。別のプログラムとして動き、" \
 		"nikque GUI（MIT）が起動して文字の命令でやりとりします。" "" \
 		"Source / ソース: $2" "Tag / タグ: $3" "Commit: $4" \
-		"Files / ファイル: aEdax-arm64-v8a (in the app as a native library), data/eval.dat" "$5"
+		"Files / ファイル: Android aEdax (in the app as a native library), data/eval.dat" "$5"
 }
 mkdir -p "$A/engines/nikque/data" "$A/engines/newedax/data"
 cp "$WORK/n/bin/data/eval.dat" "$A/engines/nikque/data/"
 cp "$WORK/n/LICENSE" "$A/engines/nikque/LICENSE.txt"
 source_txt "Edax (C version, nikque)" https://github.com/Nikque/edax-reversi-AVX $NIKQUE_TAG $NIKQUE_COMMIT \
-	"The files of the release ZIP of the tag. / タグの Release の ZIP のファイルです。" > "$A/engines/nikque/SOURCE.txt"
+	"The executable uses Android PGO from the tagged source. The weight is from the release ZIP. / 実行ファイルはタグのソースから PGO でビルドしました。評価重みは Release の ZIP から取得しました。" > "$A/engines/nikque/SOURCE.txt"
 cp "$WORK/e/bin/data/eval.dat" "$A/engines/newedax/data/"
 cp "$WORK/e/LICENSE" "$A/engines/newedax/LICENSE.txt"
 source_txt "Heath (formerly newedax, C++ version of Edax)" https://github.com/Nikque/Heath $NEWEDAX_TAG $NEWEDAX_COMMIT \
-	"The files of the release ZIP of the tag (64 slots). / タグの Release の ZIP（64 枠）のファイルです。" > "$A/engines/newedax/SOURCE.txt"
+	"The executable uses Android PGO from the tagged source. The 64-slot weight is from the release ZIP. / 実行ファイルはタグのソースから PGO でビルドしました。64 枠の評価重みは Release の ZIP から取得しました。" > "$A/engines/newedax/SOURCE.txt"
 
 # the assets of the APK of the CI: the same, with the script run at the start (a lower level: the emulator is slow)
 cp -R "$WORK/assets" "$WORK/assets-ci"
@@ -139,6 +129,13 @@ if unzip -l "dist/$NAME.apk" | grep -q "lib/x86_64/"; then echo "the release APK
 for f in libnikquegui.so libedax_nikque.so libedax_newedax.so; do
 	unzip -l "dist/$NAME.apk" | grep -q "lib/arm64-v8a/$f" || { echo "the release APK has no lib/arm64-v8a/$f"; exit 1; }
 	unzip -l "dist/$NAME-ci.apk" | grep -q "lib/x86_64/$f" || { echo "the APK of the CI has no lib/x86_64/$f"; exit 1; }
+done
+for label in nikque newedax; do
+    for abi in arm64-v8a x86_64; do
+        apk="dist/$NAME.apk"
+        [ "$abi" != x86_64 ] || apk="dist/$NAME-ci.apk"
+        unzip -p "$apk" "lib/$abi/libedax_$label.so" | cmp - "$LIBS/$abi/libedax_$label.so"
+    done
 done
 unzip -l "dist/$NAME.apk" | awk 'NR>3 && $4!="" {printf "%12s  %s\n", $1, $4}' | sort -k2 > "dist/$NAME-files.txt"
 sha256sum "dist/$NAME.apk" | tee -a "dist/$NAME-files.txt"
