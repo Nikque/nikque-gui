@@ -4,7 +4,7 @@
 # It holds nikque-gui (x86-64, GTK 3), config.ini (res/default-config.ini with the names of Linux in its notes),
 # opening.ini, readme.txt, LICENSE.txt, lang/, manual/, and the two engines in engines/nikque and engines/newedax:
 # lEdax-x86-64-v4, lEdax-x86-64-v3, lEdax-x86-64, data/eval.dat, LICENSE.txt, SOURCE.txt.
-# The engines are built here from the sources of the tags of their releases (checked out by the workflow at those tags;
+# The engines are built with profile-guided optimization here from the sources of the tags of their releases (checked out by the workflow at those tags;
 # the commits are checked), with data/eval.dat of the release ZIPs (checked by their SHA-256 and size):
 #   nikque: the Linux programs of its release ZIP ask for a newer C library (GLIBC 2.38) than Ubuntu 22.04 has.
 #   newedax: its release ZIP has no engine for Linux.
@@ -55,6 +55,13 @@ dirty=$({ git status --porcelain --untracked-files=no; git status --porcelain --
 [ -z "$dirty" ] || { echo "$dirty"; echo "the files of the GUI are not those of the commit"; exit 1; }
 [ "$(stat -c %Y "$EXE")" -ge "$(git log -1 --format=%ct)" ] || { echo "$EXE is older than the last commit"; exit 1; }
 
+EVIDENCE="$PWD/dist/pgo-linux"
+[ ! -e "$EVIDENCE" ] || { echo "$EVIDENCE already exists"; exit 1; }
+flags=$(grep -m1 '^flags' /proc/cpuinfo)
+echo "$flags"
+for f in avx2 bmi1 bmi2 f16c fma abm movbe avx512f avx512bw avx512cd avx512dq avx512vl; do
+    grep -qw "$f" <<< "$flags" || { echo "PGO requires native x86-64-v4; missing $f" >&2; exit 1; }
+done
 WORK=$(mktemp -d)
 git -C "$NESRC" archive --format=tar $NEWEDAX_COMMIT problem/fforum-1-19.obf | tar -x -C "$WORK"
 unzip -q "$NZIP" -d "$WORK/n"
@@ -70,14 +77,14 @@ for a in $ARCHS; do
 	rm -rf "$WORK/nk-$a"
 	export_source "$NKSRC" $NIKQUE_COMMIT "$WORK/nk-$a"
 	mkdir -p "$WORK/nk-$a/bin"
-	make -s -C "$WORK/nk-$a/src" build ARCH=$a COMP=gcc OS=linux CC="$CC -static-libgcc" 		> "$WORK/nk-$a.log" 2>&1 || { tail -40 "$WORK/nk-$a.log"; exit 1; }
+	bash tools/train_engine_pgo.sh "$WORK/nk-$a" "lEdax-$a" "$WORK/n/bin/data/eval.dat" "$WORK/problem/fforum-1-19.obf" "$EVIDENCE/nikque/$a" ARCH="$a" COMP=gcc OS=linux CC="$CC -static-libgcc" 		> "$WORK/nk-$a.log" 2>&1 || { tail -40 "$WORK/nk-$a.log"; exit 1; }
 	[ -x "$WORK/nk-$a/bin/lEdax-$a" ] || { echo "no lEdax-$a (nikque)"; tail -40 "$WORK/nk-$a.log"; exit 1; }
 done
 for a in $ARCHS; do
 	rm -rf "$WORK/ne-$a"
 	export_source "$NESRC" $NEWEDAX_COMMIT "$WORK/ne-$a"
 	mkdir -p "$WORK/ne-$a/bin"
-	make -s -C "$WORK/ne-$a/src" build ARCH=$a COMP=gcc OS=linux CC="$CXX -static-libstdc++ -static-libgcc" BOOST_DIR="$BOOST_DIR" \
+	bash tools/train_engine_pgo.sh "$WORK/ne-$a" "lEdax-$a" "$WORK/e/bin/data/eval.dat" "$WORK/problem/fforum-1-19.obf" "$EVIDENCE/newedax/$a" ARCH="$a" COMP=gcc OS=linux CC="$CXX -static-libstdc++ -static-libgcc" BOOST_DIR="$BOOST_DIR" \
 		> "$WORK/ne-$a.log" 2>&1 || { tail -40 "$WORK/ne-$a.log"; exit 1; }
 	[ -x "$WORK/ne-$a/bin/lEdax-$a" ] || { echo "no lEdax-$a"; tail -40 "$WORK/ne-$a.log"; exit 1; }
 done
@@ -127,14 +134,11 @@ chmod +x "$DST"/engines/*/lEdax-*
 flags=$(grep -m1 '^flags' /proc/cpuinfo || true)
 for e in nikque newedax; do
 	for a in $ARCHS; do
-		case $a in
-			x86-64-v4) echo "$flags" | grep -qw avx512vl || { echo "$e lEdax-$a: not run (no AVX-512 on this computer)"; continue; } ;;
-			x86-64-v3) echo "$flags" | grep -qw avx2 || { echo "$e lEdax-$a: not run (no AVX2 on this computer)"; continue; } ;;
-		esac
 		(cd "$DST/engines/$e" && "./lEdax-$a" -n 1 -l 60 -book-usage off -solve "$WORK/problem/fforum-1-19.obf" > "$WORK/solve-$e-$a.log" 2>&1) ||
 			{ cat "$WORK/solve-$e-$a.log"; exit 1; }
 		echo "$e lEdax-$a:"
 		tail -2 "$WORK/solve-$e-$a.log"
+        (cd "$DST/engines/$e" && shasum -a 256 -c "$EVIDENCE/$e/$a/binary.sha256")
 		grep -Fq '19 positions; 0 erroneous move; 0 erroneous score;' "$WORK/solve-$e-$a.log"
 		rm -f "$DST/engines/$e/data/book.dat"  # (made by the engine when there is none)
 	done
