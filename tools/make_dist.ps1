@@ -6,13 +6,13 @@ param(
 	# what the releases say (gh release view <tag> --json assets: the digest and the size; git ls-remote: the commit of the
 	# tag; the size of bin\data\eval.dat in the ZIP)
 	[string]$NikqueName = "v4.5.5-nikque.34",
-	[string]$NikqueSha = "ea8ce8f654283a1030f66dd5f170a9960f7fc73e5f663742a1547ee122261a7a",
-	[long]$NikqueSize = 19275144,
+	[string]$NikqueSha = "8f3f6feeb91ac17addcf49a5b00bb094d948e099153dc9179bcfab333f3e16c8",
+	[long]$NikqueSize = 18952384,
 	[string]$NikqueCommit = "4d16210cc91bb99fddaa372dceef8e2ca8990bfc",
 	[long]$NikqueEvalSize = 13952436,
 	[string]$NewedaxName = "v4.5.5-heath.21",
-	[string]$NewedaxSha = "edc50601c9cd7e37c1220ac1fcfa50b532515cf238af5462a1cf7e09235766e5",
-	[long]$NewedaxSize = 68972596,
+	[string]$NewedaxSha = "9016625c2997f23624d2c8e80a02cab451babebccc34be1ff86a0535d206bc19",
+	[long]$NewedaxSize = 68911042,
 	[string]$NewedaxCommit = "87560a37e2a3aef4f9d58303b2aeec39b8f7ccc9",
 	[long]$NewedaxEvalSize = 107612578,
 	[string]$Out = "D:\nikque-gui\dist",
@@ -79,9 +79,9 @@ New-Item -ItemType Directory $Eng | Out-Null
 foreach ($k in $Engines.Keys) {
 	$en = $Engines[$k]
 	$z = Get-Item $en.Zip
-	# the ZIP is of the version named (edax-4.5.5-heath.21-64.zip for v4.5.5-heath.21): the values below are of that release
+	# the ZIP is of the version named (edax-4.5.5-heath.21-64-pgo.zip for v4.5.5-heath.21): the values below are of that release
 	$ver = $en.Tag -replace '^v', ''
-	if ($z.Name -notmatch ('^edax-' + [regex]::Escape($ver) + '(-\d+)?\.zip$')) { throw "$($z.Name) is not the ZIP of $($en.Tag) (give -${k}Name and the values of its release)" }
+	if ($z.Name -notmatch ('^edax-' + [regex]::Escape($ver) + '(?:-\d+(?:-pgo)?)?\.zip$')) { throw "$($z.Name) is not the ZIP of $($en.Tag) (give -${k}Name and the values of its release)" }
 	$h = (Get-FileHash -Algorithm SHA256 $z.FullName).Hash.ToLower()
 	if ($h -ne $en.Sha.ToLower() -or $z.Length -ne $en.Size) { throw "$($z.Name): SHA-256 $h, $($z.Length) bytes (not the values of the release)" }
 	"zip ok  $h  $($z.Length)  $($z.Name)"
@@ -135,6 +135,8 @@ function Copy-Engine([string]$folder) {
 		"Source / ソース: $($x.Repo)"
 		"Tag / タグ: $($x.Tag)"
 		"Commit: $($x.Commit)"
+		"ZIP: $(Split-Path -Leaf $x.Zip)"
+		"ZIP SHA-256: $($x.Sha)"
 		"Files / ファイル: wEdax-x86-64-v4.exe (AVX-512), wEdax-x86-64-v3.exe (AVX2), wEdax-x86-64.exe (other x64 CPUs), data\eval.dat"
 	)
 	[System.IO.File]::WriteAllText((Join-Path $edir "SOURCE.txt"), ($text -join "`r`n") + "`r`n", (New-Object System.Text.UTF8Encoding($false)))
